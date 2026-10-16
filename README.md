@@ -10,6 +10,10 @@ It covers Windows/WSL preparation, data preservation, native Ubuntu setup and
 verification. Migration inventories, private exports and execution logs stay in
 the separate local migration bundle described there.
 
+For first startup and everyday development, read the [twelve practical
+workflows](docs/workflows.md), covering packages, VMs, language projects, Docker,
+secrets and gcloud.
+
 ## Responsibilities and current status
 
 | Area | Source | Status |

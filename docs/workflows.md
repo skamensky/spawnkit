@@ -1,0 +1,362 @@
+# Using Spawnkit
+
+Spawnkit recreates your development environment on an existing Linux machine.
+Ubuntu runs the computer; Home Manager supplies your user packages and settings;
+mise selects Python and Node versions; uv and the project's Node package manager
+install language dependencies. Projects keep their own code, configuration and
+lockfiles. Secrets and application data stay separate from all of these.
+
+The Home Manager environment, runtime setup, repository bootstrap and assistant
+links are implemented and build-tested. Live activation on native Ubuntu is still
+a migration step. The Ansible roles, Windows VM, Looking Glass launcher and GPU
+handoff are planned; the commands below do not imply those features are installed.
+
+For migration and data preservation, use the [complete Ubuntu migration
+guide](ubuntu-migration.md). For file ownership and system services, see
+[architecture](architecture.md). This guide describes the twelve everyday
+workflows and where each change belongs.
+
+## 1 First startup on a new machine
+
+First boot Ubuntu and establish the basic host: the `shmuel` account with home
+`/home/shmuel`, Git, multi-user Nix and access to the private GitHub repositories.
+Those are bootstrap prerequisites. Spawnkit does not install Ubuntu, provision a
+cloud VM or recover your data from Git. On the existing laptop, preserve and copy
+the data described in the migration guide before adopting its dotfiles.
+
+Clone `git@github.com:skamensky/spawnkit.git` into
+`~/repos/skamensky/spawnkit`. From that checkout, before RTK is available:
+
+```bash
+nix --extra-experimental-features 'nix-command flakes' run .#home-config -- select
+nix --extra-experimental-features 'nix-command flakes' run .#home-config -- check
+nix --extra-experimental-features 'nix-command flakes' run .#home-config -- build
+nix --extra-experimental-features 'nix-command flakes' run .#home-config -- repos --dry-run
+```
+
+Inspect the selected profile and preserve any unmanaged files that would
+conflict. Then deliberately activate it:
+
+```bash
+nix --extra-experimental-features 'nix-command flakes' run .#home-config -- switch
+```
+
+Activation installs your packages and managed files, clones missing declared
+repositories, links assistant instructions/settings, discovers personal skills,
+and installs the locked mise runtimes. Existing repositories are preserved,
+including local branches and unfinished work. Downloads and private repository
+clones need network access and suitable authentication.
+
+Complete Ubuntu host setup separately: drivers, Docker Engine, Tailscale, SSH,
+device permissions and any virtualization requirements. This is the work the
+planned Ansible subsystem will automate; there is no host apply command yet.
+Configure the native graphics bridge and real NVIDIA driver details following
+the migration guide. Log out and back in, then authenticate the applications you
+need. OAuth sessions, SSH identities and browser profiles are not built by Nix.
+
+## 2 Later startups and everyday packages
+
+Boot Ubuntu and log in normally. Open a terminal, editor or application launcher.
+Your activated package generation and managed settings persist across reboots.
+You do not run a Nix build or reapply Spawnkit on every boot. Repositories are not
+automatically pulled, and package versions are not silently upgraded.
+
+Use commands such as `git`, `rg`, `uv`, `python` and `node` normally. Home Manager
+puts tools on PATH; mise selects development runtimes for the current project.
+GUI applications launch normally after the graphics setup is complete. No
+per-application nixGL launch command is part of the current configuration.
+
+Enabled user services follow their declared session/startup rules. Ubuntu host
+services follow their own configuration. Opening the Windows VM is a separate
+action, not a boot dependency.
+
+For environment changes, edit the tracked source, check/build and explicitly
+switch. New terminal sessions pick up shell settings; existing GUI processes may
+need restarting or a fresh login to inherit changed environment variables.
+
+## 3 Windows VM with the GPU
+
+After native validation and implementation, open Windows through virt-manager or
+the planned launcher. Libvirt checks that the RTX is free, prepares the device
+handoff, and starts the guest. If a Linux application, GPU container or service
+holds it, startup should be refused with an explanation so you can finish or
+close that work. There is no automatic transfer of a running CUDA job to Intel.
+
+Ubuntu's desktop stays on Intel. Windows owns the RTX while running. Looking
+Glass presents the Windows desktop in a Linux window or fullscreen, using shared
+memory for captured frames. Linux can continue doing ordinary desktop and CPU
+work. It cannot simultaneously run work on the passed-through RTX.
+
+Shut Windows down to return the GPU to the Linux driver. Cleanup must verify that
+the GPU is usable again before reporting success. Closing the Looking Glass
+window alone does not shut down Windows or release the RTX. These transitions
+run around VM start/stop, not as a custom GPU service at Linux boot.
+
+Keep dual boot until repeated handoffs, Windows applications and required
+peripherals work on this laptop. The VM disk, TPM state and UEFI variables are
+backed-up mutable state outside Git/Nix. See [Windows VM design](windows-vm.md)
+for hardware checks and limitations.
+
+## 4 Another machine without a GPU such as a cloud VM
+
+Treat it as another Linux host running Spawnkit. Create the VM through its cloud
+infrastructure workflow first; provision the expected user, Git, Nix and private
+repository access. The existing configuration assumes `shmuel` and
+`/home/shmuel`; a cloud image's default `ubuntu` or OS Login username is not
+automatically substituted.
+
+Clone Spawnkit there. An unknown hostname gets the minimal `default` profile,
+with CLI tools, mise/uv and assistants, without desktop graphics or GPU setup.
+You can explicitly select the existing headless `agent-vm` profile:
+
+```bash
+nix --extra-experimental-features 'nix-command flakes' run .#home-config -- build --host agent-vm
+nix --extra-experimental-features 'nix-command flakes' run .#home-config -- switch --host agent-vm
+```
+
+For a permanent mapping, add the real hostname to the appropriate entry in
+`hosts/registry.json`. For different requirements, add a new profile's
+`hosts/<profile>/home.nix` and registry entry. Shared defaults are imported
+automatically. Future privileged settings belong in that profile's `system.yml`
+when the Ansible implementation exists.
+
+The default and current headless profiles do not include `google-cloud-sdk` or
+`docker-client`; add those packages to the relevant profile if needed. They are
+currently laptop additions. A headless host needs neither NVIDIA libraries nor
+Looking Glass. Use its own authorized authentication and remote-access setup.
+General cloud workload identity does not automatically satisfy the current
+personal-secrets helper's owner-login requirement.
+
+For a configuration change, run the required checks on the development machine
+and build the affected profile on its target architecture. On a small VM merely
+installing an already validated configuration, build its selected profile;
+`home-config check` builds all native profiles, including the laptop, so it is a
+broader and heavier operation. ARM profiles are evaluated in the current matrix,
+but require an ARM host or builder for an actual build.
+
+## 5 Add a package
+
+Choose the right scope before installing anything:
+
+| What you are adding | Where it belongs |
+| --- | --- |
+| General user command | `nix/modules/home/tools.nix` |
+| Shared laptop command | `nix/modules/home/laptop.nix` |
+| Desktop application | `nix/modules/home/desktop.nix` |
+| Tool for one machine profile | `hosts/<profile>/home.nix` |
+| Python or Node runtime version | Project `mise.toml`, or Spawnkit's `config/runtimes/` for global defaults |
+| Python or JavaScript project dependency | That project's package manifest and lockfile |
+| Project compiler, native library or build utility | That project's development flake |
+| Privileged Ubuntu daemon or driver | Host setup, eventually its Ansible role |
+
+For example, add `tree` to the existing `home.packages` list in `tools.nix`.
+From Spawnkit, stage new files if any, then:
+
+```bash
+rtk proxy home-config check
+rtk proxy home-config build
+```
+
+Build the affected profiles, commit and push the validated change. Apply with
+`home-config switch` on machines that should adopt it. Builds alone do not
+activate the package. Use the full `nix run .#home-config -- ...` form if the
+wrapper has not yet been installed.
+
+## 6 Edit a package
+
+Changing settings, updating a version and changing source code are separate tasks:
+
+| Change | Procedure |
+| --- | --- |
+| Settings, aliases, environment or service behavior | Edit the owning Home Manager module or tracked configuration; validate and switch. Never edit generated home files. |
+| Version of a Nix package | Update the relevant input or package expression, then check/build and review the lockfile diff. Updating Nixpkgs can change many packages together. |
+| Default Python or Node version | Edit `config/runtimes/mise.toml`, refresh its `mise.lock`, validate and commit both; activate to install the declared versions. |
+| Runtime version for one project | Edit its `mise.toml` and lockfile; install and test there. |
+| Actual package source or a patch | Track the source change/patch and use an explicit Nix override or package expression. Build/test that package and affected profiles. |
+| Dependency inside an application | Use uv/npm/pnpm in that application repository and commit its dependency lock changes. |
+
+Do not edit `/nix/store`, installed binaries or a Home Manager-generated global
+mise file. For a deliberate Nixpkgs refresh, run `nix flake update nixpkgs` in
+Spawnkit, then validate; it updates the pin rather than your running environment.
+[Nix input updates](https://nix.dev/manual/nix/stable/command-ref/new-cli/nix3-flake-update.html).
+
+## 7 Run a Python codebase
+
+For an existing uv project, open its checkout. Install the runtime declared by
+the project; use locked mode when it has a complete `mise.lock`. Then sync the
+Python environment and run its entry point:
+
+```bash
+rtk proxy mise install --locked
+rtk proxy mise exec -- uv sync --locked
+rtk proxy mise exec -- uv run --locked python -m your_app
+```
+
+`your_app` is an example module name; use the repository's documented entry point.
+For a project without a mise lock yet, `mise install` installs the declared
+runtime; create and commit the project lock as part of making it reproducible.
+Do not assume Spawnkit's global lock covers every project's different versions.
+[mise locked installs](https://mise.jdx.dev/dev-tools/mise-lock.html).
+
+mise supplies Python. uv creates the project's `.venv` and installs dependencies
+from `uv.lock`. Spawnkit disables uv's competing Python downloads. `--locked`
+fails if the Python dependency lock needs changing, rather than silently changing
+it. No manual virtualenv activation is needed for `uv run`.
+[uv locking and synchronization](https://docs.astral.sh/uv/concepts/projects/sync/).
+
+For deliberate dependency changes use `uv add`, `uv remove` or the project's
+update workflow and commit `pyproject.toml` with `uv.lock`. Existing non-uv
+projects retain their own documented dependency workflow until intentionally
+converted. Native dependencies may also require the project's Nix development
+environment or Ubuntu libraries.
+
+## 8 Run a Node codebase
+
+mise supplies the project's Node version. For an npm project with an existing
+`package-lock.json` and a `dev` script:
+
+```bash
+rtk proxy mise install --locked
+rtk proxy mise exec -- npm ci
+rtk proxy mise exec -- npm run dev
+```
+
+`npm ci` installs the locked dependencies into `node_modules`; it rejects a
+manifest/lock mismatch instead of updating the lock. Use the actual scripts from
+that project's `package.json`. [npm clean installs](https://docs.npmjs.com/cli/v11/commands/npm-ci/).
+
+If the project uses pnpm or Yarn, use its pinned package manager and corresponding
+lockfile/frozen-install workflow. Declare a missing manager through the project's
+tool setup rather than silently introducing another global installer. Runtime
+selection works from the project configuration; `mise exec` also makes it
+explicit for scripts and noninteractive agents. [mise command execution](https://mise.jdx.dev/cli/exec.html).
+
+For deliberate dependency edits, use the project's package manager and commit
+both manifest and lockfile. Do not commit `node_modules` or install application
+libraries as global machine tools.
+
+## 9 Mixed Node Python and Nix codebase
+
+Keep each owner explicit. The project's independent `flake.nix` and `flake.lock`
+provide its native tools/libraries or Nix-built components. Its `mise.toml` and
+`mise.lock` select development runtimes. uv and the Node package manager own their
+respective application dependencies. Spawnkit is not the project's development
+flake.
+
+If that project defines a default development shell, enter it first:
+
+```bash
+rtk proxy nix develop
+```
+
+Inside it, use `mise exec -- uv sync --locked` and `mise exec -- npm ci`, then
+start the backend/frontend with the project's own commands in separate terminals
+or its tracked task runner. For noninteractive execution:
+
+```bash
+rtk proxy nix develop --command mise exec -- uv run --locked python -m your_app
+rtk proxy nix develop --command mise exec -- npm run dev
+```
+
+These examples assume the project defines that shell and entry points; Spawnkit
+does not synthesize them. Nix prepares the shell while mise selects the runtime
+within it. [Nix development environments](https://nix.dev/manual/nix/stable/command-ref/new-cli/nix3-develop.html).
+
+Prefer keeping Python/Node out of this development shell's packages so they do
+not compete with mise. If the project intentionally packages a whole component
+with Nix, its isolated `nix build`/`nix run` workflow owns that component's build
+inputs. Nix does not automatically import your host `.venv` or `node_modules`.
+Native library runtime paths still need to be configured by the project where
+required; combining the tools does not resolve every binary dependency by itself.
+
+## 10 Build and run Docker containers
+
+Once the Ubuntu Docker Engine, access permissions and required Compose/Buildx
+plugins are configured, use Docker normally. The laptop profile already provides
+the client; that alone does not configure a running engine.
+
+For a project with a Compose file:
+
+```bash
+rtk proxy docker compose up -d --build
+rtk proxy docker compose logs -f
+rtk proxy docker compose down
+```
+
+Compose builds/creates/starts services and detached mode leaves them running.
+Keep named volumes and their backups as application state; this example does not
+request volume deletion. [Docker Compose startup](https://docs.docker.com/reference/cli/docker/compose/up/).
+
+Dockerfiles and Compose definitions live in the application repository. A normal
+Dockerfile gets its runtime/tools from its image and build instructions, not from
+the host's mise installation or Nix shell. A Nix-generated container image is an
+explicit project build alternative, not the default consequence of using Spawnkit.
+
+Linux GPU containers require the Ubuntu NVIDIA driver and NVIDIA Container
+Toolkit. They can use the RTX only while Linux owns it. Stop GPU users before
+starting the Windows GPU VM; CPU-only containers may continue running.
+[Docker GPU requirements](https://docs.docker.com/compose/how-tos/gpu-support/).
+
+## 11 Manage secrets
+
+The canonical personal credential bundle remains in GCP Secret Manager:
+`projects/shmuel-personal/secrets/personal-credentials`, using alias `current`.
+The canonical `personal-secrets` skill and `personal-gcp` repository own access
+and update behavior. Spawnkit stores references, not secret values.
+
+On a machine with the required owner gcloud login, inspect record names without
+printing values:
+
+```bash
+rtk proxy python3 ~/repos/skamensky/personal-gcp/scripts/personal-secrets.py inspect
+```
+
+Use the helper to select the record an integration needs and consume its values
+inside the process or a private temporary export. Clean up temporary files.
+Record paths organize the bundle; they are not separate IAM permissions. A
+workload needing only a subset should receive it through the approved backend or
+deployment mechanism. Updates go through the helper's guarded per-path update,
+not a whole-bundle overwrite. Provider runtime copies remain outside Git and the
+Nix store, with an explicit refresh/writeback workflow.
+
+There is no implemented universal command that automatically injects all secrets
+into every shell or project. Provider logins, browser sessions and OS keychains
+retain their own workflows. Follow a domain's skill for its specific integration.
+Company credentials are outside this personal store.
+
+The current helper requires `shmuelkamensky@gmail.com` in gcloud's owner login.
+It does not yet support ADC, VM metadata credentials or workload federation.
+A cloud VM's attached service account therefore does not automatically enable
+this personal-secrets workflow. Its CLI also needs to be declared on that host.
+
+## 12 Use gcloud
+
+The laptop profile installs `google-cloud-sdk` through Nix. Add it explicitly to
+a headless profile if needed. Run it normally; login and active account/project
+state are separate from the package installation.
+
+For personal interactive work:
+
+```bash
+rtk proxy gcloud auth list
+rtk proxy gcloud auth login shmuelkamensky@gmail.com
+rtk proxy gcloud projects list --account=shmuelkamensky@gmail.com
+```
+
+Log in only when needed. Commands can specify `--account` and `--project` to
+avoid relying on unrelated active defaults. Named gcloud configurations can
+separate work contexts. Authentication persists in the provider's local state;
+it is not committed or baked into Nix. On a headless machine, use gcloud's
+documented browser-on-another-machine flow. General unattended cloud workloads
+can use attached service accounts or workload identity where appropriate.
+[gcloud authentication](https://docs.cloud.google.com/sdk/docs/authenticate).
+
+Python/Node Google client libraries may need Application Default Credentials
+separately from the gcloud CLI login. For local interactive development that
+requires ADC, use `gcloud auth application-default login` with the intended
+account. This still does not replace the personal-secrets helper's owner-login
+requirement. [Application Default Credentials login](https://docs.cloud.google.com/sdk/gcloud/reference/auth/application-default/login).
+
+Update the Nix-owned SDK through Spawnkit's package/input configuration. Declare
+extra SDK components through its Nix package configuration when needed, rather
+than using the SDK's mutable component updater on a Nix-owned installation.
