@@ -4,4 +4,5 @@
     "personal-supabase"
     "google-automation"
   ];
+  personal.tools.googleAutomation = true;
 }

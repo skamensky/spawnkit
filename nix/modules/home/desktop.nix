@@ -28,7 +28,6 @@
         firefox
         vscode
         copyq
-        solaar
         wl-clipboard
       ]
       ++ lib.optionals pkgs.stdenv.hostPlatform.isx86_64 [ google-chrome ];

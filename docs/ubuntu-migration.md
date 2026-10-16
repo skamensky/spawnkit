@@ -253,9 +253,14 @@ sudo systemctl stop tailscaled 2>/dev/null
 sudo mkdir -p /var/lib/tailscale
 sudo cp -a /mnt/wsl-old/var/lib/tailscale/tailscaled.state /var/lib/tailscale/
 sudo cp -a /mnt/wsl-old/etc/ssh/ssh_host_* /etc/ssh/
-sudo cp -a /mnt/wsl-old/etc/ssh/sshd_config.d/. /etc/ssh/sshd_config.d/ 2>/dev/null
-sudo diff /mnt/wsl-old/etc/ssh/sshd_config /etc/ssh/sshd_config   # carry over Port 2222 / ListenAddress / PasswordAuthentication no
+sudo cp -a /mnt/wsl-old/home/shmuel/.ssh/authorized_keys ~/.ssh/ 2>/dev/null   # if not already copied with ~/.ssh
 ```
+Copy only identities. Do **not** copy `sshd_config` or `sshd_config.d/`: the
+Ansible `ssh` role (D2) owns the listener (`100.86.106.55:2222`, key-only) through
+`/etc/ssh/sshd_config.d/00-spawnkit.conf` and refuses conflicting leftover
+listeners. Record any non-default WSL sshd setting you find with
+`diff /mnt/wsl-old/etc/ssh/sshd_config /etc/ssh/sshd_config` and add it to the role
+instead of copying it.
 Never run the WSL and native nodes at the same time with the same state. WSL is shut down, so this is fine. If Shmuel boots Windows and WSL later, `wsl --unregister` is **not** your call; flag the conflict instead.
 
 ### C5. Copy from Windows
@@ -294,61 +299,18 @@ sudo umount /mnt/wsl-old && sudo qemu-nbd -d /dev/nbd0 && sudo umount /mnt/win
 
 ## Phase D — Set up (native)
 
-### D1. Hardware
+### D1. Hardware checks
+No manual driver or package installs here: the NVIDIA driver, PRIME on-demand
+mode and Solaar (with its udev rules) come from the Ansible run in D2.
 ```bash
-nvidia-smi || sudo ubuntu-drivers install    # Secure Boot: Shmuel enrols the MOK on the next reboot
-mokutil --sb-state
-sudo prime-select on-demand                  # iGPU by default, NVIDIA on demand
-sudo apt install -y solaar                   # Logitech, replaces Logi Options+
+mokutil --sb-state        # Secure Boot state decides whether D2 asks for MOK enrollment
+lspci -nnk | grep -A3 -Ei 'vga|3d|audio'
 ```
 - BIOS GPU mode: **Hybrid**, not dGPU-only (Shmuel).
 - **LenovoLegionLinux** gives you power modes, fan curves and battery conservation (60 % cap), replacing Vantage/Legion Arena.
 - Test suspend/resume, Wi-Fi 6E, the external monitor, the webcam and audio. Dolby has no Linux equivalent; EasyEffects is the closest.
 
-### D2. Declarative user environment with Home Manager
-
-The approved target is **Ubuntu + Nix/Home Manager**, with **mise owning development
-Python/Node versions and uv owning Python environments/dependencies**. Do not replay
-the old APT inventory or reinstall these tools through npm/pip/APT in parallel.
-
-The infrastructure repository is `git@github.com:skamensky/spawnkit.git`, checked
-out at `~/repos/skamensky/spawnkit`. It has one shared flake.lock, reusable modules,
-WSL/native laptop profiles, an agent-VM profile and a minimal unknown-host default.
-This guide is the complete migration reference. The repository README maps the
-subsystems; `nix/README.md` contains Home Manager setup details.
-
-1. Install multi-user Nix using the upstream installer if it is absent. Establish
-   GitHub SSH access using the migrated keys or Shmuel's login; do not put keys or
-   credentials into the flake.
-2. Clone spawnkit only if it is missing. Preserve an existing checkout and its
-   local changes.
-3. From the checkout, inspect and build before activating:
-   ```bash
-   nix --extra-experimental-features 'nix-command flakes' run .#home-config -- select
-   nix --extra-experimental-features 'nix-command flakes' run .#home-config -- check
-   nix --extra-experimental-features 'nix-command flakes' run .#home-config -- build
-   nix --extra-experimental-features 'nix-command flakes' run .#home-config -- repos --dry-run
-   ```
-   If the native machine has a different hostname, `--host laptop-ubuntu` selects
-   that profile explicitly; unknown names otherwise receive the minimal default.
-4. Before `switch`, compare and preserve old `.bashrc`, `.profile`, `.gitconfig`,
-   tmux configuration and assistant links. Existing unmanaged files are a deliberate
-   activation stop, not a reason to force an overwrite. Old `.local/bin` copies of
-   Nix-owned tools must also be reviewed so they do not shadow the managed tools.
-5. Activate with the same wrapper and `-- switch` only after these migration
-   conflicts have been resolved with Shmuel. Activation clones missing declared
-   repositories at pinned commits, installs assistant symlinks and the locked mise
-   runtimes. It never resets or pulls existing repositories.
-6. Log out/in so GUI processes inherit the managed session environment.
-
-APT remains responsible for Ubuntu drivers, system daemons and native build
-libraries. For example, Docker Engine, NVIDIA Container Toolkit, Tailscale/SSH
-services and libvirt are host setup; Home Manager's client packages do not install
-or configure those services. Keep `build-essential` and required project-specific
-native development libraries on Ubuntu. Add user packages through the appropriate
-Home Manager module, build/check the flake, then commit and push.
-
-### D2a. Privileged Ubuntu host setup
+### D2. Privileged Ubuntu host setup (first)
 
 Home Manager owns the user environment. Implemented Ansible roles own Ubuntu
 packages/services, NVIDIA drivers and Container Toolkit, Docker, Tailscale, SSH,
@@ -357,8 +319,11 @@ include their clients, so the native Home Manager profile omits duplicate copies
 Headless profiles explicitly opt into `personal.clients.gcloud` and client-only
 `personal.clients.docker` when needed; a local daemon instead belongs in Ansible.
 
-**First startup includes an explicit Ansible run.** From the Spawnkit checkout,
-before the Home Manager switch above:
+**First startup begins with an explicit Ansible run, before Home Manager.**
+Install multi-user Nix with the upstream installer if it is absent, establish
+GitHub SSH access with the migrated keys or Shmuel's login (never put keys or
+credentials into the flake), and clone spawnkit only if it is missing. Then, from
+the checkout:
 
 ```bash
 nix --extra-experimental-features 'nix-command flakes' run .#host-config -- inventory --host laptop-ubuntu
@@ -376,8 +341,11 @@ root-owned `/etc/spawnkit/enabled`; absence means the machine is not enrolled.
 This editing WSL environment remains unmarked. No manual sentinel creation.
 
 Native automation is implemented and offline tested, but native apply/hardware
-acceptance have not been performed. Initial laptop settings enable the host stack
-without GPU transfer. Collect `host-config facts` after reboot, record real PCI
+acceptance have not been performed. Initial laptop settings enable Docker,
+Tailscale, key-only SSH on `100.86.106.55:2222`, NVIDIA with PRIME on-demand,
+Solaar and the VM host stack, without GPU transfer. sshd may bind the tailnet
+address before tailscaled assigns it at boot (`ip_nonlocal_bind`), so the listener
+survives reboots; verify phone SSH after the first reboot. Collect `host-config facts` after reboot, record real PCI
 functions/IOMMU groups, then follow `docs/windows-vm.md` for GPU policy and explicit
 VM provisioning. Do not use the synthetic test PCI addresses on this computer.
 
@@ -386,10 +354,57 @@ system units; roles configure them. Libvirt sockets may activate on demand.
 No custom GPU-transfer daemon runs at boot; IOMMU kernel prerequisites and the
 shared-memory tmpfiles rule do not detach the RTX.
 
+### D2a. Declarative user environment with Home Manager
+
+The approved target is **Ubuntu + Nix/Home Manager**, with **mise owning development
+Python/Node versions and uv owning Python environments/dependencies**. Do not replay
+the old APT inventory or reinstall these tools through npm/pip/APT in parallel.
+
+The infrastructure repository is `git@github.com:skamensky/spawnkit.git`, checked
+out at `~/repos/skamensky/spawnkit`. It has one shared flake.lock, reusable modules,
+WSL/native laptop profiles, an agent-VM profile and a minimal unknown-host default.
+This guide is the complete migration reference. The repository README maps the
+subsystems; `nix/README.md` contains Home Manager setup details.
+
+1. Complete D2 first (Nix, the checkout and the host apply); reboot if it
+   installed the driver or IOMMU settings.
+2. Preserve the existing checkout and its local changes; the wrappers use the
+   checkout containing the current directory.
+3. From the checkout, inspect and build before activating:
+   ```bash
+   nix --extra-experimental-features 'nix-command flakes' run .#home-config -- select
+   nix --extra-experimental-features 'nix-command flakes' run .#home-config -- check
+   nix --extra-experimental-features 'nix-command flakes' run .#home-config -- build
+   nix --extra-experimental-features 'nix-command flakes' run .#home-config -- repos --dry-run
+   ```
+   If the native machine has a different hostname, `--host laptop-ubuntu` selects
+   that profile explicitly; unknown names otherwise receive the minimal default.
+4. Before `switch`, compare and preserve old `.bashrc`, `.profile`, `.gitconfig`,
+   tmux configuration and assistant links. Existing unmanaged files are a deliberate
+   activation stop, not a reason to force an overwrite. Login shells put the Home
+   Manager profile first and the mise shims before `~/.local/bin`, so migrated
+   copies of node, python, uv, claude, codex or rtk do not shadow managed tools
+   (the isolated activation test plants such copies). Delete those stale copies
+   once the managed versions work; anything else in `~/.local/bin` still
+   overrides `/usr/bin` as on stock Ubuntu.
+5. Activate with the same wrapper and `-- switch` only after these migration
+   conflicts have been resolved with Shmuel. Activation clones missing declared
+   repositories at pinned commits, installs assistant symlinks and the locked mise
+   runtimes. It never resets or pulls existing repositories.
+6. Log out/in so GUI processes inherit the managed session environment.
+
+APT remains responsible for Ubuntu drivers, system daemons and native build
+libraries. For example, Docker Engine, NVIDIA Container Toolkit, Tailscale/SSH
+services and libvirt are host setup; Home Manager's client packages do not install
+or configure those services. Keep `build-essential` and required project-specific
+native development libraries on Ubuntu. Add user packages through the appropriate
+Home Manager module, build/check the flake, then commit and push.
+
 ### D3. Graphics, assistants and language tools
 
 - The native laptop profile declares Firefox, Chrome on x86_64, VS Code, CopyQ,
-  Solaar, wl-clipboard and a CopyQ user service. It uses Home Manager's
+  wl-clipboard and a CopyQ user service (Solaar is an Ubuntu package because it
+  needs system udev rules). It uses Home Manager's
   `/run/opengl-driver` integration, so individual GUI packages do not need nixGL
   wrappers. Follow the activation warning's exact sudo setup command.
 - On native Ubuntu, determine the running NVIDIA driver version and the matching

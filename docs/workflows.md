@@ -308,6 +308,15 @@ Nix glibc 2.44 into the same Python's `LD_LIBRARY_PATH` failed with a
 other projects' arbitrary native dependencies. See its README for `nix build`,
 `nix run` and `nix develop` commands. No credentials enter the build.
 
+The installed `google-automation` command on the laptop and agent-VM profiles is
+that flake's package, consumed as a Spawnkit flake input
+(`personal.tools.googleAutomation`). Its revision in `flake.lock` must equal the
+`config/repositories.json` pin; the `tool-pins` check enforces this, so update both
+together (`nix flake update google-automation` plus the JSON revision). A binary
+built inside the dev shell uses a `/nix/store` interpreter and RUNPATH, so it
+breaks after garbage collection if copied elsewhere: use `go run .` or the
+dev-shell build for development only, and never copy it into `~/.local/bin`.
+
 [Nix development environments](https://nix.dev/manual/nix/stable/command-ref/new-cli/nix3-develop.html),
 [Python standalone portability](https://gregoryszorc.com/docs/python-build-standalone/main/running.html).
 

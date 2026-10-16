@@ -99,10 +99,13 @@ download URLs and checksums for Linux x64/ARM64. Home Manager installs both file
 and runs `mise install --locked` during activation. Language dependencies stay
 in the project's existing package manager and lockfile.
 
-The session PATH includes mise's executable dispatchers so GUI applications and
-noninteractive agents can find runtimes. `UV_PYTHON` points to the Python
-dispatcher; an activated mise environment supplies its selected interpreter
-directly. uv will not download a competing Python installation.
+Login-shell PATH order is: Home Manager profile, mise executable dispatchers,
+then `~/.local/bin`, `~/bin`, `~/.cargo/bin`, then system directories. GUI
+applications and noninteractive agents therefore find the declared runtimes, and
+stale per-user copies cannot shadow mise or Home Manager tools; the isolated
+activation test plants such copies and checks the resolution order. `UV_PYTHON` points to
+the Python dispatcher, which resolves the directory's mise-selected version; uv
+never downloads a competing interpreter.
 
 ```bash
 mise exec -- python --version
@@ -184,7 +187,8 @@ Tailscale/SSH daemons and libvirt. Ubuntu Docker/Tailscale packages include thei
 clients; Home Manager omits duplicates on the native profile. Other profiles opt
 into `personal.clients.gcloud`, `.docker` and `.tailscale` as required. Headless
 profiles do not include these clients by default.
-Solaar also needs the appropriate host udev permissions. Review the migration
+Solaar is an Ubuntu host package (`host_packages`) because it needs system udev
+rules for receiver access; a Home Manager copy could not reach the devices. Review the migration
 runbook before changing services. Windows GPU passthrough remains a separate
 native hardware investigation; no VFIO bindings or VM are created here.
 

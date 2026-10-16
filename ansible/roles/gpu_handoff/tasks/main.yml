@@ -23,7 +23,8 @@
     owner: root
     group: root
     mode: '0755'
-  notify: Refresh libvirt hook discovery
+# The policy and settings are read on every hook call; libvirt only needs a
+# restart to discover a new hook file.
 - name: Install a separate libvirt lifecycle hook
   ansible.builtin.copy:
     dest: /etc/libvirt/hooks/qemu.d/50-spawnkit
@@ -41,7 +42,6 @@
     group: root
     mode: '0644'
     content: "{{ cfg | to_nice_json }}"
-  notify: Refresh libvirt hook discovery
 - name: Declare Looking Glass shared memory permissions
   ansible.builtin.copy:
     dest: /etc/tmpfiles.d/spawnkit-looking-glass.conf

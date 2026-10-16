@@ -9,9 +9,13 @@ import socket
 import shutil
 import subprocess
 import tempfile
+import time
 import xml.etree.ElementTree as ET
 
 from spawnkit_host import inventory, load_config, read_overrides, render_windows, selector
+
+
+GPU_RESERVATION = Path("/run/spawnkit/gpu-owner.json")
 
 
 def run(args, **kwargs):
@@ -25,10 +29,24 @@ def native_only():
         raise ValueError("Use Spawnkit's NixOS modules on NixOS, not Ubuntu Ansible roles")
 
 
+def wait_for_gpu_return(name, timeout):
+    """Wait for guest shutdown and the release hook's verified GPU return, never forcing either."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        state = subprocess.check_output(["/usr/bin/virsh", "-c", "qemu:///system", "domstate", name], text=True, env=os.environ | {'LC_ALL': 'C'}).strip()
+        if state == "shut off" and not GPU_RESERVATION.exists():
+            print("Windows is shut off and the GPU return to Linux was verified")
+            return
+        time.sleep(2)
+    if state != "shut off":
+        raise ValueError(f"Windows is still {state} after {timeout}s; finish shutdown inside the guest (no forced power-off was sent)")
+    raise ValueError("Windows is off but the GPU return was not verified; run host-config gpu-status, then gpu-guard.py reclaim once the Linux drivers are bound")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("action", choices=["select", "inventory", "check", "render", "plan", "apply", "facts", "vm-define", "vm-start", "vm-stop", "vm-view", "vm-console", "gpu-status"])
-    parser.add_argument("--repo", type=Path, default=Path.home() / "repos/skamensky/spawnkit")
+    parser.add_argument("--repo", type=Path, default=selector().default_repo(), help="Defaults to the enclosing checkout")
     parser.add_argument("--host", help="Explicit profile; normal selection shares the Home Manager registry")
     parser.add_argument("--hostname", default=socket.gethostname())
     parser.add_argument("--environment", choices=["linux", "wsl", "nixos"], default=selector().environment())
@@ -36,6 +54,7 @@ def main():
     parser.add_argument("--output", type=Path, help="Output directory for render")
     parser.add_argument("--ask-become-pass", action="store_true")
     parser.add_argument("--notify", action="store_true", help="Also display desktop notifications for command failures")
+    parser.add_argument("--timeout", type=int, default=300, help="vm-stop: seconds to wait for guest shutdown and GPU return")
     parser.add_argument("--windows-iso", type=Path)
     parser.add_argument("--virtio-iso", type=Path)
     args = parser.parse_args()
@@ -86,6 +105,7 @@ def main():
             if args.action == "vm-stop":
                 if state != "shut off":
                     run(["/usr/bin/virsh", "-c", "qemu:///system", "shutdown", name])
+                wait_for_gpu_return(name, args.timeout)
             elif state == "shut off":
                 network = active['network_name']
                 info = subprocess.check_output(['/usr/bin/virsh', '-c', 'qemu:///system', 'net-info', network], text=True, env=os.environ | {'LC_ALL': 'C'})

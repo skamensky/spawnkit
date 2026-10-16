@@ -5,11 +5,21 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+import time
 import xml.etree.ElementTree as ET
 
 SYSFS = Path('/sys/bus/pci/devices')
 STATE = Path('/run/spawnkit/gpu-owner.json')
 CONFIG = Path('/etc/spawnkit/windows.json')
+# Holders that are not ordinary GPU jobs get specific advice instead of a bare PID.
+ADVICE = {
+    'gnome-shell': 'the desktop compositor opened the RTX; drive all Linux displays from the Intel iGPU '
+                   '(dGPU-wired outputs cannot stay in use) and log out/in, see docs/windows-vm.md',
+    'Xwayland': 'Xwayland opened the RTX (usually a PRIME-offloaded X11 app); close it or log out/in',
+    'Xorg': 'an X server opened the RTX; use PRIME on-demand and an iGPU-only session',
+    'nvidia-persistenced': 'run: sudo systemctl stop nvidia-persistenced (disable it to make this permanent)',
+    'nvidia-powerd': 'run: sudo systemctl stop nvidia-powerd',
+}
 
 
 def pci_addresses(tree):
@@ -89,8 +99,10 @@ def require_idle(nodes):
                 name = Path(f'/proc/{pid}/comm').read_text().strip()
             except OSError:
                 name = 'exited'
-            descriptions.append(f'{pid} ({name})')
-        raise RuntimeError('GPU busy; close GPU jobs/containers/apps or explicitly stop the owning service: ' + ', '.join(descriptions))
+            hint = ADVICE.get(name)
+            descriptions.append(f'{pid} ({name}' + (f': {hint})' if hint else ')'))
+        raise RuntimeError('GPU busy; nothing was stopped. Close GPU jobs/containers/apps or explicitly stop '
+                           'the owning service: ' + ', '.join(descriptions))
 
 
 def prepare(cfg, xml, state=STATE, sysfs=SYSFS, shm_root=Path('/dev/shm')):
@@ -98,7 +110,12 @@ def prepare(cfg, xml, state=STATE, sysfs=SYSFS, shm_root=Path('/dev/shm')):
         return
     state.parent.mkdir(parents=True, exist_ok=True, mode=0o755)
     # Exclusive file survives the short-lived hook process. Never steal a stale reservation.
-    descriptor = os.open(state, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    try:
+        descriptor = os.open(state, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    except FileExistsError:
+        raise RuntimeError(f'{state} remains from an earlier start whose GPU return was not verified. '
+                           'Run host-config gpu-status; when the devices show their Linux drivers, run '
+                           'sudo /usr/local/libexec/spawnkit/gpu-guard.py reclaim') from None
     with os.fdopen(descriptor, 'w') as stream:
         json.dump({'name': cfg['windows_name'], 'uuid': cfg['windows_uuid']}, stream)
     try:
@@ -114,14 +131,22 @@ def prepare(cfg, xml, state=STATE, sysfs=SYSFS, shm_root=Path('/dev/shm')):
         raise
 
 
-def release(cfg, state=STATE, sysfs=SYSFS):
+def release(cfg, state=STATE, sysfs=SYSFS, attempts=5, delay=2):
     if not state.exists():
         return
     owner = json.loads(state.read_text())
     if owner.get('uuid') != cfg['windows_uuid']:
         raise RuntimeError('GPU reservation belongs to another domain; inspect manually')
-    inspect_devices(cfg, sysfs)  # libvirt managed=yes should have restored all drivers.
-    subprocess.run(['/usr/bin/nvidia-smi', '-L'], check=True, capture_output=True, timeout=20)
+    # libvirt managed=yes rebinds the drivers; the NVIDIA module can need a moment to answer.
+    for attempt in range(attempts):
+        try:
+            inspect_devices(cfg, sysfs)
+            subprocess.run(['/usr/bin/nvidia-smi', '-L'], check=True, capture_output=True, timeout=20)
+            break
+        except (RuntimeError, subprocess.SubprocessError):
+            if attempt == attempts - 1:
+                raise
+            time.sleep(delay)
     state.unlink()
 
 
@@ -138,6 +163,10 @@ def main():
             devices.append(expected | {'current_driver': driver.resolve().name if driver.exists() else None})
         print(json.dumps({'reservation': json.loads(STATE.read_text()) if STATE.exists() else None,
                           'devices': devices}, indent=2))
+        return
+    if sys.argv[1:] == ['reclaim']:
+        # Manual recovery: clears a stale reservation only after verifying the GPU is back on Linux.
+        release(cfg)
         return
     name, operation, phase = sys.argv[1:4]
     if operation == 'prepare' and phase == 'begin':

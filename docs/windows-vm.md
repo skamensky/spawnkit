@@ -61,9 +61,11 @@ force-reset, ROM dump or host display-manager shutdown is installed.
 
 Check/build the changed home profile, commit/push, then deliberately reapply
 `host-config apply --host laptop-ubuntu --ask-become-pass` with all guests shut
-down. That installs the GPU policy/hooks and shared-memory permissions. It may
-restart the installed libvirt daemon to discover new hooks, so it refuses live
-guests. The Windows VM remains off until explicitly requested.
+down. That installs the GPU policy/hooks and shared-memory permissions. The first
+install of the hook file restarts the libvirt daemon so it discovers the hook;
+later policy/settings changes do not, because the hook reads them on each call.
+Either way the role refuses live guests. The Windows VM remains off until
+explicitly requested.
 
 ## 2 Define and install Windows
 
@@ -90,11 +92,15 @@ empty artifact and retrying. Never delete an existing Windows disk to resolve it
 Use virt-manager's SPICE VGA console for installation. If Windows cannot see its
 VirtIO disk/network, load the matching Windows driver from the VirtIO ISO. Install
 guest tools, NVIDIA's Windows driver and the Looking Glass Windows host component.
-Use the release matching the Nix client's startup/help banner (currently **B7**); the guest component captures Windows, while the Linux client displays
-it. Windows must have an active display on the RTX: an attached display/dummy
-adapter or a tested virtual display solution is necessary when the physical
-laptop panel is wired only to Intel. The SPICE VGA console alone does not establish
-a captured NVIDIA desktop.
+Use the release matching the Nix client's startup/help banner (currently **B7**);
+host and client versions must match. The guest component captures Windows, while
+the Linux client displays it. Windows must have an active display on the RTX: an
+attached display/dummy adapter on an RTX-wired output, or a tested virtual display
+driver, is necessary when the physical laptop panel is wired only to Intel. Looking
+Glass's own indirect display driver removes the dummy plug but ships in builds
+newer than stable B7, so adopting it also means packaging a matching Linux client;
+treat that as a separate, measured change. The SPICE VGA console alone does not
+establish a captured NVIDIA desktop.
 
 Verify Windows apps, sound, input and fullscreen behavior. Once GPU display works,
 shut Windows down, set `windows_video: none`, clear installation ISO settings for
@@ -105,16 +111,18 @@ tested guest display arrangement needs it. Firmware and TPM data are retained.
 
 ```bash
 host-config vm-view       # start if stopped, then launch Looking Glass
-host-config vm-stop       # request a graceful Windows shutdown
-host-config gpu-status    # root device/reservation inspection after shutdown
+host-config vm-stop       # graceful shutdown, then wait for verified GPU return
+host-config gpu-status    # root device/reservation inspection
 ```
 
 The desktop entries are **Windows (Looking Glass)** and **Windows installation
 console**. Launch failures also produce a desktop notification. The latter opens the console; start first if the VM is off. Closing
-Looking Glass leaves Windows running. `vm-stop` requests shutdown and does not
-claim it has completed; wait until `virsh -c qemu:///system domstate windows`
-reports `shut off`, then verify GPU return. A Windows installer without guest
-power handling may need shutdown from inside Windows.
+Looking Glass leaves Windows running. `vm-stop` requests an ACPI shutdown and waits
+(default 300 s, `--timeout`) until the domain is `shut off` **and** the release
+hook has cleared the reservation, which it only does after verifying the Linux
+drivers and `nvidia-smi -L`. It never forces power-off; on timeout it reports
+which of the two did not happen. A Windows installer without guest power handling
+may need shutdown from inside Windows.
 
 1. The launcher starts the dedicated NAT network if needed, then asks libvirt to
    start the domain. It never applies Ansible implicitly.
@@ -122,25 +130,57 @@ power handling may need shutdown from inside Windows.
    requires `managed='yes'`, checks IOMMU isolation and original drivers, and
    checks GPU/DRM/audio device users with `fuser`.
 3. Busy jobs/containers/GUI apps cause refusal with PIDs and process names. Nothing
-   is killed. Explicitly finish/close that work, or deliberately stop a service
-   such as persistence monitoring if it owns a device, then retry. CPU-only
-   containers can keep running.
+   is killed. Known non-job holders get specific advice: `nvidia-persistenced`
+   and `nvidia-powerd` name the service to stop; `gnome-shell`, `Xwayland` and
+   `Xorg` mean the desktop itself opened the RTX (see laptop risks below).
+   Explicitly finish/close that work or stop the named service, then retry.
+   CPU-only containers can keep running.
 4. An exclusive root reservation prevents another configured libvirt guest from
    taking the same functions. Shared memory is sized before the VM starts.
 5. Libvirt detaches the managed PCI functions and reattaches them on release.
    The hook never calls `virsh` or any libvirt API, avoiding callback deadlocks.
-6. `release end` verifies original drivers and bounded `nvidia-smi -L` health.
-   Failure leaves the reservation as an explicit recovery signal. Inspect libvirt
+6. `release end` verifies original drivers and `nvidia-smi -L` health, retrying
+   briefly while the module settles. Failure leaves the reservation as an
+   explicit recovery signal. Inspect libvirt
    journal output; the hook cannot veto a shutdown or guarantee kernel recovery.
 
 Process checks reduce risk but cannot make a hardware handoff atomic with
 unrelated root processes. Do not launch a new Linux GPU job during VM startup.
 A driver can hang during PCI unbind/reset despite these checks. Keep console
-access and reboot as a last resort; do not force-remove a reservation while a VM
-is alive. For a stale reservation after a failed start, confirm the guest is off,
-all configured functions are back on their declared drivers, no GPU processes are
-active and `nvidia-smi -L` works, then deliberately remove only
-`/run/spawnkit/gpu-owner.json`. A reboot clears it too; neither resets Windows data.
+access and reboot as a last resort; never remove a reservation while a VM is
+alive. A stale reservation makes the next start fail with recovery instructions.
+Confirm the guest is off, then run
+`sudo /usr/local/libexec/spawnkit/gpu-guard.py reclaim`: it clears the reservation
+only if every configured function is back on its declared driver and
+`nvidia-smi -L` works. A reboot clears it too; neither touches Windows data.
+
+## Laptop-specific risks (unverified on the Legion 5 16IRX9)
+
+These decide feasibility and can only be measured natively; record each result
+in the migration log.
+
+- **Desktop holding the RTX.** With PRIME on-demand (`nvidia_prime` in the laptop
+  profile) the desktop renders on Intel, but GNOME/mutter still opens the RTX's
+  DRM node when it can drive outputs. If `vm-start` names `gnome-shell`, the
+  handoff requires a session that does not use the RTX. Udev tags such as
+  `mutter-device-ignore` are reported to be timing-sensitive and can break the
+  session, so none is installed automatically; test any such rule manually with
+  console access first.
+- **Display wiring.** On many Legion models the HDMI port is wired to the RTX
+  and the internal panel to Intel (or a MUX switches it). A monitor on an RTX
+  output disappears from Linux while Windows owns the GPU, and that output is a
+  candidate for the guest display/dummy plug. Determine the wiring from `facts`,
+  `/sys/class/drm` connectors and BIOS GPU mode; keep BIOS in Hybrid mode.
+- **Laptop dGPU quirks.** Mobile NVIDIA GPUs may need the vBIOS exposed to the
+  guest or an ACPI battery table before the Windows driver initializes (Code 43).
+  No ROM file or ACPI table is shipped; add one only after native diagnosis.
+- **Reset and power.** Confirm the RTX returns to `nvidia` over repeated cycles,
+  including after Windows sleeps it, and that runtime power management still
+  idles the dGPU on Linux afterwards.
+- **Shared memory.** Standard `ivshmem-plain` is the low-maintenance default; the
+  KVMFR module avoids a copy but needs an out-of-tree DKMS module that must follow
+  every Ubuntu kernel and Secure Boot signing. Adopt it only if measured latency
+  at the target resolution is unacceptable.
 
 ## Acceptance before replacing dual boot
 

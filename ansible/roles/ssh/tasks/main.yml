@@ -16,6 +16,41 @@
     group: root
     mode: '0755'
   when: not ansible_check_mode
+# Tailnet listeners do not exist when sshd starts at boot, and Ubuntu's unit sets
+# RestartPreventExitStatus=255, so a failed bind would never recover. Allowing a
+# nonlocal bind lets sshd own the address before tailscaled assigns it.
+- name: Allow binding declared listeners before their interface is up
+  ansible.builtin.copy:
+    dest: /etc/sysctl.d/60-spawnkit-ssh.conf
+    owner: root
+    group: root
+    mode: '0644'
+    content: |
+      # Managed by Spawnkit: sshd listens on tailnet addresses assigned after boot.
+      net.ipv4.ip_nonlocal_bind = 1
+      net.ipv6.ip_nonlocal_bind = 1
+  notify: Apply SSH sysctl
+- name: Create the SSH unit drop-in directory
+  ansible.builtin.file:
+    path: /etc/systemd/system/ssh.service.d
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+- name: Order sshd after tailscaled
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/ssh.service.d/50-spawnkit.conf
+    owner: root
+    group: root
+    mode: '0644'
+    content: |
+      # Managed by Spawnkit.
+      [Unit]
+      Wants=network-online.target
+      After=network-online.target tailscaled.service
+  notify: Reload systemd for SSH
+- name: Apply listener prerequisites before restarting SSH
+  ansible.builtin.meta: flush_handlers
 - name: Configure only Spawnkit SSH settings with a backed-up drop-in
   ansible.builtin.template:
     src: sshd.conf.j2

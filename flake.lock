@@ -1,5 +1,25 @@
 {
   "nodes": {
+    "google-automation": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1792184324,
+        "narHash": "sha256-llwq0+5FDNsOEcjYsKskzDqvhJlHbg1RYxbGKXWS4hk=",
+        "owner": "skamensky",
+        "repo": "google-automation",
+        "rev": "459a11a98588bc931df1637601e28c34b2f6eb20",
+        "type": "github"
+      },
+      "original": {
+        "owner": "skamensky",
+        "repo": "google-automation",
+        "type": "github"
+      }
+    },
     "home-manager": {
       "inputs": {
         "nixpkgs": [
@@ -38,6 +58,7 @@
     },
     "root": {
       "inputs": {
+        "google-automation": "google-automation",
         "home-manager": "home-manager",
         "nixpkgs": "nixpkgs"
       }

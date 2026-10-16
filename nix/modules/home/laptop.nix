@@ -10,6 +10,7 @@
     "formql"
     "supa-crm"
   ];
+  personal.tools.googleAutomation = true;
   personal.clients = {
     gcloud = lib.mkDefault true;
     docker = lib.mkDefault true;

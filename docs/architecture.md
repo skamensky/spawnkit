@@ -75,9 +75,11 @@ service is needed. Detailed lifecycle and failure behavior: [Windows VM](windows
 | `/etc/spawnkit/windows-definition.json` | Inputs used for explicit VM definition |
 | `/etc/spawnkit/windows.xml`, `network.xml` | Rendered desired libvirt definitions |
 | `/etc/default/grub.d/90-spawnkit-iommu.cfg` | IOMMU boot prerequisite |
+| `/etc/ssh/sshd_config.d/00-spawnkit.conf` | Key-only SSH port and explicit listeners |
+| `/etc/sysctl.d/60-spawnkit-ssh.conf`, `/etc/systemd/system/ssh.service.d/50-spawnkit.conf` | Let sshd bind tailnet listeners before tailscaled assigns them at boot |
 | `/etc/tmpfiles.d/spawnkit-looking-glass.conf` | Shared-memory permissions |
 | `/dev/shm/spawnkit-windows` | Volatile Looking Glass frame memory |
-| `/run/spawnkit/gpu-owner.json` | Exclusive reservation; survives a failed recovery until inspected/rebooted |
+| `/run/spawnkit/gpu-owner.json` | Exclusive reservation; survives an unverified GPU return until `gpu-guard.py reclaim` verifies it, or reboot |
 | `/var/lib/spawnkit/windows.xml`, `windows.resolved.xml` | Applied source and resolved definition used to detect manual drift |
 | `/var/lib/libvirt/images/spawnkit-windows.qcow2` | Mutable Windows disk; default path |
 | `/var/lib/libvirt/qemu/nvram/`, `/var/lib/libvirt/swtpm/` | Firmware/TPM state managed by libvirt |

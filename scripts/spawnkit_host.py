@@ -29,14 +29,19 @@ def load_config(repo, profile, overrides=None):
     if unknown:
         raise ValueError(f"Unknown host settings: {', '.join(sorted(unknown))}")
     cfg = defaults | values
-    for key in ('gpu_devices', 'ssh_listen_addresses', 'base_packages'):
+    for key in ('gpu_devices', 'ssh_listen_addresses', 'base_packages', 'host_packages'):
         if not isinstance(cfg[key], list):
             raise ValueError(f'{key} must be a list')
-    for key in ('windows_name', 'looking_glass_name', 'network_name', 'network_bridge', 'windows_disk', 'windows_iso', 'virtio_iso', 'nvidia_driver_package', 'windows_uuid', 'network_uuid'):
+    for key in ('windows_name', 'looking_glass_name', 'network_name', 'network_bridge', 'windows_disk', 'windows_iso', 'virtio_iso', 'nvidia_driver_package', 'nvidia_prime', 'windows_uuid', 'network_uuid'):
         if not isinstance(cfg[key], str):
             raise ValueError(f'{key} must be a string')
-    if any(not isinstance(v, str) or not re.fullmatch(r'[a-zA-Z0-9+.-]+', v) for v in cfg['base_packages']):
-        raise ValueError('base_packages must contain Ubuntu package names')
+    for key in ('base_packages', 'host_packages'):
+        if any(not isinstance(v, str) or not re.fullmatch(r'[a-zA-Z0-9+.-]+', v) for v in cfg[key]):
+            raise ValueError(f'{key} must contain Ubuntu package names')
+    if cfg['nvidia_prime'] not in ('', 'on-demand', 'intel', 'nvidia'):
+        raise ValueError('nvidia_prime must be empty, on-demand, intel or nvidia')
+    if cfg['nvidia_prime'] and not cfg['nvidia']:
+        raise ValueError('nvidia_prime requires nvidia')
     for key in ("docker", "tailscale", "ssh", "nvidia", "virtualization", "iommu", "gpu_handoff", "windows_vm"):
         if not isinstance(cfg[key], bool):
             raise ValueError(f"{key} must be a boolean")

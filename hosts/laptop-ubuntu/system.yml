@@ -2,8 +2,14 @@
 docker: true
 tailscale: true
 nvidia: true
+nvidia_prime: on-demand
 virtualization: true
 iommu: true
+# Solaar needs Ubuntu's udev rules for Logitech receiver access.
+host_packages: [solaar]
+# Same tailnet identity and listener as the WSL node (migration C4); key-only.
+ssh: true
+ssh_listen_addresses: [100.86.106.55]
 # Enable these together after recording the real GPU/IOMMU facts below.
 gpu_handoff: false
 windows_vm: false

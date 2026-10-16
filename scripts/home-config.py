@@ -14,6 +14,14 @@ NIX = ["nix", "--extra-experimental-features", "nix-command flakes"]
 SYSTEMS = {"x86_64": "x86_64-linux", "aarch64": "aarch64-linux"}
 
 
+def default_repo():
+    """The Spawnkit checkout containing the working directory, else the canonical checkout."""
+    for directory in (Path.cwd(), *Path.cwd().parents):
+        if (directory / "flake.nix").is_file() and (directory / "hosts/registry.json").is_file():
+            return directory
+    return Path.home() / "repos/skamensky/spawnkit"
+
+
 def environment():
     if Path("/etc/NIXOS").exists():
         return "nixos"
@@ -37,7 +45,7 @@ def select_profile(registry, hostname, platform_kind, explicit=None):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("action", choices=["select", "build", "switch", "check", "repos"])
-    parser.add_argument("--repo", type=Path, default=Path.home() / "repos/skamensky/spawnkit")
+    parser.add_argument("--repo", type=Path, default=default_repo(), help="Defaults to the enclosing checkout")
     parser.add_argument("--host", help="Explicit declared profile; unknown hostnames select default automatically")
     parser.add_argument("--hostname", default=socket.gethostname(), help="Override detection for inspection/testing")
     parser.add_argument("--environment", choices=["linux", "wsl", "nixos"], default=environment())

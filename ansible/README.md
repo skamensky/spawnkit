@@ -37,18 +37,21 @@ the host enrolled. Reapplying is the supported convergence path.
 Reboot after NVIDIA/IOMMU changes and enroll the Ubuntu driver signing key if
 Secure Boot requests it. Log in again for Docker/libvirt/kvm group membership.
 Tailscale authentication is a separate deliberate login; no auth key enters Git.
-SSH is off by default and requires explicit listen addresses before enabling.
+SSH is off by default and requires explicit listen addresses before enabling; the
+laptop profile listens only on its tailnet address. Because that address appears
+only after tailscaled starts (and Ubuntu's unit does not restart sshd after a bind
+failure), the role enables `ip_nonlocal_bind` and orders sshd after tailscaled.
 Existing cloud access is not replaced by an assumed configuration.
 
 ## Roles and state
 
 | Role | Managed state |
 | --- | --- |
-| `base` | Ubuntu build prerequisites, `/etc/spawnkit`, installed root helper |
+| `base` | Ubuntu build prerequisites plus profile `host_packages`, `/etc/spawnkit`, installed root helper |
 | `docker` | Ubuntu Engine, Compose/Buildx, membership, declared daemon settings |
 | `tailscale` | Signed repository/key, package, `tailscaled` service |
-| `ssh` | Key-only explicit listener drop-in, full listener verification, Ubuntu unit |
-| `nvidia` | Ubuntu recommended or pinned driver, signed Container Toolkit repo/runtime |
+| `ssh` | Key-only explicit listener drop-in, full listener verification, boot-safe tailnet bind, Ubuntu unit |
+| `nvidia` | Ubuntu recommended or pinned driver, optional PRIME profile, signed Container Toolkit repo/runtime |
 | `virtualization` | Ubuntu QEMU/libvirt/OVMF/swtpm, groups, IOMMU GRUB drop-in, dedicated NAT network |
 | `gpu_handoff` | Separate libvirt lifecycle hook, GPU policy, Looking Glass tmpfiles rule |
 | `windows_vm` | Explicit `vm-define` playbook; managed domain and new disk, no automatic start |

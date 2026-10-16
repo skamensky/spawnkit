@@ -1,11 +1,11 @@
 ---
 - name: Preview Ubuntu package requirements
   ansible.builtin.debug:
-    msg: "Ubuntu packages: {{ cfg.base_packages | join(', ') }}"
+    msg: "Ubuntu packages: {{ (cfg.base_packages + cfg.host_packages) | join(', ') }}"
   when: ansible_check_mode
 - name: Install Ubuntu host build dependencies
   ansible.builtin.apt:
-    name: "{{ cfg.base_packages }}"
+    name: "{{ cfg.base_packages + cfg.host_packages }}"
     state: present
     update_cache: true
     cache_valid_time: 3600

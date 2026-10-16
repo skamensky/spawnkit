@@ -1,6 +1,8 @@
 # Shared host defaults. Native services are opt-in.
 user: shmuel
 base_packages: [ca-certificates, python3-apt, build-essential, pkg-config]
+# Profile-specific Ubuntu packages, installed in addition to base_packages.
+host_packages: []
 docker: false
 tailscale: false
 ssh: false
@@ -10,6 +12,8 @@ iommu: false
 gpu_handoff: false
 windows_vm: false
 nvidia_driver_package: ""
+# Hybrid laptops: "on-demand" keeps the desktop on the iGPU. Empty leaves PRIME alone.
+nvidia_prime: ""
 ssh_port: 2222
 ssh_listen_addresses: []
 docker_daemon: {}

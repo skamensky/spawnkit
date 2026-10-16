@@ -250,6 +250,15 @@ in
         assert evaluated.config.programs.nix-ld.enable;
         assert evaluated.config.home-manager.users.shmuel.home.activationPackage.drvPath != "";
         pkgs.runCommand "nixos-module-evaluation" { } "touch $out";
+      # The installed CLI (flake.lock) and a fresh checkout (repositories.json) use one revision.
+      tool-pins =
+        let
+          declared =
+            (builtins.fromJSON (builtins.readFile ../config/repositories.json)).google-automation.revision;
+        in
+        assert lib.assertMsg (inputs.google-automation.rev == declared)
+          "flake.lock google-automation ${inputs.google-automation.rev} differs from config/repositories.json ${declared}";
+        pkgs.runCommand "tool-pin-consistency" { } "touch $out";
     }
   );
 }

@@ -42,7 +42,8 @@ class Configuration(unittest.TestCase):
         for settings in ({'dokcer': True}, {'windows_vm': True}, {'gpu_handoff': True},
                          {'ssh': True}, {'ssh_port': 70000}, {'looking_glass_mib': 123},
                          {'windows_disk': '../disk'}, {'network_dhcp_start': '10.0.0.1'},
-                         {'gpu_devices': [{'address': 'not-pci', 'driver': 'nvidia'}]}):
+                         {'gpu_devices': [{'address': 'not-pci', 'driver': 'nvidia'}]},
+                         {'host_packages': ['bad;name']}, {'nvidia_prime': 'hybrid'}, {'nvidia_prime': 'on-demand'}):
             with self.subTest(settings=settings), self.assertRaises(ValueError):
                 load_config(ROOT, 'default', settings)
 
@@ -160,6 +161,25 @@ class HostPersistence(unittest.TestCase):
                     host.define_windows(cfg, xml, root)
 
 
+class Selection(unittest.TestCase):
+    def test_commands_default_to_the_enclosing_checkout(self):
+        with tempfile.TemporaryDirectory() as directory:
+            checkout = Path(directory)
+            (checkout / 'hosts').mkdir()
+            (checkout / 'hosts/registry.json').write_text('{}')
+            (checkout / 'flake.nix').write_text('{}')
+            (checkout / 'nested').mkdir()
+            with patch.object(Path, 'cwd', return_value=checkout / 'nested'):
+                self.assertEqual(selector().default_repo(), checkout)
+
+    def test_laptop_declares_tailnet_ssh_and_ubuntu_solaar(self):
+        cfg = load_config(ROOT, 'laptop-ubuntu')
+        self.assertTrue(cfg['ssh'])
+        self.assertEqual(cfg['ssh_listen_addresses'], ['100.86.106.55'])
+        self.assertIn('solaar', cfg['host_packages'])
+        self.assertIn('build-essential', cfg['base_packages'])
+
+
 class GPUHandoff(unittest.TestCase):
     def test_busy_gpu_refuses_and_releases_its_reservation(self):
         cfg = gpu_config()
@@ -175,7 +195,7 @@ class GPUHandoff(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             state = Path(directory) / 'owner.json'
             state.write_text('protected')
-            with self.assertRaises(FileExistsError):
+            with self.assertRaisesRegex(RuntimeError, 'gpu-guard.py reclaim'):
                 guard.prepare(cfg, render_windows(ROOT, cfg), state=state)
             self.assertEqual(state.read_text(), 'protected')
 
@@ -198,8 +218,24 @@ class GPUHandoff(unittest.TestCase):
             state.write_text(json.dumps({'uuid': cfg['windows_uuid']}))
             with patch.object(guard, 'inspect_devices', side_effect=RuntimeError('still vfio-pci')):
                 with self.assertRaisesRegex(RuntimeError, 'vfio-pci'):
-                    guard.release(cfg, state=state)
+                    guard.release(cfg, state=state, delay=0)
             self.assertTrue(state.exists())
+
+    def test_release_retries_a_slow_driver_before_clearing_reservation(self):
+        cfg = gpu_config()
+        with tempfile.TemporaryDirectory() as directory:
+            state = Path(directory) / 'owner.json'
+            state.write_text(json.dumps({'uuid': cfg['windows_uuid']}))
+            slow = [subprocess.CalledProcessError(9, 'nvidia-smi'), subprocess.CompletedProcess([], 0)]
+            with patch.object(guard, 'inspect_devices', return_value=[]), patch.object(guard.subprocess, 'run', side_effect=slow):
+                guard.release(cfg, state=state, delay=0)
+            self.assertFalse(state.exists())
+
+    def test_known_desktop_holders_get_specific_advice(self):
+        with patch.object(guard, 'users', return_value=[os.getpid()]), \
+                patch.object(guard.Path, 'read_text', return_value='nvidia-persistenced\n'):
+            with self.assertRaisesRegex(RuntimeError, 'systemctl stop nvidia-persistenced'):
+                guard.require_idle(['/dev/nvidia0'])
 
     def test_iommu_group_must_be_complete(self):
         cfg = gpu_config()

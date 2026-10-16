@@ -44,10 +44,19 @@ for iteration in 1 2; do
 done
 test -L "$test_home/.bashrc"
 test -L "$test_home/.codex/AGENTS.md"
+test -L "$test_home/.codex/RTK.md"
 test -L "$test_home/.claude/skills/setup-assistant"
 test -L "$test_home/.codex/skills/discovered-later"
 test ! -L "$test_home/.codex/skills/removed-later"
 test -L "$test_home/.config/mise/config.toml"
+# Stray unmanaged copies (as migrated from another machine) must not shadow managed tools.
+mkdir -p "$test_home/.local/bin"
+for shadow in python python3 node uv rtk; do
+  printf '#!/bin/sh\necho shadowed-%s >&2; exit 97\n' "$shadow" > "$test_home/.local/bin/$shadow"
+  chmod +x "$test_home/.local/bin/$shadow"
+done
+printf '#!/bin/sh\necho unmanaged-ok\n' > "$test_home/.local/bin/only-unmanaged"
+chmod +x "$test_home/.local/bin/only-unmanaged"
 env -u __HM_SESS_VARS_SOURCED -u __HM_PROFILE_SOURCED \
   HOME="$test_home" USER=shmuel \
   XDG_CONFIG_HOME="$test_home/.config" XDG_DATA_HOME="$test_home/.local/share" \
