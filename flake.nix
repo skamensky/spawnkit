@@ -91,8 +91,25 @@
 
       homeManagerModules.default = import ./modules/home;
       nixosModules = {
-        default = { config, ... }: {
+        default = { config, pkgs, ... }: {
           imports = [ home-manager.nixosModules.home-manager ];
+          nixpkgs.config.allowUnfree = lib.mkDefault true;
+          # mise downloads ordinary Linux binaries outside the Nix store.
+          programs.nix-ld = {
+            enable = true;
+            libraries = with pkgs; [
+              stdenv.cc.cc.lib
+              zlib
+              openssl
+              libffi
+              sqlite
+              bzip2
+              xz
+              readline
+              ncurses
+              libxcrypt
+            ];
+          };
           home-manager = {
             useGlobalPkgs = true;
             useUserPackages = true;
@@ -190,6 +207,7 @@
             assert evaluated.config.home-manager.users.shmuel.personal.profile == "default";
             assert evaluated.config.services.openssh.enable;
             assert evaluated.config.virtualisation.docker.enable;
+            assert evaluated.config.programs.nix-ld.enable;
             assert evaluated.config.home-manager.users.shmuel.home.activationPackage.drvPath != "";
             pkgs.runCommand "nixos-module-evaluation" { } "touch $out";
         }

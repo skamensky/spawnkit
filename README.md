@@ -187,6 +187,9 @@ host and make that host's nixpkgs input follow this flake's nixpkgs. It integrat
 Home Manager for `shmuel` using the same registry and shared modules. Import the
 `ssh` or `docker` system modules where needed; define users, disks, bootloader,
 authorized keys and hardware in the actual NixOS host configuration.
+The default system module enables nix-ld with common runtime libraries so mise's
+downloaded Python/Node binaries can run on NixOS. Standalone Home Manager on
+NixOS requires this host setup too; Home Manager cannot install a system loader.
 
 ## Validation and maintenance
 
