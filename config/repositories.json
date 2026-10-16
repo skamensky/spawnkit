@@ -3,7 +3,7 @@
     "path": "skamensky/personal-agent-customizations",
     "url": "git@github.com:skamensky/personal-agent-customizations.git",
     "branch": "main",
-    "revision": "da78434dca3854b500a80980171f7f75844e287a"
+    "revision": "926f9bb1fa3f952122473067dc6094745af01216"
   },
   "personal-gcp": {
     "path": "skamensky/personal-gcp",

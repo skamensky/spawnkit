@@ -6,19 +6,19 @@
 }:
 let
   cfg = config.personal.repositories;
-  catalog = builtins.fromJSON (builtins.readFile ../../repositories.json);
+  catalog = builtins.fromJSON (builtins.readFile ../../../config/repositories.json);
   manifest = pkgs.writeText "personal-repositories.json" (
     builtins.toJSON (map (name: catalog.${name}) (lib.unique cfg.names))
   );
   bootstrap = pkgs.writeShellApplication {
-    name = "nix-config-repos";
+    name = "spawnkit-repos";
     runtimeInputs = [
       pkgs.python3
       pkgs.git
       pkgs.openssh
     ];
     text = ''
-      exec python3 ${../../scripts/bootstrap-repos.py} ${manifest} --home "$HOME" "$@"
+      exec python3 ${../../../scripts/bootstrap-repos.py} ${manifest} --home "$HOME" "$@"
     '';
   };
 in
@@ -45,7 +45,7 @@ in
     home.activation.bootstrapRepositories =
       lib.hm.dag.entryBetween [ "linkGeneration" ] [ "writeBoundary" ]
         ''
-          run ${bootstrap}/bin/nix-config-repos
+          run ${bootstrap}/bin/spawnkit-repos
         '';
   };
 }

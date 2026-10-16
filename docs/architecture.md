@@ -6,7 +6,7 @@ Ubuntu continues to supply the system packages, kernel drivers and system servic
 definitions. Windows GPU handoff runs when the VM starts and stops, not at boot.
 
 This is the agreed responsibility split and proposed implementation layout. The
-Home Manager infrastructure already exists. The Ansible layer, virtualization
+Home Manager infrastructure already exists. The Ansible roles/apply command, virtualization
 module, VM definition and GPU hooks described below are planned, not installed.
 No VM or GPU binding is changed by this document.
 
@@ -14,19 +14,20 @@ No VM or GPU binding is changed by this document.
 
 | Responsibility | Owner | Tracked source |
 | --- | --- | --- |
-| Shared user packages, shell, dotfiles and repository bootstrap | Home Manager | Existing `modules/home/` and `users/shmuel.nix` |
-| User daemons, timers and their environment | Home Manager | Existing relevant modules; a new `modules/home/services.nix` when shared custom user services are needed |
-| virt-manager, virt-viewer, libvirt CLI, Looking Glass client and VM launcher | Home Manager | Planned `modules/home/virtualization.nix` |
+| Shared user packages, shell, dotfiles and repository bootstrap | Home Manager | Existing `nix/modules/home/` and `nix/users/shmuel.nix` |
+| User daemons, timers and their environment | Home Manager | Existing relevant modules; a new `nix/modules/home/services.nix` when shared custom user services are needed |
+| virt-manager, virt-viewer, libvirt CLI, Looking Glass client and VM launcher | Home Manager | Planned `nix/modules/home/virtualization.nix` |
 | User configuration and desktop entry for Windows/Looking Glass | Home Manager | Planned virtualization module and its referenced source files |
 | Ansible command and its dependencies | Nix | Root flake's shared Nixpkgs input; no separate infrastructure flake or lock |
 | Ubuntu system package installation | Ansible using APT | Planned `ansible/roles/` |
 | QEMU backend, libvirt, OVMF and swtpm configuration | Ansible with Ubuntu packages | Planned `ansible/roles/virtualization/` |
 | Docker Engine and NVIDIA Container Toolkit | Ansible with host packages | Planned `ansible/roles/docker/` |
 | NVIDIA driver installation and host device permissions | Ansible with Ubuntu-supported setup | Planned `ansible/roles/nvidia/` and host parameters |
+| Tailscale and SSH daemons | Ansible with Ubuntu packages | Planned `ansible/roles/tailscale/` and `ansible/roles/ssh/` |
 | IOMMU boot settings, GPU handoff configuration and libvirt hooks | Ansible | Planned `ansible/roles/gpu_handoff/` |
 | Hostname and environment to profile selection | Existing registry and selector | `hosts/registry.json` and `scripts/home-config.py` |
 | Profile-specific privileged setup and hardware parameters | Ansible consuming the selected profile | Planned `hosts/<profile>/system.yml` |
-| Optional NixOS system configuration | NixOS modules | Existing `modules/nixos/`; Ubuntu roles do not run on NixOS |
+| Optional NixOS system configuration | NixOS modules | Existing `nix/modules/nixos/`; Ubuntu roles do not run on NixOS |
 | Skills, assistant instructions and private assistant settings | Separate canonical repository | `personal-agent-customizations`; this flake retains external links |
 
 The Ansible roles manage package dependencies, root-owned files, group/device
@@ -39,48 +40,49 @@ Paths marked planned below do not exist yet. Role names identify responsibilitie
 we will add a role when implementing its corresponding host feature.
 
 ```text
-nix-config/
-├── flake.nix                        # Existing shared inputs and tool packaging
-├── flake.lock                       # Existing single infrastructure lock
+spawnkit/
+├── flake.nix, flake.lock              # One shared pinned entry point
+├── nix/
+│   ├── outputs.nix                    # Home Manager and optional NixOS composition
+│   ├── modules/home/                  # Existing user configuration
+│   │   ├── virtualization.nix         # Planned VM clients and launcher
+│   │   └── services.nix               # Planned only if shared custom services are needed
+│   ├── modules/nixos/                 # Optional NixOS system configuration
+│   ├── users/shmuel.nix
+│   └── tests/activation.nix
 ├── hosts/
-│   ├── registry.json                # Existing hostname/environment mapping
-│   ├── default.nix                  # Existing minimal Home Manager defaults
-│   ├── default-system.yml           # Planned minimal privileged defaults
-│   ├── laptop-ubuntu/
-│   │   ├── default.nix              # Existing Home Manager host additions
-│   │   └── system.yml               # Planned role enablement and hardware values
-│   └── <other-profile>/
-│       ├── default.nix
-│       └── system.yml               # Planned only where host setup is needed
-├── modules/
-│   ├── home/
-│   │   ├── virtualization.nix       # Planned VM clients, launcher, user config
-│   │   └── services.nix             # Planned if shared custom user units are needed
-│   └── nixos/                       # Existing optional NixOS system integration
-├── ansible/                         # Planned privileged Ubuntu automation
-│   ├── ansible.cfg
-│   ├── inventory.py                 # Uses the existing profile selection logic
-│   ├── site.yml
-│   └── roles/
-│       ├── base/
+│   ├── registry.json                  # Existing hostname/environment mapping
+│   ├── default/home.nix               # Existing shared Home Manager defaults
+│   ├── default/system.yml             # Planned minimal privileged defaults
+│   └── <profile>/
+│       ├── home.nix                   # Existing profile additions
+│       └── system.yml                 # Planned role enablement and hardware values
+├── config/
+│   ├── repositories.json              # Repository bootstrap catalog
+│   ├── assistants/RTK.md              # Shared non-secret assistant instructions
+│   ├── runtimes/                      # mise versions and runtime lock
+│   └── shell/                         # Shared shell completion sources
+├── ansible/
+│   ├── README.md                      # Existing scope and implementation status
+│   ├── inventory.py                   # Planned; reuses the existing host selector
+│   ├── site.yml                       # Planned
+│   └── roles/                         # Planned; add each role when implementing it
+│       ├── virtualization/            # QEMU/libvirt settings and Windows XML template
+│       ├── gpu_handoff/               # Hooks, helpers and host parameter templates
 │       ├── docker/
 │       ├── nvidia/
-│       ├── virtualization/
-│       │   ├── tasks/main.yml
-│       │   ├── handlers/main.yml
-│       │   └── templates/
-│       │       ├── qemu.conf.j2
-│       │       └── windows.xml.j2
-│       └── gpu_handoff/
-│           ├── tasks/main.yml
-│           ├── files/               # Auditable helpers and hook dispatcher
-│           └── templates/           # Host parameters and any required overrides
+│       ├── tailscale/
+│       └── ssh/
 ├── scripts/
-│   ├── home-config.py               # Existing user-environment wrapper
-│   └── host-config.py               # Planned explicit Ansible entry point
+│   ├── home-config.py                 # Existing user-environment entry point
+│   ├── bootstrap-repos.py             # Existing safe repository bootstrap
+│   ├── link-assistant-skills.py       # Discovers skills from the canonical checkout
+│   └── host-config.py                 # Planned explicit Ansible entry point
+├── tests/                             # Bootstrap and isolated activation checks
 └── docs/
-    ├── host-service-responsibilities.md
-    └── windows-vm.md                # Planned native setup and recovery procedure
+    ├── ubuntu-migration.md            # Complete migration runbook
+    ├── architecture.md                # This responsibility split
+    └── windows-vm.md                  # GPU passthrough design and validation
 ```
 
 Each feature's templates, scripts and any custom unit definitions stay with its
@@ -101,6 +103,7 @@ custom GPU handoff daemon or boot-time GPU transfer service.
 | Looking Glass | Home Manager desktop entry/launcher | Opened for the VM; no separate daemon is required |
 | Libvirt service and sockets | Ubuntu packages | Configure on-demand activation appropriate to the installed Ubuntu version; no guest autostart |
 | GPU prepare and cleanup | Our libvirt hooks installed by Ansible | VM startup and shutdown; reject startup if the GPU is busy |
+| Tailscale and SSH | Ubuntu/vendor packages | Enable on opted-in profiles with declared access settings |
 | Docker Engine | Ubuntu/vendor packages | Enable only on opted-in hosts; startup policy declared in its role |
 | NVIDIA host services | Installed driver package | Keep only services actually required by the chosen driver and configuration |
 
@@ -114,7 +117,8 @@ whole vendor unit into Git. If we later need a genuinely custom privileged
 daemon, keep its full unit with that feature's Ansible role and install it under
 `/etc/systemd/system/`.
 
-Home Manager generates and links user units under `~/.config/systemd/user/`.
+Personal skills are discovered from the canonical assistant checkout at activation;
+there is no skill inventory JSON in this repository. Home Manager generates and links user units under `~/.config/systemd/user/`.
 Ansible installs privileged files as root-owned copies at stable system paths;
 they do not link into a mutable checkout under the home directory. User services
 that must survive logout may need explicitly configured lingering; this is a
@@ -146,8 +150,8 @@ in native Ubuntu. The same hostname under WSL must not select those operations.
 | Ubuntu QEMU backend and helpers | Distribution package locations |
 | Libvirt configuration | `/etc/libvirt/` |
 | Hook dispatcher and lifecycle integration | `/etc/libvirt/hooks/` |
-| Privileged helper executables | `/usr/local/libexec/nix-config/` |
-| Host-specific GPU handoff parameters | `/etc/nix-config/gpu-handoff.conf` |
+| Privileged helper executables | `/usr/local/libexec/spawnkit/` |
+| Host-specific GPU handoff parameters | `/etc/spawnkit/gpu-handoff.conf` |
 | Service overrides we actually require | `/etc/systemd/system/<unit>.d/` |
 | Windows domain definition | Rendered from Git and registered with system libvirt |
 | Windows disk | Planned `/var/lib/libvirt/images/windows.qcow2` |

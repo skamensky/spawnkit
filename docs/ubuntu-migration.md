@@ -1,0 +1,525 @@
+# TopLap123: WSL + Windows → native Ubuntu (agent runbook)
+
+Written 2026-10-14 by surveying WSL (Ubuntu 24.04.2) and the Windows host. **This file is for the agent doing the migration.** Shmuel will hand it to you; work through it in order.
+
+---
+
+## 0. Agent brief: read this first
+
+### Goal
+Move everything that matters from **WSL Ubuntu** (a 313 GB `ext4.vhdx` on C:) and **Windows** (`C:\Users\shmuel`) into the **native Ubuntu install that already exists on partition 5** of the same SSD. Preserve paths so that agent sessions, git worktrees and tools keep working. Windows stays as a dual-boot fallback until Shmuel decides to delete it.
+
+### Canonical guide and private migration bundle
+
+The maintained guide is `docs/ubuntu-migration.md` in
+`~/repos/skamensky/spawnkit`. This Git repository owns reusable
+configuration and the migration procedure. The separate bundle below holds
+private inventories, migration scripts, exports, checkpoints and execution logs;
+those must not be committed. Offline copies of this guide travel in the bundle,
+but edit the repository copy and refresh those exports before hand-off.
+
+| Environment | Path |
+|---|---|
+| WSL | `~/tmp/ubuntu-migration/` (`docs/`, `inventory/`, `scripts/`) |
+| Windows | `C:\Users\shmuel\Downloads\ubuntu-migration\` (a copy) |
+| Native Ubuntu, before the WSL disk is mounted | `/mnt/win/Users/shmuel/Downloads/ubuntu-migration/`. First thing on native: copy it to `~/tmp/ubuntu-migration/` |
+
+### Find out where you are
+```bash
+uname -r | grep -qi microsoft && echo WSL || echo NATIVE
+```
+- **WSL** → you're in Phase A (preparation).
+- **NATIVE** → check `~/tmp/ubuntu-migration/MIGRATION-LOG.md` (or the copy in Windows Downloads) to see which phases are done, then continue.
+
+### Rules
+1. **Log everything** in `~/tmp/ubuntu-migration/MIGRATION-LOG.md`: each step, its result, what you copied, what you skipped and why. Before the reboot to native, copy the log into the Windows Downloads bundle so it travels.
+2. **Never write to the old disks.** Mount C: (`/mnt/win`) and the WSL image (`/mnt/wsl-old`) **read-only**. They're the only fallback.
+3. **Keep paths identical:** username `shmuel`, uid 1000, `/home/shmuel/...`. Codex/Claude transcripts, Claude project dirs (`~/.claude/projects/-home-shmuel-…`) and git worktrees store absolute paths.
+4. **Secrets:** follow Shmuel's `personal-secrets` skill. Never print secret values in chat or logs. Don't carry the plaintext `export TOKEN=…` lines over (§A2).
+5. **Stop and ask Shmuel** before you:
+   - delete anything
+   - push to a remote for the first time or create a new GitHub repo
+   - run something in a Windows admin shell
+   - touch partitions or the BIOS
+   - overwrite an existing file in the native home
+6. **Shmuel does these himself:**
+   - typing sudo passwords. Ask him to run `sudo` commands, or to approve them, if you can't
+   - OAuth logins (Codex, Claude, gcloud, gh, Tailscale if re-authenticating)
+   - Chrome Sync
+   - BIOS
+   - Windows admin PowerShell
+7. Shell commands follow Shmuel's RTK convention (`rtk <cmd>`) once `rtk` is installed on native.
+
+### Machine facts
+| | |
+|---|---|
+| Hardware | Lenovo Legion 5 16IRX9 (83DG), i9-14900HX, 32 GB RAM, RTX 4060 Laptop + Intel UHD (hybrid), Realtek 8852CE Wi-Fi 6E (`rtw89`) |
+| Disk | one 1 TB NVMe, GPT: p1 EFI · p2 MSR · **p3 = C: NTFS 470 GB (98 % full)** · p4 recovery 2 GB · **p5 = native Ubuntu 481 GB** |
+| C: | **not encrypted** (`manage-bde`: Fully Decrypted, Protection Off, 2026-10-14) |
+| WSL disk | `C:\Users\shmuel\AppData\Local\Packages\CanonicalGroupLimited.Ubuntu_79rhkp1fndgsc\LocalState\ext4.vhdx` (313 GB file, 193 GB used) |
+| WSL network | Tailscale node `toplap123` = **100.86.106.55**; sshd listens **only on that IP, port 2222**, key auth only |
+
+### Phases
+| Phase | Where | Summary |
+|---|---|---|
+| **A. Prepare** | WSL + Windows | push code, fix secrets, checkpoint in-flight agent work, snapshots, Windows exports |
+| **B. Hand-off** | Windows | `powercfg /h off`, `wsl --shutdown`, Restart into Ubuntu |
+| **C. Mount + copy** | native | mount C: and the vhdx read-only, rsync everything listed |
+| **D. Set up** | native | drivers, packages, tools, dotfiles, agent tooling |
+| **E. Resume + verify** | native | resume in-flight threads, run the verification checklist |
+| **F. Decommission** | native, weeks later | only on Shmuel's explicit go-ahead |
+
+---
+
+## Phase A — Prepare (in WSL / Windows)
+
+### A1. 🔴 Code that exists only on this laptop
+From `inventory/repos-status.txt`. "NO-REMOTE" means this laptop holds the only copy.
+
+| Repo | State | Action |
+|---|---|---|
+| `skamensky/bank-records-automation` | **723 unpushed commits, no remote**, 1.8 GB | ask Shmuel → create private GitHub repo → push |
+| `skamensky/h3-lora-lab` | 9 unpushed, no remote | same |
+| `skamensky/arnona-bot` | 1 unpushed + 9 dirty, no remote | commit + same |
+| `image-training` (5.1 G), `sleep-tracker` (2.5 G), `learn-ml`, `web-terminal-experiment`, `tarflix`, `flight-data`, `automate-takeout` | dirty, no remote | ask: private repo, or rely on the rsync in Phase C |
+| `SkylineCapital/supa-crm` + worktrees | **31 unpushed commits, 10 stashes**, `supa-crm-lead-preprocessing` dirty (3) | push branches; turn stashes into branches (`git stash branch`) after asking |
+| `region-corteza` (98 dirty, 1 unpushed), `formql` (37), `polymarket-arbitrage` (41, 1 unpushed), `family-desk` (6, 8 unpushed), `google-automation`, `my-supa`, `postgres-formula-compiler` (1 stash), `safe-phone`, `shmutils`, `personal-agent-customizations`, `pgmeta` | dirty / unpushed | commit + push where Shmuel agrees |
+
+Pushing is a safety net. Phase C still rsyncs **all of `~/repos`**, because large repos carry git-ignored data, `.env` files and models.
+
+**Done when:** `repos-status.txt` has been regenerated (command in A4) and every NO-REMOTE / unpushed entry is either pushed or explicitly accepted by Shmuel as "rsync only".
+
+### A2. 🔴 Plaintext secrets
+Legacy shell startup files export plaintext credentials for several services. These plaintext exports are not imported by Home Manager. Load the `personal-secrets` skill and:
+1. store each value in the official store, unless it's already there
+2. replace the `export` lines with loads from the store
+3. recommend rotation to Shmuel
+
+Other credential material: put it in the store, or plan to re-authenticate on native. Don't treat it as ordinary files.
+Cloud CLI, OAuth, registry and tunnel credential files under the home directory (inventoried privately, not here).
+
+**Done when:** the relevant credentials have documented store/runtime mappings, and all three shell files have no plaintext credential exports. Use a name-only inspection; never print matching credential lines into chat or logs.
+
+### A3. 🔴 In-flight agent work (Codex + Claude)
+Several Codex threads were **mid-task** when this was written: their last event was `task_started` with no `task_complete`. Nothing may be lost.
+
+1. **Snapshot.** Regenerate right before hand-off:
+   ```bash
+   python3 ~/tmp/ubuntu-migration/scripts/in_flight_agent_work.py --days 14 > ~/tmp/ubuntu-migration/inventory/in-flight-agent-work.md
+   python3 ~/tmp/ubuntu-migration/scripts/in_flight_agent_work.py --days 30 --home /mnt/c/Users/shmuel > ~/tmp/ubuntu-migration/inventory/in-flight-agent-work-windows.md
+   ```
+   For each recent thread it lists the name, cwd, last user request, last agent message, and whether the last turn finished. This covers Codex threads (including archived ones), Claude desktop sessions and Claude CLI transcripts. On native, use `--root /mnt/wsl-old` to read the old disk.
+
+2. **Unfinished at the 2026-10-14 snapshot:**
+   | Codex thread | Where it stopped | Code location |
+   |---|---|---|
+   | **supa-gcp-alerts** | Claude audit done (17 findings addressed); agent was checking the gist for private incident details **before publishing** | cwd `~` |
+   | **declarative-schemas** | Claude security review done (SQL execution bypasses, ownership, policy ordering); **fixes, regression tests and PR update not yet done** | `supa-crm/.worktrees/supa-crm-declarative-schema-poc`, branch `agent/declarative-schema-poc` |
+   | **lead import** | historical reprocessing of headerless rows **was running**; uncertain tabs flagged for review | `supa-crm-lead-preprocessing` (3 dirty), branch `codex/lead-import-preprocessing`; the local Supabase stack `s-lead-preprocess` is running in Docker |
+
+3. **Checkpoint.** These threads drove **Claude in tmux windows with bypass permissions**.
+   - Run `tmux ls`, and capture each pane: `tmux capture-pane -p -S - -t <target> > ~/tmp/ubuntu-migration/tmux/<name>.txt`.
+   - Ask Shmuel to have each unfinished thread do two things: (a) commit its WIP to its branch, and push it where allowed; (b) write a "where I stopped / next step" note into the thread.
+   - Record the notes in the log.
+4. **Local Supabase (`s-lead-preprocess`).** If the lead-import data matters, run `supabase db dump --local` (data + schema) from `supa-crm-lead-preprocessing` into `~/tmp/ubuntu-migration/db/`. Docker volumes are **not** copied.
+
+**Done when:** the snapshot is regenerated, the tmux captures are saved, and every unfinished thread has a WIP commit and a note (or Shmuel says to skip it).
+
+### A4. Inventories
+Already in `inventory/`: `apt-user-installed.txt`, `apt-sources.list.d/`, `snap.txt`, `npm-global.txt`, `vscode-extensions.txt`, `docker-images.txt`, `custom-binaries.txt`, `windows-apps.txt`, `repos-status.txt`, `in-flight-agent-work*.md`. Regenerate the repo status right before hand-off:
+```bash
+cd ~/repos; for g in $(find . -maxdepth 3 -name .git -prune | sed 's|/.git$||'); do (cd "$g"; echo "$g | dirty=$(git status --porcelain | wc -l) unpushed=$(git log --branches --not --remotes --oneline | wc -l) stash=$(git stash list | wc -l) | $(git remote get-url origin 2>/dev/null || echo NO-REMOTE)"); done > ~/tmp/ubuntu-migration/inventory/repos-status.txt
+```
+
+### A5. Windows-side items that can't simply be copied (Shmuel acts; agent tracks)
+- **Chrome (Windows):** 7 profiles (Default, Profile, 1, 2, 3, 4, 6). DPAPI-encrypted, so they can't be moved as files. Each profile must be **signed into Chrome Sync with passwords on**; note which account each profile uses.
+- **Brave:** 1 profile, so turn on Brave Sync.
+- **Firefox:** 2 profiles, which are portable and get copied in Phase C.
+- **Wi-Fi:** 26 profiles. Optional: `netsh wlan export profile key=clear folder=<dir>`. The output has plaintext keys, so keep it out of chat and logs.
+- **Unsaved notes:** Notepad++ backup tabs (copied in Phase C). The 3 Windows Notepad tabs are binary TabState files: open them in Notepad and save them as `.txt` to Downloads.
+- **`Documents\dd.accdb`** (Access): export it to CSV/SQLite while Windows still works.
+- **Logi Options+** button mappings (screenshot); **Wispr Flow** dictionary/snippets (likely no Linux client).
+- **BIOS:** update through Lenovo Vantage now (harder later).
+
+### A6. Refresh the bundle in Windows Downloads
+First export the current canonical guide, then sync the private bundle:
+```bash
+cp ~/repos/skamensky/spawnkit/docs/ubuntu-migration.md ~/tmp/ubuntu-migration/docs/migration-plan.md
+rsync -a ~/tmp/ubuntu-migration/ /mnt/c/Users/shmuel/Downloads/ubuntu-migration/
+```
+
+---
+
+## Phase B — Hand-off (Windows, Shmuel)
+In **admin PowerShell**:
+```powershell
+powercfg /h off     # turns off hibernation + Fast Startup so Linux can mount C: (also frees ~12 GB hiberfil.sys)
+wsl --shutdown      # cleanly closes the WSL disk
+```
+Then **Restart** (not Shut down) and boot Ubuntu.
+If `powercfg /h off` was skipped, always leave Windows via **Restart**. A normal Shut down leaves C: flagged as hibernated, and Linux will then mount it read-only or refuse.
+
+---
+
+## Phase C — Mount + copy (native Ubuntu)
+
+### C0. Check the native install first
+```bash
+id                         # must be shmuel, uid=1000, gid=1000. If not, stop and ask
+lsb_release -a; uname -r
+df -h /                    # need ~120 GB free for what follows
+ls -la ~                   # see what's already there
+```
+If the native home already has dotfiles or data, copy them first to `~/native-pre-migration/` (`.bashrc`, `.profile`, `.ssh`, `.config`, `.gitconfig`). Don't overwrite anything without asking.
+
+### C1. Mount read-only
+```bash
+lsblk -f                                       # C: = nvme0n1p3 (ntfs, "Windows-SSD")
+sudo mkdir -p /mnt/win /mnt/wsl-old
+sudo mount -t ntfs3 -o ro,uid=1000,gid=1000 /dev/nvme0n1p3 /mnt/win
+
+# get the bundle + log onto native disk
+mkdir -p ~/tmp && rsync -a /mnt/win/Users/shmuel/Downloads/ubuntu-migration/ ~/tmp/ubuntu-migration/
+
+# WSL disk image
+sudo apt install -y qemu-utils
+sudo modprobe nbd max_part=8
+sudo qemu-nbd --read-only -f vhdx -c /dev/nbd0 \
+  /mnt/win/Users/shmuel/AppData/Local/Packages/CanonicalGroupLimited.Ubuntu_79rhkp1fndgsc/LocalState/ext4.vhdx
+sudo mount -o ro /dev/nbd0 /mnt/wsl-old || sudo mount -o ro,noload /dev/nbd0 /mnt/wsl-old
+ls /mnt/wsl-old/home/shmuel                    # sanity check
+```
+- `ntfs3` refuses rw if Windows is hibernated. Never force it.
+- Never mount `/mnt/wsl-old` rw. `ro,noload` skips replaying the journal and is safe.
+- Don't click "Windows-SSD" in GNOME Files during this phase; that mounts it read-write.
+
+### C2. Copy from WSL
+WSL uid 1000 matches native uid 1000, so ownership carries over. Use `-aHAX`. Log each command and its exit code.
+```bash
+S=/mnt/wsl-old/home/shmuel
+X="--exclude node_modules --exclude .venv --exclude venv --exclude target --exclude __pycache__ --exclude .next --exclude .turbo"
+
+# code (all of it; deps are rebuilt in Phase D)
+rsync -aHAX --info=progress2 $X $S/repos/ ~/repos/
+
+# worktrees and work dirs outside ~/repos (keep identical paths)
+rsync -aHAX $X $S/Documents/ ~/Documents/          # includes Documents/Codex/2026-09-29/spa/work/review-policy-drift worktree
+rsync -aHAX $S/Downloads/ ~/Downloads/
+rsync -aHAX $X $S/tmp/ ~/tmp/ --exclude '/supa-crm/' --exclude '/ubuntu-migration/'   # tmp/supa-crm = 50 GB generated runs: ask before copying
+rsync -aHAX $S/{770-scene,garmin-analysis,gmail-insurance-2025,linear-cycles-report,linear-ticket-triage,scripts,supabase,bin} ~/
+rsync -aHAX $S/*.pdf ~/Documents/pension-regulations/   # 13 Hebrew Altshuler Shaham PDFs from ~ root
+
+# app data
+rsync -aHAX $S/.local/share/{family-desk,arnona-bot,claude,rtk,keyrings} ~/.local/share/
+rsync -aHAX $S/.local/bin/ ~/.local/bin/           # check for wrappers pointing at WSL paths in Phase D
+rsync -aHAX $S/.automation/ ~/.automation/
+rsync -aHAX $S/.family_photos/ ~/.family_photos/
+
+# shell + tools config (WSL-isms get fixed in D4)
+rsync -aHAX $S/{.gitconfig,.tmux.conf,.bashrc,.profile,.mybashrc,.mybashrc.sh,.bash_completion.d,.bash_history,.python_history} ~/
+rsync -aHAX $S/.config/{shell,btop,gws,go,Cursor,Kiro,Codex} ~/.config/
+rsync -aHAX $S/.ssh/ ~/.ssh/ && chmod 700 ~/.ssh && chmod 600 ~/.ssh/id_* ~/.ssh/region-corteza ~/.ssh/google_compute_engine
+
+# browser profiles used by automation (cookies need the keyrings copied above)
+rsync -aHAX $S/.config/google-chrome* ~/.config/
+
+# optional, ask: Android emulator image (1.8 GB)
+# rsync -aHAX $S/.android/ ~/.android/
+```
+
+### C3. Copy agent state (Codex + Claude)
+Stop Codex and Claude on native first, if they're installed and running.
+```bash
+# Codex: transcripts, index, sqlite state (with -wal/-shm), config, memories, artifacts
+rsync -aHAX $S/.codex/ ~/.codex/ \
+  --exclude packages/ --exclude cache/ --exclude tmp/ --exclude 'thread-writer-locks/' --exclude 'mcp-oauth-locks/' \
+  --exclude ipc/ --exclude 'app-server-*' --exclude shell_snapshots/ --exclude auth.json
+
+# Claude Code: transcripts (projects/), history, memory, settings, file-history
+rsync -aHAX $S/.claude/ ~/.claude/ --exclude cache/ --exclude debug/ --exclude shell-snapshots/ --exclude session-env/
+rsync -aHAX $S/.claude.json ~/
+
+# Claude desktop app: Code-tab sessions, titles, worktree registry, scratch workspaces
+rsync -aHAX $S/.config/Claude/{claude-code-sessions,git-worktrees.json,claude_desktop_config.json,config.json,scratch-workspaces} ~/.config/Claude/
+```
+- `~/.codex/skills`, `~/.claude/skills` and the instruction files are **symlinks** into `~/repos/skamensky/personal-agent-customizations`. They resolve once `~/repos` is in place; `setup-assistant` (Phase D) re-links them.
+- `auth.json` is excluded on purpose: Shmuel re-authenticates.
+- Retention: `~/.codex/sessions` is 7.4 GB. Apply Shmuel's generated-run retention policy only **after** Phase E confirms everything resumed.
+
+### C4. Copy system identity (keeps the same tailnet IP + SSH host key)
+The phone, the VM and `personal-agent-customizations/docs/remote-access.md` point at **100.86.106.55:2222**.
+```bash
+sudo systemctl stop tailscaled 2>/dev/null
+sudo mkdir -p /var/lib/tailscale
+sudo cp -a /mnt/wsl-old/var/lib/tailscale/tailscaled.state /var/lib/tailscale/
+sudo cp -a /mnt/wsl-old/etc/ssh/ssh_host_* /etc/ssh/
+sudo cp -a /mnt/wsl-old/etc/ssh/sshd_config.d/. /etc/ssh/sshd_config.d/ 2>/dev/null
+sudo diff /mnt/wsl-old/etc/ssh/sshd_config /etc/ssh/sshd_config   # carry over Port 2222 / ListenAddress / PasswordAuthentication no
+```
+Never run the WSL and native nodes at the same time with the same state. WSL is shut down, so this is fine. If Shmuel boots Windows and WSL later, `wsl --unregister` is **not** your call; flag the conflict instead.
+
+### C5. Copy from Windows
+```bash
+W=/mnt/win/Users/shmuel
+mkdir -p ~/windows-import
+rsync -a --info=progress2 $W/Downloads/ ~/windows-import/Downloads/ --exclude /emergency-space-reserve-5GB.bin --exclude /ubuntu-migration/
+rsync -a $W/{Documents,Desktop,Pictures,Videos,DataGripProjects} ~/windows-import/
+rsync -a $W/*.{png,pdf,cs,ps1,html} ~/windows-import/home-root/
+rsync -a $W/AppData/Roaming/Notepad++/backup/ ~/windows-import/notepadpp-unsaved/
+rsync -a $W/AppData/Roaming/Mozilla/Firefox/Profiles/ ~/windows-import/firefox-profiles/
+rsync -a $W/AppData/Local/Packages/Microsoft.WindowsTerminal_8wekyb3d8bbwe/LocalState/settings.json ~/windows-import/windows-terminal-settings.json
+rsync -a $W/{.ssh,.aws,.gitconfig} ~/windows-import/dotfiles/            # diff against WSL copies; keep unique keys only
+rsync -a $W/.codex/ ~/archive/windows-codex/ --exclude packages/ --exclude auth.json   # Windows Codex app history, read-only reference (cwds are C:\…)
+rsync -a $W/.claude/ ~/archive/windows-claude/
+
+# Ditto clipboard history → migrated to CopyQ in D6. Windows is off, so Ditto isn't running and the file is consistent.
+mkdir -p ~/windows-import/ditto && rsync -a --info=progress2 $W/AppData/Roaming/Ditto/Ditto.db ~/windows-import/ditto/
+sqlite3 "file:$HOME/windows-import/ditto/Ditto.db?mode=ro" "PRAGMA quick_check; SELECT count(*) FROM Main;"   # expect "ok" and ≈17.8k+
+```
+Skip: OneDrive and Music (empty), `scoop`, `tmp`, the Tor Browser folder on Desktop (reinstall it instead).
+
+### C6. Verify the copy, then unmount
+```bash
+du -sh ~/repos ~/.codex ~/.claude ~/windows-import
+diff <(cd /mnt/wsl-old/home/shmuel/repos && find . -name .git -prune -o -type f -print | grep -vE 'node_modules|\.venv|/target/|__pycache__' | sort) \
+     <(cd ~/repos && find . -name .git -prune -o -type f -print | grep -vE 'node_modules|\.venv|/target/|__pycache__' | sort) | head
+sudo umount /mnt/wsl-old && sudo qemu-nbd -d /dev/nbd0 && sudo umount /mnt/win
+```
+**Done when:** the diff is empty apart from the excludes, and the sizes are logged.
+
+### Deliberately left behind (rebuildable)
+`~/tmp/supa-crm` (50 GB, unless Shmuel says otherwise), `.cache`, `.npm`, `.nvm`, `.rustup`, `.cargo`, `.gradle`, `.bun`, `go/pkg`, `snap/`, `.vscode-server`, `.cursor-server`, `.antigravity-server`, `.insightface` (models re-download), `~/node_modules`, `root-env/`, `.codex/packages`, Docker images and volumes (71 of 74 volumes are dangling).
+
+---
+
+## Phase D — Set up (native)
+
+### D1. Hardware
+```bash
+nvidia-smi || sudo ubuntu-drivers install    # Secure Boot: Shmuel enrols the MOK on the next reboot
+mokutil --sb-state
+sudo prime-select on-demand                  # iGPU by default, NVIDIA on demand
+sudo apt install -y solaar                   # Logitech, replaces Logi Options+
+```
+- BIOS GPU mode: **Hybrid**, not dGPU-only (Shmuel).
+- **LenovoLegionLinux** gives you power modes, fan curves and battery conservation (60 % cap), replacing Vantage/Legion Arena.
+- Test suspend/resume, Wi-Fi 6E, the external monitor, the webcam and audio. Dolby has no Linux equivalent; EasyEffects is the closest.
+
+### D2. Declarative user environment with Home Manager
+
+The approved target is **Ubuntu + Nix/Home Manager**, with **mise owning development
+Python/Node versions and uv owning Python environments/dependencies**. Do not replay
+the old APT inventory or reinstall these tools through npm/pip/APT in parallel.
+
+The infrastructure repository is `git@github.com:skamensky/spawnkit.git`, checked
+out at `~/repos/skamensky/spawnkit`. It has one shared flake.lock, reusable modules,
+WSL/native laptop profiles, an agent-VM profile and a minimal unknown-host default.
+This guide is the complete migration reference. The repository README maps the
+subsystems; `nix/README.md` contains Home Manager setup details.
+
+1. Install multi-user Nix using the upstream installer if it is absent. Establish
+   GitHub SSH access using the migrated keys or Shmuel's login; do not put keys or
+   credentials into the flake.
+2. Clone spawnkit only if it is missing. Preserve an existing checkout and its
+   local changes.
+3. From the checkout, inspect and build before activating:
+   ```bash
+   nix --extra-experimental-features 'nix-command flakes' run .#home-config -- select
+   nix --extra-experimental-features 'nix-command flakes' run .#home-config -- check
+   nix --extra-experimental-features 'nix-command flakes' run .#home-config -- build
+   nix --extra-experimental-features 'nix-command flakes' run .#home-config -- repos --dry-run
+   ```
+   If the native machine has a different hostname, `--host laptop-ubuntu` selects
+   that profile explicitly; unknown names otherwise receive the minimal default.
+4. Before `switch`, compare and preserve old `.bashrc`, `.profile`, `.gitconfig`,
+   tmux configuration and assistant links. Existing unmanaged files are a deliberate
+   activation stop, not a reason to force an overwrite. Old `.local/bin` copies of
+   Nix-owned tools must also be reviewed so they do not shadow the managed tools.
+5. Activate with the same wrapper and `-- switch` only after these migration
+   conflicts have been resolved with Shmuel. Activation clones missing declared
+   repositories at pinned commits, installs assistant symlinks and the locked mise
+   runtimes. It never resets or pulls existing repositories.
+6. Log out/in so GUI processes inherit the managed session environment.
+
+APT remains responsible for Ubuntu drivers, system daemons and native build
+libraries. For example, Docker Engine, NVIDIA Container Toolkit, Tailscale/SSH
+services and libvirt are host setup; Home Manager's client packages do not install
+or configure those services. Keep `build-essential` and required project-specific
+native development libraries on Ubuntu. Add user packages through the appropriate
+Home Manager module, build/check the flake, then commit and push.
+
+### D2a. Privileged Ubuntu host setup
+
+Home Manager owns the user environment. Ansible will own privileged Ubuntu setup
+from this same repository: native build dependencies, Docker Engine and NVIDIA
+Container Toolkit, NVIDIA driver setup, Tailscale's `tailscaled` daemon, SSH,
+libvirt/QEMU/OVMF/swtpm, device permissions and GPU lifecycle hooks. The
+`tailscale` client is already declared in `nix/modules/home/laptop.nix`; that does
+not install or configure its host daemon.
+
+**Ansible roles and the host apply command are not implemented yet.** Read
+`ansible/README.md` and `docs/architecture.md` for ownership and planned paths;
+implement and validate the required roles before treating host setup as automated.
+Keep privileged application separate from `home-config switch`. Do not invoke a
+planned `host-config` command until it exists. Machine selection will reuse
+`hosts/registry.json`; root settings will live in `hosts/<profile>/system.yml`.
+
+User daemons are Home Manager `systemd.user` declarations. Ubuntu supplies system
+service units; our roles add only needed drop-ins. Libvirt may start on demand.
+No custom GPU handoff daemon is required at Linux boot. IOMMU boot prerequisites
+are separate from the VM's on-demand device transfer.
+
+### D3. Graphics, assistants and language tools
+
+- The native laptop profile declares Firefox, Chrome on x86_64, VS Code, CopyQ,
+  Solaar, wl-clipboard and a CopyQ user service. It uses Home Manager's
+  `/run/opengl-driver` integration, so individual GUI packages do not need nixGL
+  wrappers. Follow the activation warning's exact sudo setup command.
+- On native Ubuntu, determine the running NVIDIA driver version and the matching
+  upstream installer hash. Declare them through `personal.desktop.nvidia` in the
+  native host module, `hosts/laptop-ubuntu/home.nix`. **Never infer those values from WSL or the Windows driver.**
+  The initial profile supports Intel/Mesa; NVIDIA offloading needs this hardware
+  configuration and native verification.
+- Nix installs mise and uv; mise installs the declared Python and Node versions
+  from the tracked runtime lockfile. Do not install nvm or a second development
+  Python owner. Verify `python --version`, `node --version` and `uv run` from both
+  a terminal and a noninteractive agent.
+- `AGENTS.md`, assistant settings and per-skill symlinks point to the canonical
+  personal-agent-customizations checkout. The **setup-assistant skill now uses
+  Home Manager** and discovers skill directories from the canonical assistant
+  checkout; no duplicate skills manifest is maintained here. Do not run the old imperative symlink helper over managed links.
+- Existing worktrees, unpushed commits and repositories without remotes still come
+  from Phase C. Bootstrap only fills missing repositories; it is not a backup.
+- Shmuel authenticates Claude/Codex, gh, gcloud and Tailscale as required. Credentials
+  and browser/agent state remain separate from Nix configuration.
+- Restore editor extensions as needed, and rebuild project dependencies using
+  their existing language package managers and lockfiles.
+
+Windows GPU passthrough is a separate native feasibility task (KVM/libvirt/VFIO).
+Keep Ubuntu's desktop on Intel. The RTX is exclusive to either Linux workloads
+or the running Windows guest; Looking Glass displays Windows inside the Intel
+Linux desktop using shared memory. It does not share GPU ownership.
+
+Use Ubuntu's QEMU/libvirt backend with a Windows VM definition tracked as a
+repository template. Home Manager will provide virt-manager, the Looking Glass
+client and a launcher. Libvirt pre-start/cleanup hooks perform GPU handoff only
+when starting/stopping Windows. Before detaching, reject startup if any Linux
+application, service or container holds the GPU. Do not kill work automatically;
+detaching a busy GPU can hang. Hooks must not call back into libvirt.
+
+Do not bind the RTX to VFIO as part of ordinary Home Manager activation. Verify
+native IOMMU groups, related PCI functions, display routing, Windows applications,
+and repeated GPU return to Linux first. Keep VM disks, virtual TPM state and UEFI
+variables outside Git/Nix, with consistent backups. Preserve dual boot until the
+required applications and peripherals work. The detailed design and source links
+are in `docs/windows-vm.md`; this is planned until native validation succeeds.
+
+### D4. Review old shell configuration before Home Manager adoption
+
+The Home Manager modules implement the target shell and tmux settings. Use this
+table to audit old files and migration conflicts; make persistent changes in
+`spawnkit`, rather than editing the generated home files.
+| File | Now | Change to |
+|---|---|---|
+| `~/.tmux.conf` | `copy-pipe-and-cancel "clip.exe"` | `"wl-copy"` |
+| `~/.bashrc` ~L148–155 | `alias powershell='powershell.exe'`; ChatGPT launcher with `WAYLAND_DISPLAY=/mnt/wslg/...` | delete |
+| `~/.mybashrc` | Claude desktop launcher with `/mnt/wslg` | delete |
+| `~/.mybashrc.sh` | `alias wslpath=...`; commented `/mnt/c` PATH/WINHOME lines | delete |
+| `~/.mybashrc.sh` | plaintext `export` secrets | should already be gone (A2); verify |
+| `~/bin/clipimg` | PowerShell clipboard-image grab | rewrite with `wl-paste --type image/png` |
+| `/etc/wsl.conf` | — | not needed on native |
+| `~/.ssh/config` | `thinkpad` 10.100.102.7, `phone` over tailnet, `corteza`, `myserver` via cloudflared | keep; test each |
+| anything | other references to `/mnt/c`, `.exe`, `wslg` | `grep -rnE '/mnt/c|\.exe\b|wslg' ~/.bashrc ~/.mybashrc* ~/.profile ~/.config/shell ~/bin ~/.local/bin` and fix them |
+
+### D5. Windows apps → Linux equivalents
+✅ native build · 🔁 replacement · 🌐 web · ❌ drop. Install the ✅/🔁 ones Shmuel wants; ask, don't assume.
+
+| Windows app | On Ubuntu |
+|---|---|
+| Chrome, Brave, Firefox, Edge | ✅ |
+| VS Code, Cursor, Kiro, Antigravity | ✅ .deb / AppImage |
+| JetBrains Toolbox → IntelliJ Ultimate, DataGrip | ✅ (Settings Sync) |
+| WezTerm / Windows Terminal | ✅ WezTerm, or Ghostty / GNOME Console |
+| Claude desktop, ChatGPT desktop | ✅ (apt repos already in inventory) |
+| Codex app | Codex CLI ✅; also check whether a Linux desktop build exists now |
+| Docker | ✅ docker-ce |
+| WhatsApp Desktop | 🌐 web.whatsapp.com PWA (+ `wacli` on the VM) |
+| Element, Zoom, Webex, TeamViewer, Dropbox, ExpressVPN | ✅ |
+| Citrix Workspace (+ VDI plugins) | ✅ Linux .deb. **Test early**, since it's needed for work |
+| Windows 365 | 🌐 windows365.microsoft.com |
+| Microsoft 365, OneNote | 🌐; LibreOffice ✅ |
+| Adobe Acrobat | 🔁 Okular / Xournal++ |
+| Notepad++ | 🔁 VS Code / Kate |
+| Everything | 🔁 FSearch |
+| WizTree | 🔁 ncdu / Baobab / QDirStat |
+| Ditto | 🔁 **CopyQ, with full history migrated (D6)** |
+| AutoHotkey (`mine.ahk` = 2004Scape mining macro) | 🔁 xdotool/ydotool; only if Shmuel wants it |
+| Wispr Flow | ❓ likely no Linux client → whisper-based dictation (nerd-dictation, Speech Note) |
+| Logi Options+ | 🔁 Solaar |
+| OBS, Shotcut, Krita, VLC, qBittorrent, LibreOffice, Wireshark, balenaEtcher, 7-Zip (p7zip) | ✅ |
+| K-Lite | 🔁 `ubuntu-restricted-extras` |
+| Tor Browser | ✅ `torbrowser-launcher` |
+| Visual Studio 2022, Windows SDK, MSYS2, scoop, gsudo, .NET/VC++ runtimes | ❌ (`dotnet-sdk` only if needed) |
+| NVIDIA App, Dolby, Intel XTU, Lenovo Vantage/Now/AvatarMaster, Legion Arena, Nahimic, Copilot, Npcap, USBPcap, WinFsp, TMOG | ❌ |
+| `dd.accdb` | 🔁 `mdbtools` / LibreOffice Base, or the CSV export from A5 |
+
+### D6. Migrate Ditto clipboard history → CopyQ
+Ditto (Windows) holds **17,820 clips from 2025-01-20 to 2026-10-15**: 16.9k text (958 with Hebrew), 9k with HTML, 39 RTF, 96 copied-file lists, and **783 images stored as raw bitmaps (3.4 GB of the 3.9 GB DB)**. There are no Ditto groups, pinned clips or shortcuts, so it's a flat history.
+
+The converter is `scripts/ditto_to_copyq.py`, **tested 2026-10-15 end-to-end** on a snapshot of the real DB against CopyQ 7.1 in an isolated session. All 17,819 non-empty clips imported, and the per-tab counts were verified.
+```bash
+copyq version                                    # installed by Home Manager; verify it is on PATH
+systemctl --user status copyq.service             # managed by the native desktop profile; avoid duplicate autostart
+uv run --script ~/tmp/ubuntu-migration/scripts/ditto_to_copyq.py export \
+  --db ~/windows-import/ditto/Ditto.db --out ~/windows-import/ditto/export      # ~80 s; 3.9 GB → ~560 MB
+copyq source ~/windows-import/ditto/export/import-into-copyq.js               # ~45 s; prints "verified per tab"
+```
+What it does:
+- **Mapping:** UTF-16 text → `text/plain`; CF_HTML → `text/html`; RTF → `text/rtf`; bitmap → `image/png`; copied files → the list of their original Windows paths as text. Each item also carries `application/x-ditto-meta` `{id, date}`.
+- **Tabs:** CopyQ caps a tab at **10,000 items**, so a single "Ditto" tab silently drops about 7k clips (found during testing). The script splits text into half-year tabs `Ditto/2025-H1` (5,100), `Ditto/2025-H2` (7,506), `Ditto/2026-H1` (2,689) and `Ditto/2026-H2` (1,752), plus `Ditto/images` (772). Newest clips are on top. It falls back to quarter or month tabs automatically if a period grows past 9,000.
+- **`maxitems` is global:** the import raises it to the largest tab (~7.5k), which means the live clipboard tab also keeps that much history. **Don't lower it later**, or CopyQ trims the imported tabs. Tell Shmuel about this trade-off.
+- **Memory:** CopyQ loads tabs into memory. Expect about 465 MB of tab files, most of it `Ditto/images` (292 MB). If that's too heavy, Shmuel can delete `Ditto/images` in CopyQ and keep the PNGs in `export/clips/` instead.
+- **Re-runnable:** it replaces any existing `Ditto*` tabs. Ditto keeps growing until Windows is retired, so re-copy `Ditto.db` and re-run both commands to pick up newer clips.
+- **Privacy:** clipboard history likely contains passwords and tokens. Keep `Ditto.db` and `export/` out of git, gists and chat. Once Shmuel confirms CopyQ has everything, ask whether to delete `~/windows-import/ditto/` (keep the original on C: until Phase F).
+
+---
+
+## Phase E — Resume + verify (native)
+
+### E1. Resume in-flight agent work
+1. `python3 ~/tmp/ubuntu-migration/scripts/in_flight_agent_work.py --days 14`. The output should match `inventory/in-flight-agent-work.md`, which proves the transcripts arrived intact.
+2. Fix worktrees: run `git worktree list` and `git worktree repair` in `~/repos/SkylineCapital/supa-crm` and `~/repos/skamensky/family-desk`. Expected worktrees outside `~/repos/<owner>/<repo>`:
+   - `~/Documents/Codex/2026-09-29/spa/work/review-policy-drift` (`codex/review-policy-drift`)
+   - `~/repos/SkylineCapital/supa-crm.worktrees/supabase-log-access`
+   - `~/repos/SkylineCapital/supa-crm/.worktrees/{fix-gmail-message-ambiguity,fix-gmail-sync-catchup,fix-picklist-constraint-identity,supa-crm-declarative-schema-poc}`
+   - `~/repos/SkylineCapital/supa-crm-{docusign-intake-recovery,docusign-release-dev,docusign-release-master,lead-preprocessing}`
+   - `~/tmp/family-desk/publish-core` (already marked prunable; ask before pruning)
+3. Open Codex and confirm that **supa-gcp-alerts**, **declarative-schemas** and **lead import** are listed. Reopen each one, read its checkpoint note, and continue only with Shmuel's go-ahead.
+4. Claude: `claude --resume` from each project cwd lists the old transcripts. The Claude desktop app shows its old Code-tab sessions.
+5. Recreate tmux: `tmain` (→ `supa-crm/start-tmux-session.sh`). Restore the local Supabase for lead import from `~/tmp/ubuntu-migration/db/` if it was dumped.
+
+### E2. Verification checklist
+- [ ] `nvidia-smi` works; PRIME on-demand; suspend/resume; Wi-Fi 6E; external monitor; webcam; audio
+- [ ] `tailscale status` shows `toplap123` at **100.86.106.55**; `ssh -p 2222` from the phone works (else update `docs/remote-access.md`)
+- [ ] Home Manager check/build passed; approved profile activated; Claude + Codex logged in; assistant links and skills resolve; `rtk --version`
+- [ ] mise Python/Node and uv work in noninteractive agents; no shadowing legacy tool copies
+- [ ] Native graphics setup done; matching NVIDIA userspace version/hash declared and offloading verified
+- [ ] the agent-work snapshot matches; old Codex threads visible; `claude --resume` works; worktrees repaired
+- [ ] `repos-status` regenerated on native matches the pre-migration file (except for the deliberate pushes)
+- [ ] no `/mnt/c`, `.exe` or `wslg` references left in shell config (D4 grep is empty)
+- [ ] no plaintext secrets in dotfiles
+- [ ] Family Desk, arnona-bot, bank-records automation, google-automation, personal-sms and clockify-sheets-sync each run end-to-end once
+- [ ] Required Ubuntu host packages/services configured; Tailscale daemon reachable through the managed CLI
+- [ ] Docker works; supa-crm local stack starts
+- [ ] Before adopting the Windows VM: busy-GPU start refusal, Windows GPU acceleration and repeated return to Linux verified
+- [ ] Citrix / Windows 365 access works
+- [ ] Windows Downloads/Documents/Desktop present in `~/windows-import`; unsaved Notepad++ tabs reviewed
+- [ ] CopyQ autostarts; the `Ditto/*` tabs exist; the import printed "verified per tab"; a Hebrew clip and an image paste correctly
+- [ ] log complete; summary given to Shmuel
+
+---
+
+## Phase F — Decommission (only on Shmuel's explicit go-ahead, weeks later)
+- After about a month without needing Windows: Shmuel decides whether to delete C: and the recovery partition, and to grow p5.
+- Before that, the 313 GB `ext4.vhdx` is the last full copy of the WSL world. Ask whether to archive it (external drive) or let it go.
+- Then apply the generated-run retention policy to `~/.codex/sessions` and `~/tmp`.

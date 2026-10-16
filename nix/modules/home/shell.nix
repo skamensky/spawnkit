@@ -34,9 +34,9 @@
       tmain = "$HOME/repos/SkylineCapital/supa-crm/start-tmux-session.sh";
     };
     initExtra = ''
-      source ${../../config/completions/supabase.bash}
-      source ${../../config/completions/shmutils.sh.bash}
-      source ${../../config/completions/tmux.sh.bash}
+      source ${../../../config/shell/completions/supabase.bash}
+      source ${../../../config/shell/completions/shmutils.sh.bash}
+      source ${../../../config/shell/completions/tmux.sh.bash}
     '';
   };
   programs.fzf = {

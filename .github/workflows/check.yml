@@ -15,4 +15,4 @@ jobs:
       - name: Build automatically selected default on an unknown CI hostname
         run: nix run .#home-config -- build --repo "$GITHUB_WORKSPACE"
       - name: Test isolated activation and unmanaged file protection
-        run: bash scripts/test-activation.sh
+        run: bash tests/home-activation.sh

@@ -6,8 +6,12 @@ trap 'rm -rf -- "$test_root"' EXIT
 test_home="$test_root/home"
 mkdir -p "$test_home" "$test_root/runtime"
 chmod 700 "$test_root/runtime"
+skill_source="$test_home/repos/skamensky/personal-agent-customizations/skills"
+mkdir -p "$skill_source/setup-assistant" "$skill_source/removed-later"
+printf '%s\n' 'Temporary canonical test skill' > "$skill_source/setup-assistant/SKILL.md"
+printf '%s\n' 'Temporary canonical test skill' > "$skill_source/removed-later/SKILL.md"
 activation=$(nix --extra-experimental-features 'nix-command flakes' build \
-  --impure --no-link --print-out-paths --file "$repo/tests/activation.nix" \
+  --impure --no-link --print-out-paths --file "$repo/nix/tests/activation.nix" \
   --argstr flake "path:$repo" --argstr testHome "$test_home")
 
 # Refuse an unmanaged shell file without changing it.
@@ -32,10 +36,17 @@ for iteration in 1 2; do
       cat "$test_root/activation-$iteration.log" >&2
       exit 1
     }
+  if [[ "$iteration" == 1 ]]; then
+    mkdir -p "$skill_source/discovered-later"
+    printf '%s\n' 'Discovered without rebuilding the flake' > "$skill_source/discovered-later/SKILL.md"
+    rm -r -- "$skill_source/removed-later"
+  fi
 done
 test -L "$test_home/.bashrc"
 test -L "$test_home/.codex/AGENTS.md"
 test -L "$test_home/.claude/skills/setup-assistant"
+test -L "$test_home/.codex/skills/discovered-later"
+test ! -L "$test_home/.codex/skills/removed-later"
 test -L "$test_home/.config/mise/config.toml"
 env -u __HM_SESS_VARS_SOURCED -u __HM_PROFILE_SOURCED \
   HOME="$test_home" USER=shmuel \

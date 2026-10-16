@@ -37,7 +37,7 @@ def select_profile(registry, hostname, platform_kind, explicit=None):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("action", choices=["select", "build", "switch", "check", "repos"])
-    parser.add_argument("--repo", type=Path, default=Path.home() / "repos/skamensky/nix-config")
+    parser.add_argument("--repo", type=Path, default=Path.home() / "repos/skamensky/spawnkit")
     parser.add_argument("--host", help="Explicit declared profile; unknown hostnames select default automatically")
     parser.add_argument("--hostname", default=socket.gethostname(), help="Override detection for inspection/testing")
     parser.add_argument("--environment", choices=["linux", "wsl", "nixos"], default=environment())
@@ -69,7 +69,7 @@ def main():
             check=True, stdout=subprocess.DEVNULL)
         return
     if args.action == "repos":
-        catalog = json.loads((repo / "repositories.json").read_text())
+        catalog = json.loads((repo / "config/repositories.json").read_text())
         names = json.loads(subprocess.check_output(NIX + ["eval", "--json",
             f"path:{repo}#homeConfigurations.\"{name}\".config.personal.repositories.names"], text=True))
         import importlib.util

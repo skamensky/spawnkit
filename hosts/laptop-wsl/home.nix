@@ -1,5 +1,5 @@
 { ... }: {
-  imports = [ ../../modules/home/laptop.nix ];
+  imports = [ ../../nix/modules/home/laptop.nix ];
   personal.environment = "wsl";
   home.sessionVariables = {
     AWS_PROFILE = "slate";

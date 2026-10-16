@@ -15,13 +15,13 @@
     programs.mise = {
       enable = true;
       enableBashIntegration = true;
-      globalConfig = builtins.fromTOML (builtins.readFile ../../config/mise.toml);
+      globalConfig = builtins.fromTOML (builtins.readFile ../../../config/runtimes/mise.toml);
     };
     xdg.configFile."uv/uv.toml".text = ''
       python-downloads = "never"
       python-preference = "only-system"
     '';
-    xdg.configFile."mise/mise.lock".source = ../../config/mise.lock;
+    xdg.configFile."mise/mise.lock".source = ../../../config/runtimes/mise.lock;
     # Makes selected runtimes discoverable by GUI apps and noninteractive agents.
     home.sessionPath = [ "$HOME/.local/share/mise/shims" ];
     home.sessionVariables.UV_PYTHON = "${config.home.homeDirectory}/.local/share/mise/shims/python";
