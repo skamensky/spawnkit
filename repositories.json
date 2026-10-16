@@ -1,0 +1,68 @@
+{
+  "personal-agent-customizations": {
+    "path": "skamensky/personal-agent-customizations",
+    "url": "git@github.com:skamensky/personal-agent-customizations.git",
+    "branch": "main",
+    "revision": "da78434dca3854b500a80980171f7f75844e287a"
+  },
+  "personal-gcp": {
+    "path": "skamensky/personal-gcp",
+    "url": "git@github.com:skamensky/personal-gcp.git",
+    "branch": "main",
+    "revision": "f01ac77fbf6fc7a327cf6aa5f7de5cdcff98fb6d"
+  },
+  "google-automation": {
+    "path": "skamensky/google-automation",
+    "url": "git@github.com:skamensky/google-automation.git",
+    "branch": "master",
+    "revision": "1a23773f9463b6f6d0742a623d06af746f705736"
+  },
+  "personal-supabase": {
+    "path": "skamensky/personal-supabase",
+    "url": "git@github.com:skamensky/personal-supabase.git",
+    "branch": "main",
+    "revision": "5e2d1ec3cc700819d0e781df2a0afae032ecbdb2"
+  },
+  "family-desk": {
+    "path": "skamensky/family-desk",
+    "url": "git@github.com:skamensky/family-desk.git",
+    "branch": "main",
+    "revision": "ad678f8eb94ab7d3103f1c09d0133b38a54c0fa5"
+  },
+  "safe-phone": {
+    "path": "skamensky/safe-phone",
+    "url": "git@github.com:skamensky/safe-phone.git",
+    "branch": "main",
+    "revision": "ee826b5af7aa51de013c6ba238acdac6d3a264c2"
+  },
+  "shmutils": {
+    "path": "skamensky/shmutils",
+    "url": "git@github.com:skamensky/shmutils.git",
+    "branch": "master",
+    "revision": "62e5337a409d1a69866b3f785eacca27c8343ba6"
+  },
+  "pgmeta": {
+    "path": "skamensky/pgmeta",
+    "url": "git@github.com:skamensky/pgmeta.git",
+    "branch": "master",
+    "revision": "095fdfbe9eb6046b920085baaaf2d1354aa1a690"
+  },
+  "photo-search": {
+    "path": "skamensky/photo-search",
+    "url": "git@github.com:skamensky/photo-search.git",
+    "branch": "main",
+    "revision": "b4c8ab2cf2c5410f2aa5bd2f6cc707300a8f9433"
+  },
+  "formql": {
+    "path": "skamensky/formql",
+    "url": "git@github.com:skamensky/formql.git",
+    "branch": "main",
+    "revision": "ecde2e9c4a53b2f9abd9c038ea1371ec0736caf0"
+  },
+  "supa-crm": {
+    "path": "SkylineCapital/supa-crm",
+    "url": "git@github.com:SkylineCapital/supa-crm.git",
+    "branch": "master",
+    "revision": "5fdaf5fc7d795995d5fb0d0e3e7aa7247e3d0010"
+  }
+}
