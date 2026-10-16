@@ -180,6 +180,11 @@ Solaar also needs the appropriate host udev permissions. Review the migration
 runbook before changing services. Windows GPU passthrough remains a separate
 native hardware investigation; no VFIO bindings or VM are created here.
 
+The [host service responsibility plan](docs/host-service-responsibilities.md)
+records the agreed Home Manager/Ubuntu boundary and proposed Ansible layout,
+including machine selection, systemd units, on-demand libvirt hooks and VM state.
+The Ansible and Windows VM components in that plan are not implemented yet.
+
 ## Optional NixOS integration
 
 Import this flake's `nixosModules.default` into an independently configured NixOS
