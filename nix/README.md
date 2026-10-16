@@ -79,7 +79,8 @@ Flake outputs are named `homeConfigurations."shmuel@PROFILE-SYSTEM"`, with a
 - `nix/users/shmuel.nix` declares identity and the two core bootstrap repositories.
 - `nix/modules/home/laptop.nix` shares laptop tools/repos across native and WSL.
 - `nix/modules/home/git.nix`, `shell.nix`, `tools.nix`, `runtimes.nix`,
-  `repositories.nix`, `assistants.nix` and `desktop.nix` own their respective areas.
+  `repositories.nix`, `assistants.nix`, `desktop.nix`, `clients.nix` and
+  `virtualization.nix` own their respective areas.
 - `nix/modules/nixos/ssh.nix` and `docker.nix` are opt-in system modules. They do
   not reconfigure Ubuntu services or expose ports on non-NixOS hosts.
 
@@ -120,7 +121,9 @@ run `mise -C config/runtimes lock --platform linux-x64,linux-arm64` from this re
 the reviewed config with mise when prompted. Build, test, commit and push both
 files. Native C build dependencies for downloaded Python/Node runtimes normally
 come from Ubuntu (`build-essential`, relevant development libraries); a project
-can independently declare a Nix build environment when it needs one.
+can independently declare a tested Nix tools/build environment. Do not inject
+Nix glibc or arbitrary Nix libraries into mise runtimes; see the library/toolchain
+boundary in [mixed-project workflows](../docs/workflows.md#9-mixed-node-python-and-nix-codebase).
 
 ## Repositories and assistant content
 
@@ -177,15 +180,20 @@ driver changes. The configuration can build before those hardware facts are
 known, but NVIDIA acceleration has not thereby been verified.
 
 Ubuntu owns NVIDIA kernel drivers, Docker Engine, NVIDIA Container Toolkit,
-Tailscale/SSH daemons and libvirt. Home Manager supplies relevant client tools.
+Tailscale/SSH daemons and libvirt. Ubuntu Docker/Tailscale packages include their
+clients; Home Manager omits duplicates on the native profile. Other profiles opt
+into `personal.clients.gcloud`, `.docker` and `.tailscale` as required. Headless
+profiles do not include these clients by default.
 Solaar also needs the appropriate host udev permissions. Review the migration
 runbook before changing services. Windows GPU passthrough remains a separate
 native hardware investigation; no VFIO bindings or VM are created here.
 
-The [host service responsibility plan](../docs/architecture.md)
-records the agreed Home Manager/Ubuntu boundary and proposed Ansible layout,
+The [host service architecture](../docs/architecture.md)
+records the Home Manager/Ubuntu boundary and implemented Ansible layout,
 including machine selection, systemd units, on-demand libvirt hooks and VM state.
-The Ansible and Windows VM components in that plan are not implemented yet.
+Ansible host roles, guarded VM handoff and launch commands are implemented; see
+`../ansible/README.md` and `../docs/windows-vm.md`. Native installation and GPU
+acceptance are still required. Home Manager never runs privileged host setup.
 
 ## Optional NixOS integration
 

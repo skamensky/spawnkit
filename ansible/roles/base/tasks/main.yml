@@ -1,0 +1,35 @@
+---
+- name: Preview Ubuntu package requirements
+  ansible.builtin.debug:
+    msg: "Ubuntu packages: {{ cfg.base_packages | join(', ') }}"
+  when: ansible_check_mode
+- name: Install Ubuntu host build dependencies
+  ansible.builtin.apt:
+    name: "{{ cfg.base_packages }}"
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+  when: not ansible_check_mode
+- name: Create root-owned Spawnkit configuration directory
+  ansible.builtin.file:
+    path: /etc/spawnkit
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+- name: Create root-owned helper directory
+  ansible.builtin.file:
+    path: /usr/local/libexec/spawnkit
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Install the privileged host helper from the reviewed repository
+  ansible.builtin.copy:
+    src: host-state.py
+    dest: /usr/local/libexec/spawnkit/host-state.py
+    owner: root
+    group: root
+    mode: '0755'
+  when: not ansible_check_mode

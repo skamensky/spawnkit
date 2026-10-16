@@ -1,0 +1,44 @@
+---
+- name: Create trusted APT key directory
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+- name: Install pinned public Tailscale signing key
+  ansible.builtin.get_url:
+    url: https://pkgs.tailscale.com/stable/ubuntu/noble.noarmor.gpg
+    dest: /etc/apt/keyrings/spawnkit-tailscale.gpg
+    checksum: sha256:3e03dacf222698c60b8e2f990b809ca1b3e104de127767864284e6c228f1fb39
+    owner: root
+    group: root
+    mode: '0644'
+- name: Declare signed Tailscale repository
+  ansible.builtin.copy:
+    dest: /etc/apt/sources.list.d/spawnkit-tailscale.sources
+    owner: root
+    group: root
+    mode: '0644'
+    content: |
+      Types: deb
+      URIs: https://pkgs.tailscale.com/stable/ubuntu
+      Suites: {{ ansible_facts.distribution_release }}
+      Components: main
+      Signed-By: /etc/apt/keyrings/spawnkit-tailscale.gpg
+- name: Preview Tailscale host installation
+  ansible.builtin.debug:
+    msg: Install tailscale and enable tailscaled; preserve identity and do not run tailscale up or enroll credentials.
+  when: ansible_check_mode
+- name: Install Tailscale CLI and daemon together
+  ansible.builtin.apt:
+    name: tailscale
+    state: present
+    update_cache: true
+  when: not ansible_check_mode
+- name: Enable Tailscale without changing login state
+  ansible.builtin.systemd_service:
+    name: tailscaled.service
+    enabled: true
+    state: started
+  when: not ansible_check_mode

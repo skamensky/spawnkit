@@ -1,0 +1,10 @@
+# Synthetic offline fixture, never real laptop PCI facts.
+gpu_handoff: true
+windows_vm: true
+gpu_devices:
+  - address: '0000:01:00.0'
+    driver: nvidia
+  - address: '0000:01:00.1'
+    driver: snd_hda_intel
+windows_iso: /var/lib/libvirt/images/windows.iso
+virtio_iso: /var/lib/libvirt/images/virtio-win.iso

@@ -1,0 +1,51 @@
+---
+- name: Configure the local Spawnkit host
+  hosts: all
+  connection: local
+  gather_facts: true
+  become: true
+  pre_tasks:
+    - name: Require Ubuntu and the configured existing user
+      ansible.builtin.assert:
+        that:
+          - ansible_facts.distribution == 'Ubuntu'
+          - ansible_facts.distribution_version is version('24.04', '>=')
+          - cfg.user == 'shmuel'
+        fail_msg: Host automation currently targets Ubuntu 24.04+ with the existing shmuel account.
+    - name: Require x86_64 for this Windows GPU implementation
+      ansible.builtin.assert:
+        that: not cfg.virtualization or ansible_facts.architecture == 'x86_64'
+    - name: Check account exists before changing the host
+      ansible.builtin.getent:
+        database: passwd
+        key: "{{ cfg.user }}"
+    - name: Reject native hardware services under WSL
+      ansible.builtin.assert:
+        that:
+          - not (cfg.nvidia or cfg.virtualization or cfg.gpu_handoff or cfg.windows_vm) or 'microsoft' not in ansible_facts.kernel | lower
+  roles:
+    - role: base
+    - role: docker
+      when: cfg.docker
+    - role: tailscale
+      when: cfg.tailscale
+    - role: ssh
+      when: cfg.ssh
+    - role: nvidia
+      when: cfg.nvidia
+    - role: virtualization
+      when: cfg.virtualization
+    - role: gpu_handoff
+      when: cfg.gpu_handoff
+  post_tasks:
+    - name: Complete service handlers before marking the host managed
+      ansible.builtin.meta: flush_handlers
+    - name: Record successful explicit Spawnkit enrollment
+      ansible.builtin.copy:
+        dest: /etc/spawnkit/enabled
+        owner: root
+        group: root
+        mode: '0644'
+        content: |
+          {{ {'profile': spawnkit_profile, 'repository': 'https://github.com/skamensky/spawnkit', 'revision': spawnkit_revision} | to_nice_json }}
+      when: not ansible_check_mode

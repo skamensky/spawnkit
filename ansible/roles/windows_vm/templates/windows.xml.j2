@@ -1,0 +1,45 @@
+<domain type='kvm'>
+  <name>{{ cfg.windows_name }}</name>
+  <uuid>{{ cfg.windows_uuid }}</uuid>
+  <metadata><spawnkit:managed xmlns:spawnkit='https://github.com/skamensky/spawnkit'/></metadata>
+  <memory unit='MiB'>{{ cfg.windows_memory_mib }}</memory>
+  <vcpu placement='static'>{{ cfg.windows_vcpus }}</vcpu>
+  <os firmware='efi'>
+    <type arch='x86_64' machine='q35'>hvm</type>
+    <firmware><feature enabled='yes' name='secure-boot'/><feature enabled='yes' name='enrolled-keys'/></firmware>
+    <boot dev='hd'/><boot dev='cdrom'/>
+    <bootmenu enable='yes'/>
+  </os>
+  <features><acpi/><apic/><hyperv mode='passthrough'/><smm state='on'/></features>
+  <cpu mode='host-passthrough' check='none' migratable='off'/>
+  <clock offset='localtime'><timer name='hypervclock' present='yes'/></clock>
+  <on_poweroff>destroy</on_poweroff><on_reboot>restart</on_reboot><on_crash>destroy</on_crash>
+  <devices>
+    <emulator>/usr/bin/qemu-system-x86_64</emulator>
+    <disk type='file' device='disk'>
+      <driver name='qemu' type='qcow2' discard='unmap'/>
+      <source file='{{ cfg.windows_disk }}'/><target dev='vda' bus='virtio'/>
+    </disk>
+{% for media in [cfg.windows_iso, cfg.virtio_iso] %}
+{% if media %}
+    <disk type='file' device='cdrom'><driver name='qemu' type='raw'/><source file='{{ media }}'/><target dev='{{ "sda" if loop.index == 1 else "sdb" }}' bus='sata'/><readonly/></disk>
+{% endif %}
+{% endfor %}
+    <controller type='usb' model='qemu-xhci'/>
+    <interface type='network'><source network='{{ cfg.network_name }}'/><model type='virtio'/></interface>
+    <input type='tablet' bus='usb'/><input type='keyboard' bus='usb'/>
+    <graphics type='spice' autoport='yes' listen='127.0.0.1'><listen type='address' address='127.0.0.1'/></graphics>
+    <channel type='spicevmc'><target type='virtio' name='com.redhat.spice.0'/></channel>
+    <video><model type='{{ cfg.windows_video }}'/></video>
+    <sound model='ich9'/><audio id='1' type='spice'/>
+    <tpm model='tpm-crb'><backend type='emulator' version='2.0'/></tpm>
+{% for device in cfg.gpu_devices %}
+{% set pci = device.address.replace(':', '.').split('.') %}
+    <hostdev mode='subsystem' type='pci' managed='yes'>
+      <source><address domain='0x{{ pci[0] }}' bus='0x{{ pci[1] }}' slot='0x{{ pci[2] }}' function='0x{{ pci[3] }}'/></source>
+    </hostdev>
+{% endfor %}
+    <shmem name='{{ cfg.looking_glass_name }}'><model type='ivshmem-plain'/><size unit='M'>{{ cfg.looking_glass_mib }}</size></shmem>
+    <memballoon model='virtio'/>
+  </devices>
+</domain>

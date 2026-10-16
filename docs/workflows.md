@@ -6,10 +6,10 @@ mise selects Python and Node versions; uv and the project's Node package manager
 install language dependencies. Projects keep their own code, configuration and
 lockfiles. Secrets and application data stay separate from all of these.
 
-The Home Manager environment, runtime setup, repository bootstrap and assistant
-links are implemented and build-tested. Live activation on native Ubuntu is still
-a migration step. The Ansible roles, Windows VM, Looking Glass launcher and GPU
-handoff are planned; the commands below do not imply those features are installed.
+Home Manager, repository bootstrap, host Ansible roles, GPU lifecycle hooks and
+VM launch commands are implemented and checked offline. Native Ubuntu driver
+installation and Windows/GPU acceptance remain migration steps. The current WSL
+machine has not been applied or enrolled.
 
 For migration and data preservation, use the [complete Ubuntu migration
 guide](ubuntu-migration.md). For file ownership and system services, see
@@ -47,12 +47,27 @@ and installs the locked mise runtimes. Existing repositories are preserved,
 including local branches and unfinished work. Downloads and private repository
 clones need network access and suitable authentication.
 
-Complete Ubuntu host setup separately: drivers, Docker Engine, Tailscale, SSH,
-device permissions and any virtualization requirements. This is the work the
-planned Ansible subsystem will automate; there is no host apply command yet.
-Configure the native graphics bridge and real NVIDIA driver details following
-the migration guide. Log out and back in, then authenticate the applications you
-need. OAuth sessions, SSH identities and browser profiles are not built by Nix.
+**Yes, first startup includes Ansible.** Before Home Manager activation, inspect
+and explicitly apply the selected Ubuntu host profile from this checkout:
+
+```bash
+nix --extra-experimental-features 'nix-command flakes' run .#host-config -- select
+nix --extra-experimental-features 'nix-command flakes' run .#host-config -- inventory
+nix --extra-experimental-features 'nix-command flakes' run .#host-config -- check
+nix --extra-experimental-features 'nix-command flakes' run .#host-config -- plan --ask-become-pass
+nix --extra-experimental-features 'nix-command flakes' run .#host-config -- apply --ask-become-pass
+```
+
+Use `--host laptop-ubuntu` for the native laptop if renamed. This installs the
+profile's Ubuntu packages/services, drivers and permissions, and creates
+`/etc/spawnkit/enabled` only after success. It does not provision Windows or take
+the GPU. Native NVIDIA/IOMMU changes require a reboot and possibly Secure Boot
+MOK enrollment; log in again for groups. Then perform the explicit Home Manager
+switch above and native graphics-bridge setup. See [host automation](../ansible/README.md)
+for dry-run limits and [Windows setup](windows-vm.md) for its second stage.
+Home Manager activation alone never runs Ansible or creates the sentinel.
+Authenticate required applications separately; identities and sessions stay out
+of Git and the Nix store.
 
 ## 2 Later startups and everyday packages
 
@@ -76,8 +91,8 @@ need restarting or a fresh login to inherit changed environment variables.
 
 ## 3 Windows VM with the GPU
 
-After native validation and implementation, open Windows through virt-manager or
-the planned launcher. Libvirt checks that the RTX is free, prepares the device
+After completing the [native setup](windows-vm.md), use `host-config vm-view` or
+the Windows desktop entry. The libvirt hook checks that the RTX is free, prepares the device
 handoff, and starts the guest. If a Linux application, GPU container or service
 holds it, startup should be refused with an explanation so you can finish or
 close that work. There is no automatic transfer of a running CUDA job to Intel.
@@ -117,15 +132,24 @@ nix --extra-experimental-features 'nix-command flakes' run .#home-config -- swit
 For a permanent mapping, add the real hostname to the appropriate entry in
 `hosts/registry.json`. For different requirements, add a new profile's
 `hosts/<profile>/home.nix` and registry entry. Shared defaults are imported
-automatically. Future privileged settings belong in that profile's `system.yml`
-when the Ansible implementation exists.
+automatically. Privileged Ubuntu settings belong in that profile's `system.yml`; inspect and
+apply them with `host-config` separately from Home Manager.
 
-The default and current headless profiles do not include `google-cloud-sdk` or
-`docker-client`; add those packages to the relevant profile if needed. They are
-currently laptop additions. A headless host needs neither NVIDIA libraries nor
-Looking Glass. Use its own authorized authentication and remote-access setup.
-General cloud workload identity does not automatically satisfy the current
-personal-secrets helper's owner-login requirement.
+The default and current headless profiles deliberately omit gcloud, Docker and
+Tailscale clients. Enable required client tools explicitly in the profile:
+
+```nix
+personal.clients.gcloud = true;
+personal.clients.docker = true;  # client only, e.g. a remote Docker Engine
+```
+
+For a local Docker Engine instead, set `docker: true` in `system.yml` and leave
+`personal.clients.docker = false`: Ubuntu's Engine package already includes its
+CLI and plugins. The same ownership rule applies to Ubuntu Tailscale. A cloud
+host needs neither desktop graphics nor Looking Glass. Existing authorized SSH
+and cloud access remain separate; no GPU role is implied by using Spawnkit.
+Workload identity does not automatically satisfy the current personal-secrets
+helper's owner-login requirement.
 
 For a configuration change, run the required checks on the development machine
 and build the affected profile on its target architecture. On a small VM merely
@@ -147,7 +171,7 @@ Choose the right scope before installing anything:
 | Python or Node runtime version | Project `mise.toml`, or Spawnkit's `config/runtimes/` for global defaults |
 | Python or JavaScript project dependency | That project's package manifest and lockfile |
 | Project compiler, native library or build utility | That project's development flake |
-| Privileged Ubuntu daemon or driver | Host setup, eventually its Ansible role |
+| Privileged Ubuntu daemon or driver | `ansible/roles/` and `hosts/<profile>/system.yml` |
 
 For example, add `tree` to the existing `home.packages` list in `tools.nix`.
 From Spawnkit, stage new files if any, then:
@@ -207,8 +231,9 @@ it. No manual virtualenv activation is needed for `uv run`.
 For deliberate dependency changes use `uv add`, `uv remove` or the project's
 update workflow and commit `pyproject.toml` with `uv.lock`. Existing non-uv
 projects retain their own documented dependency workflow until intentionally
-converted. Native dependencies may also require the project's Nix development
-environment or Ubuntu libraries.
+converted. Native dependencies require compatible libraries and a toolchain; follow the
+project's tested setup. Nix-built libraries are not automatically compatible with
+mise Python. See the mixed-project boundary below.
 
 ## 8 Run a Node codebase
 
@@ -243,37 +268,55 @@ provide its native tools/libraries or Nix-built components. Its `mise.toml` and
 respective application dependencies. Spawnkit is not the project's development
 flake.
 
-If that project defines a default development shell, enter it first:
+A tested shell can supply **tools** while mise supplies Python/Node. This is not
+a blanket guarantee that their native libraries can be mixed. `nix develop` does
+not universally set `LD_LIBRARY_PATH`; package hooks or the project shell may set
+it, and a normal `mkShell` can also export Nix compiler/linker flags. Injecting
+Nix glibc can break an ordinary Linux interpreter. Even without injecting glibc,
+a Nix library or Python extension may require a newer glibc than Ubuntu provides.
+
+Use a project `mkShellNoCC` with selected tools and no global Nix runtime-library
+path as a starting point. Scope compilers to the component they build. Keep
+Python/Node out of its packages when mise owns those runtimes. Test native Python
+imports, real extension builds and Node native addons in that actual shell.
+Do not solve a failed import by exporting every Nix library into the whole shell.
+
+The practical choices are:
+
+| Need | Coherent setup |
+| --- | --- |
+| Go/Rust/CLI build tools plus Python/Node apps | Nix tools with scoped compiler environment; mise/uv/npm for the apps |
+| mise Python with native extensions | Ubuntu-compatible compiler/libraries or compatible binary wheels; test in that environment |
+| A component must link Nix native libraries | Build/package that complete component with Nix, or isolate it in a container; communicate over CLI/HTTP/files |
+| Native Node addons | Build against the selected Node and a compatible host toolchain, or isolate the component |
+
+Only after testing a project's shell use, for example:
 
 ```bash
-rtk proxy nix develop
+rtk proxy nix develop --command mise exec -- uv sync --locked
+rtk proxy nix develop --command mise exec -- npm ci
 ```
 
-Inside it, use `mise exec -- uv sync --locked` and `mise exec -- npm ci`, then
-start the backend/frontend with the project's own commands in separate terminals
-or its tracked task runner. For noninteractive execution:
+`google-automation` now has its **own** flake/lock. It packages the Go CLI and its
+CGO SQLite dependency coherently with Nix. Its development shell wraps `go` with
+the Nix compiler only for that child process and leaves the parent shell's `CC`
+and `LD_LIBRARY_PATH` unset. It provides neither Python nor Node. That specific
+shell was tested with Spawnkit's pinned mise Python/Node: Python retained Ubuntu
+glibc 2.39, native stdlib imports passed, and Node ran. Deliberately injecting
+Nix glibc 2.44 into the same Python's `LD_LIBRARY_PATH` failed with a
+`GLIBC_PRIVATE` symbol error; this does not certify
+other projects' arbitrary native dependencies. See its README for `nix build`,
+`nix run` and `nix develop` commands. No credentials enter the build.
 
-```bash
-rtk proxy nix develop --command mise exec -- uv run --locked python -m your_app
-rtk proxy nix develop --command mise exec -- npm run dev
-```
-
-These examples assume the project defines that shell and entry points; Spawnkit
-does not synthesize them. Nix prepares the shell while mise selects the runtime
-within it. [Nix development environments](https://nix.dev/manual/nix/stable/command-ref/new-cli/nix3-develop.html).
-
-Prefer keeping Python/Node out of this development shell's packages so they do
-not compete with mise. If the project intentionally packages a whole component
-with Nix, its isolated `nix build`/`nix run` workflow owns that component's build
-inputs. Nix does not automatically import your host `.venv` or `node_modules`.
-Native library runtime paths still need to be configured by the project where
-required; combining the tools does not resolve every binary dependency by itself.
+[Nix development environments](https://nix.dev/manual/nix/stable/command-ref/new-cli/nix3-develop.html),
+[Python standalone portability](https://gregoryszorc.com/docs/python-build-standalone/main/running.html).
 
 ## 10 Build and run Docker containers
 
 Once the Ubuntu Docker Engine, access permissions and required Compose/Buildx
-plugins are configured, use Docker normally. The laptop profile already provides
-the client; that alone does not configure a running engine.
+plugins are configured by the native laptop Ansible profile, use Docker normally.
+Ubuntu supplies that profile's complete Engine/client/plugins. WSL and remote-only
+client profiles do not acquire an Engine just by installing the Nix client.
 
 For a project with a Compose file:
 
@@ -332,7 +375,7 @@ this personal-secrets workflow. Its CLI also needs to be declared on that host.
 ## 12 Use gcloud
 
 The laptop profile installs `google-cloud-sdk` through Nix. Add it explicitly to
-a headless profile if needed. Run it normally; login and active account/project
+a headless profile with `personal.clients.gcloud = true` if needed. Run it normally; login and active account/project
 state are separate from the package installation.
 
 For personal interactive work:

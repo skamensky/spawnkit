@@ -1,0 +1,6 @@
+---
+- name: Refresh libvirt hook discovery
+  ansible.builtin.systemd_service:
+    name: "{{ 'virtqemud.service' if 'virtqemud.socket' in libvirt_units.stdout else 'libvirtd.service' }}"
+    state: restarted
+  when: not ansible_check_mode

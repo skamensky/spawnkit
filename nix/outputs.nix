@@ -82,6 +82,10 @@ in
     default = { config, pkgs, ... }: {
       imports = [ home-manager.nixosModules.home-manager ];
       nixpkgs.config.allowUnfree = lib.mkDefault true;
+      environment.etc."spawnkit/enabled".text = builtins.toJSON {
+        repository = "https://github.com/skamensky/spawnkit";
+        profile = selectProfile config.networking.hostName "nixos";
+      };
       # mise downloads ordinary Linux binaries outside the Nix store.
       programs.nix-ld = {
         enable = true;
@@ -130,6 +134,21 @@ in
           exec python3 ${../scripts/home-config.py} "$@"
         '';
       };
+      host-config = pkgs.writeShellApplication {
+        name = "host-config";
+        runtimeInputs = [
+          (pkgs.python3.withPackages (p: [
+            p.pyyaml
+            p.jinja2
+          ]))
+          pkgs.python3Packages.ansible-core
+          pkgs.libnotify
+          pkgs.git
+        ];
+        text = ''
+          exec python3 ${../scripts}/host-config.py "$@"
+        '';
+      };
       default = self.packages.${system}.home-config;
     }
   );
@@ -139,6 +158,11 @@ in
       type = "app";
       program = "${self.packages.${system}.home-config}/bin/home-config";
       meta.description = "Build, check or activate the detected Home Manager profile";
+    };
+    host-config = {
+      type = "app";
+      program = "${self.packages.${system}.host-config}/bin/host-config";
+      meta.description = "Inspect, preview or explicitly apply Ubuntu host and VM configuration";
     };
     default = self.apps.${system}.home-config;
   });
@@ -169,6 +193,34 @@ in
             cp -r ${../tests} tests
             chmod -R u+w scripts tests
             python3 -m unittest discover -s tests -v
+            touch "$out"
+          '';
+      host-tests =
+        pkgs.runCommand "spawnkit-host-tests"
+          {
+            nativeBuildInputs = [
+              (pkgs.python3.withPackages (p: [
+                p.pyyaml
+                p.jinja2
+              ]))
+              pkgs.python3Packages.ansible-core
+              pkgs.libvirt
+              pkgs.git
+            ];
+          }
+          ''
+            export HOME="$TMPDIR/home"
+            mkdir -p "$HOME"
+            cp -r ${../.} source
+            chmod -R u+w source
+            cd source
+            export SPAWNKIT_REPO="$PWD"
+            export SPAWNKIT_SOURCE_REVISION=source-check
+            python3 -m unittest discover -s tests/host -v
+            python3 scripts/host-config.py check --repo "$PWD" --host default
+            python3 scripts/host-config.py check --repo "$PWD" --host laptop-ubuntu
+            python3 scripts/host-config.py render --repo "$PWD" --host laptop-ubuntu --vars-file tests/host/gpu.yml --output "$TMPDIR/render"
+            virt-xml-validate "$TMPDIR/render/windows.xml" domain
             touch "$out"
           '';
       nixos-module =

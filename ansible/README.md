@@ -1,29 +1,78 @@
 # Ubuntu host automation
 
-This subsystem is planned. No playbook, role or host apply command is installed
-yet. The maintained design is in [architecture](../docs/architecture.md), and the
-native migration steps are in the [Ubuntu migration guide](../docs/ubuntu-migration.md).
+Implemented roles configure native Ubuntu 24.04+ using Ubuntu packages and systemd.
+The controller is packaged by the root Nix flake; it does not install host daemons
+through Nix. The current WSL machine has not been applied or enrolled.
 
-Ansible will manage the privileged Ubuntu configuration that Home Manager cannot
-apply: APT packages, root-owned configuration, service/socket enablement, groups,
-udev rules and libvirt hooks. It will not manage Home Manager-owned user tools,
-dotfiles or personal skills.
+## First installation
 
-The feature roles will cover the required native build dependencies, Docker,
-NVIDIA and its container toolkit, Tailscale's `tailscaled` daemon, SSH, libvirt,
-and GPU handoff. Add each role with its feature's implementation; unused scaffold
-roles are not needed. The Nix-managed Tailscale command alone does not set up the
-host daemon. Tailnet identity, keys and login state remain outside Git.
+Create the existing `shmuel` account, install Git and multi-user Nix, establish
+private GitHub access, and clone this repository. From its checkout:
 
-Host selection must consume the existing `hosts/registry.json` and selector;
-profile-specific root configuration will live in `hosts/<profile>/system.yml`.
-Unknown hosts get a minimal baseline. Native Ubuntu hardware operations must not
-run on WSL or NixOS.
+```bash
+nix --extra-experimental-features 'nix-command flakes' run .#host-config -- select
+nix --extra-experimental-features 'nix-command flakes' run .#host-config -- inventory
+nix --extra-experimental-features 'nix-command flakes' run .#host-config -- check
+nix --extra-experimental-features 'nix-command flakes' run .#host-config -- plan --ask-become-pass
+nix --extra-experimental-features 'nix-command flakes' run .#host-config -- apply --ask-become-pass
+```
 
-Install privileged scripts/configuration as root-owned files and use Ubuntu's
-packaged service units, with small drop-ins only where needed. GPU work runs in
-libvirt lifecycle hooks. Keep Home Manager switching separate from privileged
-host application, and do not enable Windows VM autostart.
+Use `--host laptop-ubuntu` explicitly if detection selects a minimal default on
+a renamed native laptop. Selection shares `hosts/registry.json` with Home Manager.
+Host settings are shared defaults in `hosts/default/system.yml`, extended by
+`hosts/<profile>/system.yml`. Add only real hardware values to machine overrides.
+`--vars-file` accepts local non-secret installation settings; permanent settings
+belong in Git. The inventory is generated, not separately maintained.
 
-The future Ansible runtime will come from the shared root Nixpkgs input. No
-second flake or independent Nixpkgs lock belongs in this directory.
+`check` is syntax-only and unprivileged. `plan` is Ansible check/diff mode and
+needs sudo for host inspection; it never writes the enrollment sentinel. A fresh
+host's unavailable packages/services cannot all be simulated: package installation,
+daemon operations and privileged helpers are skipped with explanatory previews.
+Run `check` and read the inventory as well; a dry run does not prove native setup.
+`apply` explicitly invokes `ansible/site.yml` with become; Home Manager never calls
+it. Successful completion writes the root-owned `/etc/spawnkit/enabled` sentinel.
+A failed first apply can leave partially installed packages, but does not mark
+the host enrolled. Reapplying is the supported convergence path.
+
+Reboot after NVIDIA/IOMMU changes and enroll the Ubuntu driver signing key if
+Secure Boot requests it. Log in again for Docker/libvirt/kvm group membership.
+Tailscale authentication is a separate deliberate login; no auth key enters Git.
+SSH is off by default and requires explicit listen addresses before enabling.
+Existing cloud access is not replaced by an assumed configuration.
+
+## Roles and state
+
+| Role | Managed state |
+| --- | --- |
+| `base` | Ubuntu build prerequisites, `/etc/spawnkit`, installed root helper |
+| `docker` | Ubuntu Engine, Compose/Buildx, membership, declared daemon settings |
+| `tailscale` | Signed repository/key, package, `tailscaled` service |
+| `ssh` | Key-only explicit listener drop-in, full listener verification, Ubuntu unit |
+| `nvidia` | Ubuntu recommended or pinned driver, signed Container Toolkit repo/runtime |
+| `virtualization` | Ubuntu QEMU/libvirt/OVMF/swtpm, groups, IOMMU GRUB drop-in, dedicated NAT network |
+| `gpu_handoff` | Separate libvirt lifecycle hook, GPU policy, Looking Glass tmpfiles rule |
+| `windows_vm` | Explicit `vm-define` playbook; managed domain and new disk, no automatic start |
+
+Ubuntu supplies the system service units. This repository stores settings and
+Ansible tasks that enable/configure them; it does not symlink checkout files into
+root's systemd paths. User services are Home Manager declarations. There is no
+custom boot-time GPU-transfer unit. `/etc/tmpfiles.d/spawnkit-looking-glass.conf`
+only creates a shared-memory file at boot; ownership transfer occurs at VM start.
+
+Docker configuration merges preserve unrelated keys and save the original once;
+changes refuse a restart when containers are running. No disk, volume, token,
+Tailscale identity, VM TPM or UEFI state is deleted. Changing package declarations
+to false does not automatically purge existing software or state: service removal
+requires a deliberate reviewed teardown. This avoids treating disappearance from
+a config as permission to destroy a working machine.
+
+APT installation is declarative and repeatable but uses Ubuntu/vendor repositories,
+not a byte-for-byte archive of the OS. `flake.lock` pins the controller, user tools
+and tests. Exact OS rebuilds would additionally need APT snapshots and image pins.
+Pinned public signing-key hashes deliberately fail when upstream rotates a key;
+review the new public key and update its hash in Git.
+
+See [architecture](../docs/architecture.md), [Windows setup](../docs/windows-vm.md)
+and the [full migration guide](../docs/ubuntu-migration.md). Native driver install,
+GPU reset behavior, guest provisioning and physical display routing still need
+verification on the actual laptop; offline checks are not hardware validation.

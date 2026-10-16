@@ -1,0 +1,62 @@
+---
+- name: Preview native virtualization setup
+  ansible.builtin.debug:
+    msg: Install QEMU/KVM, libvirt, OVMF, swtpm and IOMMU boot parameters; no VM or GPU binding starts at boot.
+  when: ansible_check_mode
+- name: Install the Ubuntu virtualization stack
+  ansible.builtin.apt:
+    name: [qemu-kvm, qemu-utils, libvirt-daemon-system, libvirt-clients, ovmf, swtpm, swtpm-tools, virtinst, libxml2-utils, pciutils, psmisc]
+    state: present
+  when: not ansible_check_mode
+- name: Grant local VM access
+  ansible.builtin.user:
+    name: "{{ cfg.user }}"
+    groups: [libvirt, kvm]
+    append: true
+  when: not ansible_check_mode
+- name: Discover Ubuntu's installed libvirt daemon layout
+  ansible.builtin.command: systemctl list-unit-files --no-legend
+  changed_when: false
+  register: libvirt_units
+  when: not ansible_check_mode
+- name: Start the installed libvirt socket architecture
+  ansible.builtin.systemd_service:
+    name: "{{ item }}"
+    enabled: true
+    state: started
+  loop: "{{ ['virtqemud.socket', 'virtnetworkd.socket', 'virtstoraged.socket', 'virtnodedevd.socket', 'virtsecretd.socket', 'virtlogd.socket', 'virtlockd.socket', 'virtproxyd.socket'] if 'virtqemud.socket' in libvirt_units.stdout else ['libvirtd.socket', 'virtlogd.socket', 'virtlockd.socket'] }}"
+  when: not ansible_check_mode
+- name: Determine CPU vendor for IOMMU
+  ansible.builtin.slurp:
+    src: /proc/cpuinfo
+  register: cpuinfo
+  when: cfg.iommu
+- name: Require a supported IOMMU CPU vendor
+  ansible.builtin.assert:
+    that: "'GenuineIntel' in (cpuinfo.content | b64decode) or 'AuthenticAMD' in (cpuinfo.content | b64decode)"
+  when: cfg.iommu
+- name: Declare IOMMU boot parameters without reserving a GPU
+  ansible.builtin.copy:
+    dest: /etc/default/grub.d/90-spawnkit-iommu.cfg
+    owner: root
+    group: root
+    mode: '0644'
+    content: |
+      # Reboot after applying. No vfio-pci.ids or NVIDIA blacklist here.
+      GRUB_CMDLINE_LINUX="$GRUB_CMDLINE_LINUX {{ 'intel_iommu=on' if 'GenuineIntel' in (cpuinfo.content | b64decode) else 'amd_iommu=on' }} iommu=pt"
+  when: cfg.iommu
+  notify: Update GRUB
+- name: Declare the dedicated VM network
+  ansible.builtin.template:
+    src: network.xml.j2
+    dest: /etc/spawnkit/network.xml
+    owner: root
+    group: root
+    mode: '0644'
+  when: not ansible_check_mode
+- name: Define the dedicated NAT network without starting it
+  ansible.builtin.command:
+    argv: [/usr/bin/python3, /usr/local/libexec/spawnkit/host-state.py, network, /etc/spawnkit/network.xml]
+  register: network_definition
+  changed_when: network_definition.stdout.startswith('changed')
+  when: not ansible_check_mode

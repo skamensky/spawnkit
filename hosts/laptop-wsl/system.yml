@@ -1,0 +1,2 @@
+# WSL uses its existing host integration; no native GPU or libvirt setup.
+base_packages: [ca-certificates, python3-apt, build-essential, pkg-config]

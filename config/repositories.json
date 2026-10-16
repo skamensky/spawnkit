@@ -3,7 +3,7 @@
     "path": "skamensky/personal-agent-customizations",
     "url": "git@github.com:skamensky/personal-agent-customizations.git",
     "branch": "main",
-    "revision": "926f9bb1fa3f952122473067dc6094745af01216"
+    "revision": "ee88cf0875e19b3ad3681dea09d58c692e83865f"
   },
   "personal-gcp": {
     "path": "skamensky/personal-gcp",
@@ -15,7 +15,7 @@
     "path": "skamensky/google-automation",
     "url": "git@github.com:skamensky/google-automation.git",
     "branch": "master",
-    "revision": "1a23773f9463b6f6d0742a623d06af746f705736"
+    "revision": "459a11a98588bc931df1637601e28c34b2f6eb20"
   },
   "personal-supabase": {
     "path": "skamensky/personal-supabase",

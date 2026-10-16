@@ -350,24 +350,41 @@ Home Manager module, build/check the flake, then commit and push.
 
 ### D2a. Privileged Ubuntu host setup
 
-Home Manager owns the user environment. Ansible will own privileged Ubuntu setup
-from this same repository: native build dependencies, Docker Engine and NVIDIA
-Container Toolkit, NVIDIA driver setup, Tailscale's `tailscaled` daemon, SSH,
-libvirt/QEMU/OVMF/swtpm, device permissions and GPU lifecycle hooks. The
-`tailscale` client is already declared in `nix/modules/home/laptop.nix`; that does
-not install or configure its host daemon.
+Home Manager owns the user environment. Implemented Ansible roles own Ubuntu
+packages/services, NVIDIA drivers and Container Toolkit, Docker, Tailscale, SSH,
+QEMU/libvirt/OVMF/swtpm, IOMMU and GPU hooks. Ubuntu's Docker/Tailscale packages
+include their clients, so the native Home Manager profile omits duplicate copies.
+Headless profiles explicitly opt into `personal.clients.gcloud` and client-only
+`personal.clients.docker` when needed; a local daemon instead belongs in Ansible.
 
-**Ansible roles and the host apply command are not implemented yet.** Read
-`ansible/README.md` and `docs/architecture.md` for ownership and planned paths;
-implement and validate the required roles before treating host setup as automated.
-Keep privileged application separate from `home-config switch`. Do not invoke a
-planned `host-config` command until it exists. Machine selection will reuse
-`hosts/registry.json`; root settings will live in `hosts/<profile>/system.yml`.
+**First startup includes an explicit Ansible run.** From the Spawnkit checkout,
+before the Home Manager switch above:
 
-User daemons are Home Manager `systemd.user` declarations. Ubuntu supplies system
-service units; our roles add only needed drop-ins. Libvirt may start on demand.
-No custom GPU handoff daemon is required at Linux boot. IOMMU boot prerequisites
-are separate from the VM's on-demand device transfer.
+```bash
+nix --extra-experimental-features 'nix-command flakes' run .#host-config -- inventory --host laptop-ubuntu
+nix --extra-experimental-features 'nix-command flakes' run .#host-config -- check --host laptop-ubuntu
+nix --extra-experimental-features 'nix-command flakes' run .#host-config -- plan --host laptop-ubuntu --ask-become-pass
+nix --extra-experimental-features 'nix-command flakes' run .#host-config -- apply --host laptop-ubuntu --ask-become-pass
+```
+
+Read `ansible/README.md` for preview limits and `docs/architecture.md` for managed
+paths. Selection uses `hosts/registry.json`; defaults and machine overrides live
+in `hosts/<profile>/system.yml`. Reboot after driver/IOMMU changes, perform MOK
+enrollment if prompted, and log in again for group membership. Ansible never
+runs implicitly from Home Manager or on every boot. Successful host apply creates
+root-owned `/etc/spawnkit/enabled`; absence means the machine is not enrolled.
+This editing WSL environment remains unmarked. No manual sentinel creation.
+
+Native automation is implemented and offline tested, but native apply/hardware
+acceptance have not been performed. Initial laptop settings enable the host stack
+without GPU transfer. Collect `host-config facts` after reboot, record real PCI
+functions/IOMMU groups, then follow `docs/windows-vm.md` for GPU policy and explicit
+VM provisioning. Do not use the synthetic test PCI addresses on this computer.
+
+User daemons remain Home Manager `systemd.user` declarations. Ubuntu supplies the
+system units; roles configure them. Libvirt sockets may activate on demand.
+No custom GPU-transfer daemon runs at boot; IOMMU kernel prerequisites and the
+shared-memory tmpfiles rule do not detach the RTX.
 
 ### D3. Graphics, assistants and language tools
 
@@ -393,7 +410,10 @@ are separate from the VM's on-demand device transfer.
 - Shmuel authenticates Claude/Codex, gh, gcloud and Tailscale as required. Credentials
   and browser/agent state remain separate from Nix configuration.
 - Restore editor extensions as needed, and rebuild project dependencies using
-  their existing language package managers and lockfiles.
+  their existing language package managers and lockfiles. A Nix tools shell can
+  coexist with mise, but do not inject Nix glibc/shared libraries into mise Python
+  or assume native extension compatibility. Use the tested toolchain boundary in
+  `docs/workflows.md` section 9; Google automation has its own scoped Go/CGO flake.
 
 Windows GPU passthrough is a separate native feasibility task (KVM/libvirt/VFIO).
 Keep Ubuntu's desktop on Intel. The RTX is exclusive to either Linux workloads
@@ -401,7 +421,7 @@ or the running Windows guest; Looking Glass displays Windows inside the Intel
 Linux desktop using shared memory. It does not share GPU ownership.
 
 Use Ubuntu's QEMU/libvirt backend with a Windows VM definition tracked as a
-repository template. Home Manager will provide virt-manager, the Looking Glass
+repository template. Home Manager provides virt-manager, the Looking Glass
 client and a launcher. Libvirt pre-start/cleanup hooks perform GPU handoff only
 when starting/stopping Windows. Before detaching, reject startup if any Linux
 application, service or container holds the GPU. Do not kill work automatically;
@@ -412,7 +432,7 @@ native IOMMU groups, related PCI functions, display routing, Windows application
 and repeated GPU return to Linux first. Keep VM disks, virtual TPM state and UEFI
 variables outside Git/Nix, with consistent backups. Preserve dual boot until the
 required applications and peripherals work. The detailed design and source links
-are in `docs/windows-vm.md`; this is planned until native validation succeeds.
+are in `docs/windows-vm.md`; native acceptance remains unverified until those checks succeed.
 
 ### D4. Review old shell configuration before Home Manager adoption
 

@@ -1,4 +1,4 @@
-{ pkgs, ... }: {
+{ lib, pkgs, ... }: {
   personal.repositories.names = [
     "google-automation"
     "personal-supabase"
@@ -10,11 +10,13 @@
     "formql"
     "supa-crm"
   ];
+  personal.clients = {
+    gcloud = lib.mkDefault true;
+    docker = lib.mkDefault true;
+    tailscale = lib.mkDefault true;
+  };
   home.packages = with pkgs; [
-    google-cloud-sdk
-    docker-client
     cloudflared
-    tailscale
     cmake
     ninja
     poppler-utils

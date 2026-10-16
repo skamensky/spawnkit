@@ -1,0 +1,55 @@
+---
+- name: Inspect active guests before changing lifecycle policy
+  ansible.builtin.command: /usr/bin/virsh -c qemu:///system list --name
+  changed_when: false
+  register: active_guests
+  when: not ansible_check_mode
+- name: Require a quiescent VM host for lifecycle policy updates
+  ansible.builtin.assert:
+    that: active_guests.stdout | trim == ''
+    fail_msg: Shut down guests before applying GPU hook changes; a daemon restart must not disturb live guests.
+  when: not ansible_check_mode
+- name: Create independent libvirt hooks directory
+  ansible.builtin.file:
+    path: /etc/libvirt/hooks/qemu.d
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+- name: Install GPU lifecycle policy
+  ansible.builtin.copy:
+    src: gpu-guard.py
+    dest: /usr/local/libexec/spawnkit/gpu-guard.py
+    owner: root
+    group: root
+    mode: '0755'
+  notify: Refresh libvirt hook discovery
+- name: Install a separate libvirt lifecycle hook
+  ansible.builtin.copy:
+    dest: /etc/libvirt/hooks/qemu.d/50-spawnkit
+    owner: root
+    group: root
+    mode: '0755'
+    content: |
+      #!/bin/sh
+      exec /usr/bin/python3 /usr/local/libexec/spawnkit/gpu-guard.py "$@"
+  notify: Refresh libvirt hook discovery
+- name: Declare GPU and runtime settings outside the Nix store
+  ansible.builtin.copy:
+    dest: /etc/spawnkit/windows.json
+    owner: root
+    group: root
+    mode: '0644'
+    content: "{{ cfg | to_nice_json }}"
+  notify: Refresh libvirt hook discovery
+- name: Declare Looking Glass shared memory permissions
+  ansible.builtin.copy:
+    dest: /etc/tmpfiles.d/spawnkit-looking-glass.conf
+    owner: root
+    group: root
+    mode: '0644'
+    content: "f /dev/shm/{{ cfg.looking_glass_name }} 0660 {{ cfg.user }} kvm -\n"
+- name: Create shared memory file without truncating existing contents
+  ansible.builtin.command: systemd-tmpfiles --create /etc/tmpfiles.d/spawnkit-looking-glass.conf
+  changed_when: false
+  when: not ansible_check_mode

@@ -24,5 +24,6 @@
     claude-code
     codex
     inputs.self.packages.${pkgs.stdenv.hostPlatform.system}.home-config
+    inputs.self.packages.${pkgs.stdenv.hostPlatform.system}.host-config
   ];
 }

@@ -1,85 +1,164 @@
-# Windows GPU passthrough on Ubuntu and responsibility for configuration
+# Windows GPU VM on native Ubuntu
 
-For this laptop, the useful target is an Ubuntu desktop running on Intel graphics, with the RTX 4060 available either to Linux applications or to a Windows VM at different times. Looking Glass can display Windows inside the Ubuntu desktop. Switching the RTX between operating systems is a hardware and driver operation that must happen only after its current users release it.
+The repository implements host provisioning, domain generation, guarded GPU
+handoff, Looking Glass launch and graceful shutdown. Native installation and
+hardware acceptance have not been run from WSL. Do not treat a successful flake
+build as proof this laptop's GPU resets or display wiring work.
 
-I recommend testing that handoff on native Ubuntu before making it part of everyday use. Home Manager should own the user tools and launcher. Ubuntu should own the privileged virtualization backend and kernel integration. Keep the configuration, templates and installation procedure together in the infrastructure repository so migration remains repeatable.
+## Intended topology
 
-## What Looking Glass does
+Ubuntu and its desktop stay on Intel. The RTX 4060 belongs either to Linux GPU
+workloads or to Windows; PCI passthrough is exclusive. Looking Glass captures the
+Windows display into shared memory and shows it in an Intel-rendered Linux window.
+It does not permit Linux CUDA jobs to share the passed-through GPU.
 
-Looking Glass displays a Windows VM desktop in a Linux window or fullscreen, with keyboard and mouse interaction. In our proposed setup, Windows renders using its passed-through RTX; the Windows capture component transfers frames through shared memory, and the Linux client displays them using Intel graphics. It avoids the encode/network/decode path of ordinary video streaming. It does not arbitrate ownership of the RTX. [Looking Glass overview](https://looking-glass.io/), [capture and shared memory documentation](https://looking-glass.io/docs/B7-rc1/usage/).
+Ubuntu owns QEMU/KVM, libvirt, OVMF, swtpm, NVIDIA kernel drivers and the system
+virsh CLI. Home Manager supplies virt-manager and Looking Glass. The template
+uses Q35, host CPU passthrough, Secure Boot capable UEFI with enrolled keys, TPM2,
+VirtIO storage/network and a local SPICE console. Shared memory uses standard
+`ivshmem-plain`; no custom KVMFR kernel module is required. This copies frames and
+may perform worse at high resolutions than KVMFR's DMA path. Test actual latency
+before deciding whether to add a separately managed KVMFR module.
 
-The practical arrangement is:
+## 1 Establish the native host
 
-```text
-Windows apps → RTX rendering → shared memory → Looking Glass on Linux → Intel → screen
+Enable firmware virtualization and VT-d/IOMMU. Boot native Ubuntu, keep dual boot,
+and follow the complete migration guide's data-preservation steps. From Spawnkit:
+
+```bash
+nix --extra-experimental-features 'nix-command flakes' run .#host-config -- check --host laptop-ubuntu
+nix --extra-experimental-features 'nix-command flakes' run .#host-config -- plan --host laptop-ubuntu --ask-become-pass
+nix --extra-experimental-features 'nix-command flakes' run .#host-config -- apply --host laptop-ubuntu --ask-become-pass
 ```
 
-The host still needs a usable graphics device. Looking Glass's B7 requirements explicitly allow integrated graphics plus a discrete GPU, and recommend KVMFR/DMABUF for the host iGPU to reduce memory bandwidth overhead. Actual resolution and refresh rate need testing. [Looking Glass requirements](https://looking-glass.io/docs/B7/requirements/).
+This installs the driver/toolkit and VM host stack and declares IOMMU boot
+parameters. The checked-in laptop profile initially has `gpu_handoff: false` and
+`windows_vm: false`, because WSL cannot reveal the real PCI/IOMMU topology. No GPU
+is bound to VFIO, no Windows domain is created, and no guest starts at boot.
+Reboot, enroll MOK if required by Secure Boot, log in again for groups, and ensure
+the desktop is on Intel. Run `host-config facts` (use the full Nix wrapper before
+Home Manager is activated). Record native results in the migration log.
 
-A Windows display must also exist for the selected capture method. The physical monitor, dummy plug or virtual display arrangement depends on the Looking Glass release and the laptop's display routing; choose and test that arrangement with matching Windows and Linux components.
+Inspect every NVIDIA function and its IOMMU group. Set the **real** function
+addresses and original Linux drivers in `hosts/laptop-ubuntu/system.yml`, then
+enable `gpu_handoff` and `windows_vm`. Example shape only, never copy blind:
 
-## The main ways to allocate the GPU
+```yaml
+gpu_handoff: true
+windows_vm: true
+gpu_devices:
+  - address: '0000:01:00.0'
+    driver: nvidia
+  - address: '0000:01:00.1'
+    driver: snd_hda_intel
+```
 
-These are architectural choices, rather than estimates of how many users choose each one.
+Include all non-bridge functions in each affected IOMMU group. If a group includes
+a necessary host device, the design is not viable as configured: do not mask it
+with an ACS override. A boot GPU is refused. Laptop MUX wiring, display outputs
+and GPU reset capability require real checks. No automatic module blacklist,
+force-reset, ROM dump or host display-manager shutdown is installed.
 
-| Arrangement | Linux use of RTX | Operational consequence |
-| --- | --- | --- |
-| Reserve the RTX for the guest by binding it to VFIO at boot | Unavailable, including while Windows is off | Avoids switching away from a live NVIDIA host driver. Good when Linux only needs Intel. |
-| Give the RTX to Linux normally and hand it to Windows on demand | Available while the guest is off | Requires all host users to release it, successful detach, and successful return after shutdown. Best fit for alternating Linux GPU work and Windows. |
-| Pass through the only desktop GPU | Host graphical session loses its graphics device | Requires releasing the graphical session and restoring it afterward. Adds disruption and recovery work. Our Intel GPU makes this unnecessary if it can drive the required host displays. |
-| Use a supported shared GPU virtualization implementation | Depends on hardware and virtualization support | A different product capability from whole-device passthrough; not a supported sharing plan for this GeForce RTX 4060. |
+Check/build the changed home profile, commit/push, then deliberately reapply
+`host-config apply --host laptop-ubuntu --ask-become-pass` with all guests shut
+down. That installs the GPU policy/hooks and shared-memory permissions. It may
+restart the installed libvirt daemon to discover new hooks, so it refuses live
+guests. The Windows VM remains off until explicitly requested.
 
-VFIO assigns devices subject to IOMMU isolation groups. A group can include related GPU functions or other devices, so inspecting just the graphics function is insufficient. [Linux VFIO documentation](https://kernel.org/doc/html/latest/driver-api/vfio.html).
+## 2 Define and install Windows
 
-NVIDIA's GeForce passthrough FAQ describes one Windows VM and explicitly excludes SR-IOV. Its published support statement is from 2021 and is not certification of this laptop with Windows 11. The current supported vGPU hardware list does not include the GeForce RTX 4060. [GeForce passthrough FAQ](https://nvidia.custhelp.com/app/answers/detail/a_id/5173/), [supported vGPU hardware](https://docs.nvidia.com/vgpu/gpus-supported-by-vgpu.html).
+Obtain a properly licensed Windows ISO and the upstream signed VirtIO driver ISO.
+Stage them as regular, world-readable files beneath `/var/lib/libvirt/images/`.
+The repository does not download license media or commit ISO images.
 
-## What happens if Linux is using the RTX
+```bash
+host-config vm-define --host laptop-ubuntu --ask-become-pass \
+  --windows-iso /var/lib/libvirt/images/windows.iso \
+  --virtio-iso /var/lib/libvirt/images/virtio-win.iso
+host-config vm-start
+host-config vm-console
+```
 
-Whole-device passthrough is exclusive: Linux and the running Windows guest cannot use the same passed-through device simultaneously. Libvirt's `managed='yes'` setting handles detachment at guest start and reattachment at shutdown; it does not migrate running CUDA or graphics jobs to Intel. [Libvirt device management](https://www.libvirt.org/manpages/virsh.html#nodedev-detach).
+The first definition creates a sparse 192 GiB qcow2 disk (12 GiB RAM/8 vCPUs by
+default); adjust those tracked settings before defining it. It refuses existing
+unmanaged domains/disks, changing the UUID, resizing/converting a disk implicitly,
+or redefining a running guest. The stable UUID keeps libvirt's TPM/NVRAM identity.
+Definition never enables autostart. A failed first definition may leave a new
+empty disk; inspect it and the libvirt error before deliberately removing that
+empty artifact and retrying. Never delete an existing Windows disk to resolve it.
 
-There is no universal promise that starting the VM while the GPU is busy produces a quick, harmless error. Detachment can fail or block. A user-reported NVIDIA issue opened on September 19, 2026 reproduces an indefinite unbind hang with driver 595.99.02 after initiating removal while CUDA held the GPU. That is a specific report, not proof that every driver has the same bug. It is enough reason to avoid treating detachment itself as a busy check. [NVIDIA issue 1374](https://github.com/NVIDIA/open-gpu-kernel-modules/issues/1374).
+Use virt-manager's SPICE VGA console for installation. If Windows cannot see its
+VirtIO disk/network, load the matching Windows driver from the VirtIO ISO. Install
+guest tools, NVIDIA's Windows driver and the Looking Glass Windows host component.
+Use the release matching the Nix client's startup/help banner (currently **B7**); the guest component captures Windows, while the Linux client displays
+it. Windows must have an active display on the RTX: an attached display/dummy
+adapter or a tested virtual display solution is necessary when the physical
+laptop panel is wired only to Intel. The SPICE VGA console alone does not establish
+a captured NVIDIA desktop.
 
-Forcefully stopping the GPU users can terminate work and lose application state. Pausing a process does not release its GPU resources. An idle utilization reading also does not establish that the driver has no clients: a process can retain a context or open device without currently executing GPU work.
+Verify Windows apps, sound, input and fullscreen behavior. Once GPU display works,
+shut Windows down, set `windows_video: none`, clear installation ISO settings for
+normal operation, and rerun `vm-define`. VGA can instead remain declared if the
+tested guest display arrangement needs it. Firmware and TPM data are retained.
 
-## Recommended handoff policy
+## 3 Daily lifecycle
 
-This is the proposed behavior for our future launcher and host integration:
+```bash
+host-config vm-view       # start if stopped, then launch Looking Glass
+host-config vm-stop       # request a graceful Windows shutdown
+host-config gpu-status    # root device/reservation inspection after shutdown
+```
 
-1. Keep the Linux desktop and Looking Glass on Intel. Explicitly launch selected Linux workloads on NVIDIA when Windows is off. NVIDIA documents PRIME render offload for this general arrangement; the desktop compositor must also be checked for unwanted RTX ownership. [NVIDIA PRIME documentation](https://download.nvidia.com/XFree86/Linux-x86_64/570.169/README/primerenderoffload.html).
-2. Before VM start, acquire a handoff lock and prevent configured GPU services from restarting during the transition. Inspect NVIDIA processes and open device handles, including DRM render nodes, CUDA users, GPU containers, monitoring and background services.
-3. If users remain, refuse startup and show the blocking processes or services. Do not silently kill them. Save or finish the work and close them deliberately.
-4. Detach the complete required set of PCI functions, then start Windows. Use libvirt managed devices where suitable rather than duplicating its device management in scripts.
-5. Keep the RTX unavailable to new Linux workloads while Windows owns it.
-6. After Windows shuts down, restore the host driver and relevant services. Confirm GPU health and a small Linux GPU workload before reporting it available.
+The desktop entries are **Windows (Looking Glass)** and **Windows installation
+console**. Launch failures also produce a desktop notification. The latter opens the console; start first if the VM is off. Closing
+Looking Glass leaves Windows running. `vm-stop` requests shutdown and does not
+claim it has completed; wait until `virsh -c qemu:///system domstate windows`
+reports `shut off`, then verify GPU return. A Windows installer without guest
+power handling may need shutdown from inside Windows.
 
-A shell launcher alone is insufficient because virt-manager and other libvirt clients could bypass it. Put the refusal check in a libvirt pre-start hook as well. Libvirt documents startup hooks that can abort guest start. Hooks must not call back into libvirt, because that can deadlock. Lifecycle coordination and driver work need carefully separated responsibilities. [Libvirt hooks](https://www.libvirt.org/hooks.html).
+1. The launcher starts the dedicated NAT network if needed, then asks libvirt to
+   start the domain. It never applies Ansible implicitly.
+2. The root `prepare begin` hook validates the actual domain UUID/PCI functions,
+   requires `managed='yes'`, checks IOMMU isolation and original drivers, and
+   checks GPU/DRM/audio device users with `fuser`.
+3. Busy jobs/containers/GUI apps cause refusal with PIDs and process names. Nothing
+   is killed. Explicitly finish/close that work, or deliberately stop a service
+   such as persistence monitoring if it owns a device, then retry. CPU-only
+   containers can keep running.
+4. An exclusive root reservation prevents another configured libvirt guest from
+   taking the same functions. Shared memory is sized before the VM starts.
+5. Libvirt detaches the managed PCI functions and reattaches them on release.
+   The hook never calls `virsh` or any libvirt API, avoiding callback deadlocks.
+6. `release end` verifies original drivers and bounded `nvidia-smi -L` health.
+   Failure leaves the reservation as an explicit recovery signal. Inspect libvirt
+   journal output; the hook cannot veto a shutdown or guarantee kernel recovery.
 
-Open-file checks are a guard, not a proof against every concurrent process or kernel driver problem. The policy must coordinate known services, restrict concurrent starts, and verify actual device state. A timeout around a shell command cannot guarantee recovery from a driver blocked in the kernel.
+Process checks reduce risk but cannot make a hardware handoff atomic with
+unrelated root processes. Do not launch a new Linux GPU job during VM startup.
+A driver can hang during PCI unbind/reset despite these checks. Keep console
+access and reboot as a last resort; do not force-remove a reservation while a VM
+is alive. For a stale reservation after a failed start, confirm the guest is off,
+all configured functions are back on their declared drivers, no GPU processes are
+active and `nvidia-smi -L` works, then deliberately remove only
+`/run/spawnkit/gpu-owner.json`. A reboot clears it too; neither resets Windows data.
 
-## What must be tested on native Ubuntu
+## Acceptance before replacing dual boot
 
-The current WSL session cannot establish the laptop's native passthrough feasibility. Test VT-d/IOMMU support and groups, GPU PCI functions, hybrid graphics mode, internal panel and external connector routing, Windows driver initialization, and repeated guest start/shutdown followed by Linux GPU use.
+- Baseline: native driver loads, Secure Boot policy is satisfied, Intel desktop
+  survives normal NVIDIA Linux workloads and GPU containers.
+- A running CUDA job/GPU container makes VM start fail without killing work.
+- Windows boots with TPM/Secure Boot, uses RTX acceleration, and Looking Glass
+  captures the desired display at acceptable resolution/latency.
+- Multiple start/shutdown cycles return NVIDIA functions and Linux compute;
+  shared-memory permissions and AppArmor confinement remain intact after reboot.
+- If AppArmor denies shared memory, inspect the exact libvirt generated profile
+  and installed Ubuntu policy; add a narrowly scoped tracked policy rule for the
+  one shared-memory path. Never disable AppArmor or make QEMU unconfined.
+- Back up the powered-off disk, domain XML, NVRAM and swtpm state together and test
+  restoration. Check required USB devices and Windows applications.
 
-Also test the required Windows applications and peripherals, and laptop suspend/resume with the VM stopped. If a connector is driven by the RTX, it cannot simultaneously remain a Linux-driven output while that RTX belongs to Windows. A Looking Glass window can display Windows on an Intel-driven screen; it does not rewire physical ports.
-
-Keep dual boot until these checks pass. If repeated handoff proves unreliable, reserving the RTX for the VM avoids dynamic switching, but gives up native Linux use of that GPU. The other practical choice is to retain Linux ownership and boot Windows for workloads that need it.
-
-## What Nix should own on Ubuntu
-
-| Component | Recommended owner |
-| --- | --- |
-| virt-manager, virt-viewer and libvirt client commands | Home Manager packages, connecting explicitly to `qemu:///system` |
-| Looking Glass client, configuration and desktop launcher | Home Manager |
-| VM templates, hardware identifiers, helper source and setup procedure | Tracked infrastructure repository, with host-specific values |
-| QEMU backend, libvirt system daemon, OVMF firmware and swtpm | Ubuntu packages and host setup |
-| KVM, VFIO, IOMMU boot settings and NVIDIA driver | Ubuntu kernel and host setup |
-| AppArmor, device permissions, networking, privileged hooks and optional KVMFR module | Ubuntu host setup, with tracked source and installation steps |
-| Windows disk, UEFI variable store, TPM state and user data | Mutable state with backups outside the Nix store |
-
-Ubuntu documents QEMU and libvirt as host packages, while virt-manager acts as a client. Libvirt distinguishes the privileged system instance from per-user sessions. Installing a Nix client does not replace the system daemon or change which QEMU executable that daemon launches. [Ubuntu libvirt installation](https://ubuntu.com/server/docs/how-to/virtualisation/libvirt/), [virt-manager architecture](https://ubuntu.com/server/docs/how-to/virtualisation/virtual-machine-manager/), [libvirt daemon architecture](https://www.libvirt.org/daemons.html).
-
-Nix can provide a QEMU executable on Ubuntu. It is not inherently incompatible. However, making Ubuntu's libvirt use that executable requires deliberate backend configuration and validation of service-user access, security profiles, helpers and firmware. Libvirt's security model includes per-VM AppArmor profiles and device access controls. Merely adding QEMU to the interactive shell's PATH does not configure these. For this workstation I recommend keeping that integrated backend together in Ubuntu. [Libvirt QEMU driver and security architecture](https://libvirt.org/drvqemu.html).
-
-The repository can still be the source of truth for the overall setup: Home Manager builds the user environment, and a tracked host procedure installs the Ubuntu requirements and privileged configuration. This gives repeatable setup without claiming that a Home Manager build reconstructs the kernel, hardware isolation or Windows state. GPU identifiers and display routing will need reassessment on another machine.
-
-This design is pending implementation and native hardware validation. No VM, GPU driver binding or persistent machine configuration was changed for this research.
+Primary references: [libvirt hooks](https://libvirt.org/hooks.html),
+[PCI host devices and shared memory XML](https://libvirt.org/formatdomain.html),
+[Looking Glass shared memory](https://looking-glass.io/docs/B7/ivshmem_shm/),
+[Looking Glass installation](https://looking-glass.io/docs/B7/install/),
+[NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html).

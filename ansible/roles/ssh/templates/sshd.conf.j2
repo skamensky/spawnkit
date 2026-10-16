@@ -1,0 +1,10 @@
+# Managed by Spawnkit. Authorized keys and identities remain outside Git.
+Port {{ cfg.ssh_port }}
+{% for address in cfg.ssh_listen_addresses %}
+ListenAddress {{ address }}
+{% endfor %}
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+PermitRootLogin no
+PubkeyAuthentication yes
+AllowUsers {{ cfg.user }}

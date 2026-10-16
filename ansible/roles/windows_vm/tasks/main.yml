@@ -1,0 +1,41 @@
+---
+- name: Require previously applied host GPU setup
+  ansible.builtin.stat:
+    path: /etc/spawnkit/windows.json
+  register: gpu_configuration
+- name: Check host enrollment
+  ansible.builtin.assert:
+    that: gpu_configuration.stat.exists
+    fail_msg: Run host-config apply for this GPU profile before vm-define.
+- name: Read the installed GPU lifecycle policy
+  ansible.builtin.slurp:
+    src: /etc/spawnkit/windows.json
+  register: installed_gpu_policy
+- name: Require definition settings to match the applied GPU policy
+  ansible.builtin.assert:
+    that:
+      - (installed_gpu_policy.content | b64decode | from_json).windows_uuid == cfg.windows_uuid
+      - (installed_gpu_policy.content | b64decode | from_json).gpu_devices == cfg.gpu_devices
+      - (installed_gpu_policy.content | b64decode | from_json).looking_glass_name == cfg.looking_glass_name
+      - (installed_gpu_policy.content | b64decode | from_json).looking_glass_mib == cfg.looking_glass_mib
+    fail_msg: Apply the matching host policy before defining Windows.
+- name: Render the desired persistent VM definition
+  ansible.builtin.template:
+    src: windows.xml.j2
+    dest: /etc/spawnkit/windows.xml
+    owner: root
+    group: root
+    mode: '0644'
+- name: Record the definition inputs including installation media
+  ansible.builtin.copy:
+    dest: /etc/spawnkit/windows-definition.json
+    content: "{{ cfg | to_nice_json }}"
+    owner: root
+    group: root
+    mode: '0644'
+- name: Define Windows while preserving disk, NVRAM and TPM identity
+  ansible.builtin.command:
+    argv: [/usr/bin/python3, /usr/local/libexec/spawnkit/host-state.py, define-windows, /etc/spawnkit/windows-definition.json, /etc/spawnkit/windows.xml]
+  register: windows_definition
+  changed_when: windows_definition.stdout.startswith('changed')
+  when: not ansible_check_mode

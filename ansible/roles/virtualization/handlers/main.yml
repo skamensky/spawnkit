@@ -1,0 +1,5 @@
+---
+- name: Update GRUB
+  ansible.builtin.command: update-grub
+  when: not ansible_check_mode
+  changed_when: true

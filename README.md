@@ -20,8 +20,8 @@ secrets and gcloud.
 | --- | --- | --- |
 | User packages, shell, dotfiles, assistants and user services | `nix/` with shared `config/` and machine `hosts/` | Implemented and build-tested; live activation is a migration step |
 | Repository cloning and preservation | `config/repositories.json`, `scripts/bootstrap-repos.py` | Implemented |
-| Ubuntu packages, system services, permissions and GPU hooks | `ansible/` | Responsibility documented; roles not implemented |
-| Windows VM and Looking Glass | [VM design](docs/windows-vm.md) | Native hardware validation and implementation pending |
+| Ubuntu packages, system services, permissions and GPU hooks | `ansible/` | Implemented; native apply pending |
+| Windows VM and Looking Glass | [VM design](docs/windows-vm.md) | Definition/hooks/launcher implemented; native acceptance pending |
 | Optional NixOS system configuration | `nix/modules/nixos/` | Implemented module integration; not required for Ubuntu |
 
 Read the [architecture and service ownership](docs/architecture.md) for the
@@ -37,10 +37,10 @@ nix/                       Home Manager modules, optional NixOS modules and Nix 
 hosts/                     Shared defaults, machine overrides and hostname registry
 config/                    Repository catalog, runtime pins and shell sources
 scripts/                   Environment selection and repository bootstrap commands
-ansible/                   Ubuntu host automation scope and implementation boundary
+ansible/                   Ubuntu host roles, lifecycle hooks and VM templates
 tests/                     Bootstrap safety and isolated Home Manager activation
 docs/ubuntu-migration.md   Complete Windows/WSL to Ubuntu migration guide
-docs/architecture.md       Responsibility split, installed paths and planned automation
+docs/architecture.md       Responsibility split, installed paths and host automation
 docs/windows-vm.md         GPU passthrough, Looking Glass and native validation
 ```
 
@@ -66,7 +66,7 @@ neither a project dependency lock nor a backup of local changes.
 
 [`hosts/registry.json`](hosts/registry.json) maps hostname plus environment to a
 machine profile. Unknown hostnames receive functional defaults. It is the only
-hostname map; the planned host automation will reuse it.
+hostname map; host automation uses it too.
 
 ## Build the user environment
 

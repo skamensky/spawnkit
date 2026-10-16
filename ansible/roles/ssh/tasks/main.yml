@@ -1,0 +1,46 @@
+---
+- name: Require explicitly declared listener addresses
+  ansible.builtin.assert:
+    that: cfg.ssh_listen_addresses | length > 0
+    fail_msg: Set ssh_listen_addresses to the intended local or tailnet addresses before enabling SSH.
+- name: Install OpenSSH server
+  ansible.builtin.apt:
+    name: openssh-server
+    state: present
+  when: not ansible_check_mode
+- name: Ensure the privilege separation runtime directory exists
+  ansible.builtin.file:
+    path: /run/sshd
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+  when: not ansible_check_mode
+- name: Configure only Spawnkit SSH settings with a backed-up drop-in
+  ansible.builtin.template:
+    src: sshd.conf.j2
+    dest: /etc/ssh/sshd_config.d/00-spawnkit.conf
+    owner: root
+    group: root
+    mode: '0644'
+    backup: true
+    validate: /usr/sbin/sshd -t -f %s
+  when: not ansible_check_mode
+  notify: Restart SSH
+- name: Verify the full effective SSH listener configuration
+  ansible.builtin.command:
+    argv: "{{ ['/usr/bin/python3', '/usr/local/libexec/spawnkit/host-state.py', 'verify-ssh', cfg.ssh_port | string] + cfg.ssh_listen_addresses }}"
+  changed_when: false
+  when: not ansible_check_mode
+- name: Use the configured SSH service rather than a competing socket listener
+  ansible.builtin.systemd_service:
+    name: ssh.socket
+    state: stopped
+    enabled: false
+  when: not ansible_check_mode
+- name: Enable the configured key-only SSH listener
+  ansible.builtin.systemd_service:
+    name: ssh.service
+    state: started
+    enabled: true
+  when: not ansible_check_mode

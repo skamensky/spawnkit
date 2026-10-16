@@ -1,0 +1,36 @@
+---
+- name: Preview Docker packages
+  ansible.builtin.debug:
+    msg: Install Ubuntu docker.io, docker-buildx and docker-compose-v2; no second Nix Docker CLI on this host.
+  when: ansible_check_mode
+- name: Install Ubuntu Docker stack
+  ansible.builtin.apt:
+    name: [docker.io, docker-buildx, docker-compose-v2]
+    state: present
+  when: not ansible_check_mode
+- name: Create Docker configuration directory
+  ansible.builtin.file:
+    path: /etc/docker
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+- name: Merge only declared Docker daemon settings
+  ansible.builtin.command:
+    argv: [/usr/bin/python3, /usr/local/libexec/spawnkit/host-state.py, merge-docker, "{{ cfg.docker_daemon | to_json }}"]
+  register: docker_configuration
+  changed_when: docker_configuration.stdout.startswith('changed')
+  when: not ansible_check_mode
+  notify: Restart Docker
+- name: Grant configured user Docker access
+  ansible.builtin.user:
+    name: "{{ cfg.user }}"
+    groups: docker
+    append: true
+  when: not ansible_check_mode
+- name: Enable Docker Engine
+  ansible.builtin.systemd_service:
+    name: docker.service
+    enabled: true
+    state: started
+  when: not ansible_check_mode

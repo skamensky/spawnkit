@@ -1,0 +1,10 @@
+# Hardware values are filled from `host-config facts` on native Ubuntu.
+docker: true
+tailscale: true
+nvidia: true
+virtualization: true
+iommu: true
+# Enable these together after recording the real GPU/IOMMU facts below.
+gpu_handoff: false
+windows_vm: false
+gpu_devices: []

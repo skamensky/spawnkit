@@ -1,0 +1,76 @@
+---
+- name: Preview native driver and container toolkit setup
+  ansible.builtin.debug:
+    msg: Install the Ubuntu recommended NVIDIA driver (or the declared package) and NVIDIA Container Toolkit when Docker is enabled. Reboot and enroll MOK if required.
+  when: ansible_check_mode
+- name: Install Ubuntu driver discovery tools
+  ansible.builtin.apt:
+    name: ubuntu-drivers-common
+    state: present
+  when: not ansible_check_mode
+- name: Discover the native recommended NVIDIA driver
+  ansible.builtin.command: ubuntu-drivers devices
+  register: recommended_driver
+  changed_when: false
+  when: not ansible_check_mode and cfg.nvidia_driver_package == ''
+- name: Select the driver without guessing a branch
+  ansible.builtin.set_fact:
+    driver_candidates: >-
+      {{ [cfg.nvidia_driver_package] if cfg.nvidia_driver_package else (recommended_driver.stdout | regex_findall('driver\s+:\s+(nvidia-driver-[a-zA-Z0-9-]+)[^\n]*recommended')) | unique | list }}
+  when: not ansible_check_mode
+- name: Require one unambiguous driver selection
+  ansible.builtin.assert:
+    that: driver_candidates | length == 1
+    fail_msg: Set nvidia_driver_package after reviewing ubuntu-drivers devices on this native host.
+  when: not ansible_check_mode
+- name: Install the Ubuntu kernel driver
+  ansible.builtin.apt:
+    name: "{{ driver_candidates[0] }}"
+    state: present
+  when: not ansible_check_mode
+- name: Configure the NVIDIA container repository
+  when: cfg.docker
+  block:
+    - name: Create signing key directory
+      ansible.builtin.file:
+        path: /etc/apt/keyrings
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+    - name: Fetch pinned public NVIDIA repository key
+      ansible.builtin.get_url:
+        url: https://nvidia.github.io/libnvidia-container/gpgkey
+        dest: /etc/apt/keyrings/nvidia-container.asc
+        checksum: sha256:c880576d6cf75a48e5027a871bac70fd0421ab07d2b55f30877b21f1c87959c9
+        owner: root
+        group: root
+        mode: '0644'
+    - name: Configure signed container toolkit repository
+      ansible.builtin.copy:
+        dest: /etc/apt/sources.list.d/spawnkit-nvidia-container.sources
+        owner: root
+        group: root
+        mode: '0644'
+        content: |
+          Types: deb
+          URIs: https://nvidia.github.io/libnvidia-container/stable/deb/{{ 'amd64' if ansible_facts.architecture == 'x86_64' else 'arm64' }}
+          Suites: /
+          Signed-By: /etc/apt/keyrings/nvidia-container.asc
+    - name: Install NVIDIA container toolkit
+      ansible.builtin.apt:
+        name: nvidia-container-toolkit
+        state: present
+        update_cache: true
+      when: not ansible_check_mode
+    - name: Merge NVIDIA runtime without replacing unrelated daemon settings
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/python3
+          - /usr/local/libexec/spawnkit/host-state.py
+          - merge-docker
+          - '{"runtimes":{"nvidia":{"path":"nvidia-container-runtime","runtimeArgs":[]}}}'
+      register: nvidia_runtime
+      changed_when: nvidia_runtime.stdout.startswith('changed')
+      when: not ansible_check_mode
+      notify: Restart Docker

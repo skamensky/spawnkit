@@ -1,207 +1,92 @@
-# Ubuntu host services and Windows VM configuration
+# Spawnkit ownership and saved state
 
-Home Manager manages Shmuel's user environment and user services. Ansible will
-manage the remaining privileged Ubuntu setup. Both live in this repository;
-Ubuntu continues to supply the system packages, kernel drivers and system service
-definitions. Windows GPU handoff runs when the VM starts and stops, not at boot.
+Spawnkit is a source-controlled machine recipe. Home Manager owns the user
+session, Ansible owns privileged Ubuntu setup, mise/uv own language environments,
+and each project keeps its own development recipe. No NixOS installation is
+required. Native execution of the new host/VM automation is still a migration step.
 
-This is the agreed responsibility split and proposed implementation layout. The
-Home Manager infrastructure already exists. The Ansible roles/apply command, virtualization
-module, VM definition and GPU hooks described below are planned, not installed.
-No VM or GPU binding is changed by this document.
-
-## Ownership
-
-| Responsibility | Owner | Tracked source |
+| Responsibility | Source | Applied location |
 | --- | --- | --- |
-| Shared user packages, shell, dotfiles and repository bootstrap | Home Manager | Existing `nix/modules/home/` and `nix/users/shmuel.nix` |
-| User daemons, timers and their environment | Home Manager | Existing relevant modules; a new `nix/modules/home/services.nix` when shared custom user services are needed |
-| virt-manager, virt-viewer, libvirt CLI, Looking Glass client and VM launcher | Home Manager | Planned `nix/modules/home/virtualization.nix` |
-| User configuration and desktop entry for Windows/Looking Glass | Home Manager | Planned virtualization module and its referenced source files |
-| Ansible command and its dependencies | Nix | Root flake's shared Nixpkgs input; no separate infrastructure flake or lock |
-| Ubuntu system package installation | Ansible using APT | Planned `ansible/roles/` |
-| QEMU backend, libvirt, OVMF and swtpm configuration | Ansible with Ubuntu packages | Planned `ansible/roles/virtualization/` |
-| Docker Engine and NVIDIA Container Toolkit | Ansible with host packages | Planned `ansible/roles/docker/` |
-| NVIDIA driver installation and host device permissions | Ansible with Ubuntu-supported setup | Planned `ansible/roles/nvidia/` and host parameters |
-| Tailscale and SSH daemons | Ansible with Ubuntu packages | Planned `ansible/roles/tailscale/` and `ansible/roles/ssh/` |
-| IOMMU boot settings, GPU handoff configuration and libvirt hooks | Ansible | Planned `ansible/roles/gpu_handoff/` |
-| Hostname and environment to profile selection | Existing registry and selector | `hosts/registry.json` and `scripts/home-config.py` |
-| Profile-specific privileged setup and hardware parameters | Ansible consuming the selected profile | Planned `hosts/<profile>/system.yml` |
-| Optional NixOS system configuration | NixOS modules | Existing `nix/modules/nixos/`; Ubuntu roles do not run on NixOS |
-| Skills, assistant instructions and private assistant settings | Separate canonical repository | `personal-agent-customizations`; this flake retains external links |
+| User packages, aliases, dotfiles, user services | `nix/modules/home/` | Home Manager generation and home symlinks |
+| Shared dependency pins | Root `flake.nix`, `flake.lock` | Nix store |
+| Host selection | `hosts/registry.json` | Both `home-config` and `host-config` use it |
+| User profile differences | `hosts/<profile>/home.nix` | Home Manager |
+| Ubuntu host profile differences | `hosts/<profile>/system.yml` extending default | Generated local Ansible inventory |
+| Ubuntu packages, kernel drivers, Docker/libvirt/Tailscale/SSH | `ansible/roles/` | Ubuntu packages and their supplied systemd units |
+| GPU transfer policy | `ansible/roles/gpu_handoff/` | `/etc/libvirt/hooks/qemu.d/50-spawnkit` and root helper |
+| Windows domain | `ansible/roles/windows_vm/templates/windows.xml.j2` | System libvirt, explicitly defined |
+| VM GUI and launcher | `nix/modules/home/virtualization.nix` | virt-manager, Looking Glass, desktop entries |
+| Personal instructions/settings/skills | `personal-agent-customizations` checkout | External Home Manager symlinks |
+| Project compilers and native tools | Project flake and project lock | That project's Nix shell/build |
+| Python/Node versions | Global or project mise files/locks | mise data directory |
+| Application dependencies | Project `uv.lock`, Node lockfiles | `.venv`, `node_modules` |
+| Secrets | Canonical personal-secrets workflow | Provider runtime state, never Git/store |
 
-The Ansible roles manage package dependencies, root-owned files, group/device
-permissions, service enablement and reload/restart handlers. They are not used to
-install user tools or manage home files already owned by Home Manager.
+The native laptop uses Ubuntu's complete Docker and Tailscale packages, which
+include their clients. Home Manager must not install duplicate clients there.
+`personal.clients.{gcloud,docker,tailscale}` selects client packages for other
+profiles. Headless profiles default to none of these clients; enabling a service
+and selecting a client are separate decisions. `laptop-wsl` remains client-only.
 
-## Repository layout
+## Apply boundaries
 
-Paths marked planned below do not exist yet. Role names identify responsibilities;
-we will add a role when implementing its corresponding host feature.
+`home-config check/build` validates without changing the home. `home-config switch`
+is explicit. `host-config check` validates playbooks; `host-config plan` previews;
+`host-config apply` invokes privileged Ansible setup. No login hook, Home Manager
+activation, scheduled pull or boot timer runs an Ansible apply.
 
-```text
-spawnkit/
-├── flake.nix, flake.lock              # One shared pinned entry point
-├── nix/
-│   ├── outputs.nix                    # Home Manager and optional NixOS composition
-│   ├── modules/home/                  # Existing user configuration
-│   │   ├── virtualization.nix         # Planned VM clients and launcher
-│   │   └── services.nix               # Planned only if shared custom services are needed
-│   ├── modules/nixos/                 # Optional NixOS system configuration
-│   ├── users/shmuel.nix
-│   └── tests/activation.nix
-├── hosts/
-│   ├── registry.json                  # Existing hostname/environment mapping
-│   ├── default/home.nix               # Existing shared Home Manager defaults
-│   ├── default/system.yml             # Planned minimal privileged defaults
-│   └── <profile>/
-│       ├── home.nix                   # Existing profile additions
-│       └── system.yml                 # Planned role enablement and hardware values
-├── config/
-│   ├── repositories.json              # Repository bootstrap catalog
-│   ├── assistants/RTK.md              # Shared non-secret assistant instructions
-│   ├── runtimes/                      # mise versions and runtime lock
-│   └── shell/                         # Shared shell completion sources
-├── ansible/
-│   ├── README.md                      # Existing scope and implementation status
-│   ├── inventory.py                   # Planned; reuses the existing host selector
-│   ├── site.yml                       # Planned
-│   └── roles/                         # Planned; add each role when implementing it
-│       ├── virtualization/            # QEMU/libvirt settings and Windows XML template
-│       ├── gpu_handoff/               # Hooks, helpers and host parameter templates
-│       ├── docker/
-│       ├── nvidia/
-│       ├── tailscale/
-│       └── ssh/
-├── scripts/
-│   ├── home-config.py                 # Existing user-environment entry point
-│   ├── bootstrap-repos.py             # Existing safe repository bootstrap
-│   ├── link-assistant-skills.py       # Discovers skills from the canonical checkout
-│   └── host-config.py                 # Planned explicit Ansible entry point
-├── tests/                             # Bootstrap and isolated activation checks
-└── docs/
-    ├── ubuntu-migration.md            # Complete migration runbook
-    ├── architecture.md                # This responsibility split
-    └── windows-vm.md                  # GPU passthrough design and validation
-```
+Only a successful explicit host apply creates `/etc/spawnkit/enabled`. The NixOS
+integration declares the same path when included in an activated NixOS system.
+Home Manager alone does not enroll a machine. Agents check the root-owned sentinel
+before treating Spawnkit as authoritative for persistent software changes. Editing
+this repository does not enroll the computer doing the editing.
 
-Each feature's templates, scripts and any custom unit definitions stay with its
-role rather than in a second central copy. The user launcher source stays with
-the Home Manager virtualization module. Exact filenames can be refined during
-implementation without changing ownership.
+Unknown hostnames use `default`: ordinary user tools and shell configuration,
+with native GPU/desktop/daemon features disabled. Known host profiles extend
+shared defaults. Cloud instance creation stays with its infrastructure repository.
+Ansible currently supports Ubuntu 24.04+; other distributions retain Home Manager
+support and need an appropriate system configuration layer. NixOS uses the
+separate NixOS modules, not the Ubuntu playbooks.
 
-## Systemd files and when they run
+## System services
 
-We do not need a new systemd unit merely because a step needs root. In particular,
-GPU handoff uses libvirt's VM lifecycle hooks; there is no planned always-running
-custom GPU handoff daemon or boot-time GPU transfer service.
+Ubuntu supplies `docker.service`, `tailscaled.service`, `ssh.service`, libvirt's
+installed daemon/socket architecture and supporting swtpm/OVMF packages. Ansible
+installs, enables and configures them rather than copying their vendor units.
+Docker/Tailscale run at boot when enabled; libvirt sockets can activate daemons on
+demand. IOMMU boot parameters enable kernel capabilities without reserving the GPU.
+The dedicated `spawnkit` NAT network is defined without autostart and started on
+VM request. A running default libvirt network is not adopted or overwritten.
 
-| Item | Definition source | Runtime behavior |
-| --- | --- | --- |
-| Existing CopyQ user service | Home Manager desktop module | Follows the user desktop session |
-| Future personal watchers or timers | Home Manager `systemd.user` declarations | User login, timer or explicit start, according to the feature |
-| Looking Glass | Home Manager desktop entry/launcher | Opened for the VM; no separate daemon is required |
-| Libvirt service and sockets | Ubuntu packages | Configure on-demand activation appropriate to the installed Ubuntu version; no guest autostart |
-| GPU prepare and cleanup | Our libvirt hooks installed by Ansible | VM startup and shutdown; reject startup if the GPU is busy |
-| Tailscale and SSH | Ubuntu/vendor packages | Enable on opted-in profiles with declared access settings |
-| Docker Engine | Ubuntu/vendor packages | Enable only on opted-in hosts; startup policy declared in its role |
-| NVIDIA host services | Installed driver package | Keep only services actually required by the chosen driver and configuration |
+The GPU hook is a root process invoked by libvirt around VM start/release. It
+checks busy devices and IOMMU isolation, reserves the GPU and prepares shared
+memory. Libvirt's `managed='yes'` PCI devices perform detach/reattach. The hook
+never invokes libvirt recursively. No separate GPU daemon or privileged user
+service is needed. Detailed lifecycle and failure behavior: [Windows VM](windows-vm.md).
 
-Ubuntu may supply monolithic libvirtd or modular daemon units depending on the
-installed release and packages. Inspect that package set and configure the units
-it actually supplies rather than enabling both architectures.
+## Files outside the repository
 
-For a packaged daemon, keep its vendor unit and add a tracked drop-in under
-`/etc/systemd/system/<unit>.d/` only when a change is required. Do not copy the
-whole vendor unit into Git. If we later need a genuinely custom privileged
-daemon, keep its full unit with that feature's Ansible role and install it under
-`/etc/systemd/system/`.
-
-Personal skills are discovered from the canonical assistant checkout at activation;
-there is no skill inventory JSON in this repository. Home Manager generates and links user units under `~/.config/systemd/user/`.
-Ansible installs privileged files as root-owned copies at stable system paths;
-they do not link into a mutable checkout under the home directory. User services
-that must survive logout may need explicitly configured lingering; this is a
-host setting and is not a reason to turn all user services into system services.
-
-## Machine selection
-
-Retain `hosts/registry.json` as the only hostname mapping. The planned inventory
-uses the existing selector to determine the host profile and loads privileged
-defaults plus that profile's explicit `system.yml` additions. Do not independently
-maintain another hostname inventory.
-
-Unknown hosts retain the functional Home Manager default. Their privileged
-default is minimal and does not install virtualization, change GPU bindings,
-enable network daemons or change boot parameters. Hardware-dependent roles are
-explicitly enabled on known profiles, with environment checks that exclude WSL
-and NixOS from native Ubuntu GPU operations.
-
-The laptop profile will declare GPU PCI addresses, all required related functions,
-the Windows domain name and other hardware-specific inputs only after discovery
-in native Ubuntu. The same hostname under WSL must not select those operations.
-
-## Installed locations and VM state
-
-| Content | Installed or runtime location |
+| Path | Meaning |
 | --- | --- |
-| Home Manager clients and launcher | Nix store, exposed through the user profile |
-| User service definitions and application configuration | Home Manager links under `~/.config/` |
-| Ubuntu QEMU backend and helpers | Distribution package locations |
-| Libvirt configuration | `/etc/libvirt/` |
-| Hook dispatcher and lifecycle integration | `/etc/libvirt/hooks/` |
-| Privileged helper executables | `/usr/local/libexec/spawnkit/` |
-| Host-specific GPU handoff parameters | `/etc/spawnkit/gpu-handoff.conf` |
-| Service overrides we actually require | `/etc/systemd/system/<unit>.d/` |
-| Windows domain definition | Rendered from Git and registered with system libvirt |
-| Windows disk | Planned `/var/lib/libvirt/images/windows.qcow2` |
-| UEFI variables, virtual TPM state and other libvirt state | Libvirt-managed locations under `/var/lib/libvirt/` |
+| `/etc/spawnkit/enabled` | Enrollment marker with selected profile and applied revision |
+| `/usr/local/libexec/spawnkit/host-state.py` | Installed reviewed privileged host operations |
+| `/usr/local/libexec/spawnkit/gpu-guard.py` | Installed reviewed lifecycle guard |
+| `/etc/spawnkit/windows.json` | Applied GPU policy and launcher settings |
+| `/etc/spawnkit/windows-definition.json` | Inputs used for explicit VM definition |
+| `/etc/spawnkit/windows.xml`, `network.xml` | Rendered desired libvirt definitions |
+| `/etc/default/grub.d/90-spawnkit-iommu.cfg` | IOMMU boot prerequisite |
+| `/etc/tmpfiles.d/spawnkit-looking-glass.conf` | Shared-memory permissions |
+| `/dev/shm/spawnkit-windows` | Volatile Looking Glass frame memory |
+| `/run/spawnkit/gpu-owner.json` | Exclusive reservation; survives a failed recovery until inspected/rebooted |
+| `/var/lib/spawnkit/windows.xml`, `windows.resolved.xml` | Applied source and resolved definition used to detect manual drift |
+| `/var/lib/libvirt/images/spawnkit-windows.qcow2` | Mutable Windows disk; default path |
+| `/var/lib/libvirt/qemu/nvram/`, `/var/lib/libvirt/swtpm/` | Firmware/TPM state managed by libvirt |
 
-VM images, TPM state, UEFI variables, logs and user data are mutable state, not
-Git content or Nix derivation inputs. Back them up together using a procedure
-that preserves consistency. Never recreate the disk, TPM or UEFI state merely
-because a configuration is reapplied. Domain XML changes must be reviewed and
-applied at an appropriate VM shutdown boundary.
+Root-owned copies are installed by Ansible so a normal Git edit cannot silently
+change privileged behavior. No symlink points a privileged hook at a user-writable
+checkout. Changing source requires a new explicit apply.
 
-Credentials remain in the established personal secrets workflow. Tracked files
-contain references only; neither Ansible templates nor Nix outputs contain secret
-values. Ansible is an application mechanism, not a new credential store.
-
-## Deployment and validation
-
-User and host activation remain separate explicit operations. `home-config
-switch` does not invoke sudo or silently apply Ansible changes.
-
-The planned `host-config` entry point selects the profile, previews Ansible
-changes with check/diff mode, and applies them only through an explicit apply
-operation. Ansible check mode is a preview, not evidence that GPU passthrough
-works. No automatic host-configuration timer is planned.
-
-For implementation, pin the Ansible runtime through the shared Nixpkgs input.
-Validate role syntax and inventory selection, inspect the preview, and verify
-that a second application makes no unintended changes. Any Home Manager changes
-still require the repository's `home-config check`, `home-config build` and
-affected-profile builds before commit and push. No Home Manager activation is
-used merely to test a build.
-
-Native validation must establish IOMMU isolation, display routing, successful
-Windows GPU initialization and repeated return to Linux. The pre-start guard
-must reject a busy GPU before attempting driver removal. Coordinate known GPU
-services and containers, inspect device users, and verify actual driver state.
-Hooks must not call back into libvirt. Preserve dual boot until the required
-Windows workflows and the return to Linux are verified.
-
-The lockfile pins Nix tools and user packages. Ordinary APT package declarations
-recreate intended host setup but do not provide exact historical versions unless
-we separately adopt repository snapshots. Source control also does not make
-hardware identifiers portable or roll back mutable Windows state.
-
-## References
-
-- [Home Manager systemd module](https://github.com/nix-community/home-manager/blob/master/modules/systemd.nix)
-- [Ansible systemd service management](https://docs.ansible.com/projects/ansible/latest/collections/ansible/builtin/systemd_service_module.html)
-- [Ansible APT management](https://docs.ansible.com/projects/ansible/latest/collections/ansible/builtin/apt_module.html)
-- [Systemd unit files and drop-ins](https://github.com/systemd/systemd/blob/main/man/systemd.unit.xml)
-- [Libvirt daemon activation](https://www.libvirt.org/daemons.html)
-- [Libvirt lifecycle hooks and restrictions](https://www.libvirt.org/hooks.html)
-- [Libvirt system and session instances](https://libvirt.org/drvqemu.html)
+The recipe is reproducible configuration, not a backup. Keep consistent offline
+backups of the VM disk, definition, NVRAM and TPM state together; account logins,
+application data and unpushed work have their own preservation workflows. Ansible
+uses current Ubuntu/vendor APT repositories rather than a frozen OS snapshot.

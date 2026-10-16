@@ -8,10 +8,9 @@ Read them before changing this repository. Follow the RTK shell convention.
 Use `nix/modules/home/` Home Manager modules for user packages, shell configuration, dotfiles,
 repository bootstrap and user services. Use `nix/modules/nixos/` only on
 NixOS. Ubuntu kernel drivers and system services stay with Ubuntu. Their automation
-belongs in `ansible/`, with host-specific values under `hosts/<profile>/`. The
-Ansible layer is planned until its roles and apply command are implemented.
+belongs in `ansible/`, with host-specific values under `hosts/<profile>/`. Apply host changes explicitly with `host-config`; never run it from Home Manager.
 User services belong in Home Manager. Keep `docs/ubuntu-migration.md` the complete
-migration guide and distinguish implemented behavior from planned host setup.
+migration guide and distinguish offline checks from native host/VM acceptance.
 
 Keep one top-level flake and lockfile. Reuse shared modules; host profiles contain
 only differences. Preserve automatic default selection for unknown hostnames.

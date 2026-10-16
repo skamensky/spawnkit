@@ -7,6 +7,8 @@
 }:
 {
   imports = [
+    ./clients.nix
+    ./virtualization.nix
     ./git.nix
     ./shell.nix
     ./tools.nix
