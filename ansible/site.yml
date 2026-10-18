@@ -4,6 +4,8 @@
   connection: local
   gather_facts: true
   become: true
+  # A later failure must not drop notified restarts: a changed file would not notify again.
+  force_handlers: true
   pre_tasks:
     - name: Require Ubuntu and the configured existing user
       ansible.builtin.assert:

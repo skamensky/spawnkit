@@ -25,9 +25,14 @@ def validate(entry):
                    check=True, stdout=subprocess.DEVNULL)
 
 
-def bootstrap(entries, home, dry_run=False):
+def bootstrap(entries, home, dry_run=False, known_hosts=None):
     for entry in entries:
         validate(entry)
+    env = os.environ.copy()
+    if known_hosts and "GIT_SSH_COMMAND" not in env:
+        # Pinned keys stand in for the global file; the user's own known_hosts still applies.
+        env["GIT_SSH_COMMAND"] = f"ssh -o GlobalKnownHostsFile={known_hosts}"
+    failed = []
     for entry in entries:
         target = home / "repos" / entry["path"]
         if os.path.lexists(target):
@@ -54,10 +59,19 @@ def bootstrap(entries, home, dry_run=False):
         # Clone atomically. A failed clone never leaves a plausible final checkout.
         with tempfile.TemporaryDirectory(prefix=f".{target.name}-", dir=target.parent) as staging:
             clone = Path(staging) / "checkout"
-            subprocess.run(["git", "clone", "--no-checkout", entry["url"], str(clone)], check=True)
-            subprocess.run(["git", "-C", str(clone), "checkout", "-B", entry["branch"], entry["revision"]], check=True)
+            try:
+                subprocess.run(["git", "clone", "--no-checkout", entry["url"], str(clone)], check=True, env=env)
+                subprocess.run(["git", "-C", str(clone), "checkout", "-B", entry["branch"], entry["revision"]], check=True)
+            except subprocess.CalledProcessError:
+                failed.append(entry["path"])
+                continue
             clone.rename(target)
         print(f"Created {target} at {entry['revision']}")
+    if failed:
+        raise RuntimeError(
+            f"Could not clone {', '.join(failed)}. Establish GitHub SSH access for this user "
+            "(docs/ubuntu-migration.md D2), then rerun the switch; existing checkouts were kept."
+        )
 
 
 def main():
@@ -65,9 +79,13 @@ def main():
     parser.add_argument("manifest", type=Path)
     parser.add_argument("--home", type=Path, default=Path.home())
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--known-hosts", type=Path)
     args = parser.parse_args()
-    bootstrap(json.loads(args.manifest.read_text()), args.home, args.dry_run)
+    bootstrap(json.loads(args.manifest.read_text()), args.home, args.dry_run, args.known_hosts)
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except (RuntimeError, ValueError) as error:
+        raise SystemExit(f"spawnkit-repos: {error}")

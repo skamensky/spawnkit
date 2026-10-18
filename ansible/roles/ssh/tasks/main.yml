@@ -16,6 +16,15 @@
     group: root
     mode: '0755'
   when: not ansible_check_mode
+# Leave socket activation before any listener change. Otherwise the socket
+# generator rewrites the live socket, systemd loses track of the inherited sshd
+# (KillMode=process) and the old listener survives every restart until reboot.
+- name: Use the configured SSH service rather than a competing socket listener
+  ansible.builtin.systemd_service:
+    name: ssh.socket
+    state: stopped
+    enabled: false
+  when: not ansible_check_mode
 # Tailnet listeners do not exist when sshd starts at boot, and Ubuntu's unit sets
 # RestartPreventExitStatus=255, so a failed bind would never recover. Allowing a
 # nonlocal bind lets sshd own the address before tailscaled assigns it.
@@ -67,15 +76,16 @@
     argv: "{{ ['/usr/bin/python3', '/usr/local/libexec/spawnkit/host-state.py', 'verify-ssh', cfg.ssh_port | string] + cfg.ssh_listen_addresses }}"
   changed_when: false
   when: not ansible_check_mode
-- name: Use the configured SSH service rather than a competing socket listener
-  ansible.builtin.systemd_service:
-    name: ssh.socket
-    state: stopped
-    enabled: false
-  when: not ansible_check_mode
 - name: Enable the configured key-only SSH listener
   ansible.builtin.systemd_service:
     name: ssh.service
     state: started
     enabled: true
+  when: not ansible_check_mode
+- name: Restart SSH before checking its sockets
+  ansible.builtin.meta: flush_handlers
+- name: Verify sshd listens only on the declared addresses
+  ansible.builtin.command:
+    argv: "{{ ['/usr/bin/python3', '/usr/local/libexec/spawnkit/host-state.py', 'verify-ssh-listening', cfg.ssh_port | string] + cfg.ssh_listen_addresses }}"
+  changed_when: false
   when: not ansible_check_mode

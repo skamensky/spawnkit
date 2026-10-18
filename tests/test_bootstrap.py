@@ -105,13 +105,19 @@ class RepositorySafetyTests(unittest.TestCase):
         self.assertTrue((self.target / ".git").is_file())
 
     def test_failed_clone_leaves_no_final_or_staging_checkout(self):
+        other = dict(self.entry, path="skamensky/other", url="git@github.com:skamensky/other.git")
+        attempted = []
         def fail(command, **kwargs):
             if command[:2] == ["git", "clone"]:
+                attempted.append(command[-2])
+                self.assertIn("GlobalKnownHostsFile=/pinned", kwargs["env"]["GIT_SSH_COMMAND"])
                 raise subprocess.CalledProcessError(1, command)
             return RUN(command, **kwargs)
-        with patch.object(bootstrap.subprocess, "run", side_effect=fail):
-            with self.assertRaises(subprocess.CalledProcessError):
-                bootstrap.bootstrap([self.entry], self.home)
+        with patch.object(bootstrap.subprocess, "run", side_effect=fail), patch.dict(bootstrap.os.environ, clear=False) as env:
+            env.pop("GIT_SSH_COMMAND", None)
+            with self.assertRaisesRegex(RuntimeError, "skamensky/example, skamensky/other.*GitHub SSH access"):
+                bootstrap.bootstrap([self.entry, other], self.home, known_hosts=Path("/pinned"))
+        self.assertEqual(attempted, [self.entry["url"], other["url"]])
         self.assertFalse(self.target.exists())
         self.assertEqual(list(self.target.parent.iterdir()), [])
 

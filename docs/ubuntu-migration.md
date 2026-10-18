@@ -345,7 +345,9 @@ acceptance have not been performed. Initial laptop settings enable Docker,
 Tailscale, key-only SSH on `100.86.106.55:2222`, NVIDIA with PRIME on-demand,
 Solaar and the VM host stack, without GPU transfer. sshd may bind the tailnet
 address before tailscaled assigns it at boot (`ip_nonlocal_bind`), so the listener
-survives reboots; verify phone SSH after the first reboot. Collect `host-config facts` after reboot, record real PCI
+survives reboots; verify phone SSH after the first reboot. The role leaves Ubuntu's
+`ssh.socket` activation before changing listeners and then checks that sshd
+listens only on the declared addresses. Collect `host-config facts` after reboot, record real PCI
 functions/IOMMU groups, then follow `docs/windows-vm.md` for GPU policy and explicit
 VM provisioning. Do not use the synthetic test PCI addresses on this computer.
 
@@ -387,10 +389,16 @@ subsystems; `nix/README.md` contains Home Manager setup details.
    (the isolated activation test plants such copies). Delete those stale copies
    once the managed versions work; anything else in `~/.local/bin` still
    overrides `/usr/bin` as on stock Ubuntu.
+   A fresh Ubuntu user has the stock `/etc/skel` `.bashrc` and `.profile`; the
+   first switch stops on them too. Compare them with `/etc/skel` and move them
+   aside (for example `*.pre-spawnkit`) only when they are unmodified copies.
 5. Activate with the same wrapper and `-- switch` only after these migration
    conflicts have been resolved with Shmuel. Activation clones missing declared
    repositories at pinned commits, installs assistant symlinks and the locked mise
-   runtimes. It never resets or pulls existing repositories.
+   runtimes. It never resets or pulls existing repositories. Cloning needs this
+   user's GitHub SSH access from D2 (GitHub's host keys are pinned, so no prompt
+   appears); without it every missing repository is reported in one error, the
+   existing checkouts are kept, and the switch can simply be rerun.
 6. Log out/in so GUI processes inherit the managed session environment.
 
 APT remains responsible for Ubuntu drivers, system daemons and native build

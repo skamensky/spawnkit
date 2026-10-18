@@ -41,6 +41,10 @@ SSH is off by default and requires explicit listen addresses before enabling; th
 laptop profile listens only on its tailnet address. Because that address appears
 only after tailscaled starts (and Ubuntu's unit does not restart sshd after a bind
 failure), the role enables `ip_nonlocal_bind` and orders sshd after tailscaled.
+It disables `ssh.socket` before touching listeners: rewriting a live socket makes
+systemd lose the inherited sshd, whose old listener then survives restarts until
+reboot. After the restart it fails if sshd listens anywhere undeclared. Playbooks
+use `force_handlers`, so a later failure cannot drop a notified restart.
 Existing cloud access is not replaced by an assumed configuration.
 
 ## Roles and state

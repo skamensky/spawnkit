@@ -71,6 +71,15 @@ class Configuration(unittest.TestCase):
 
 
 class HostPersistence(unittest.TestCase):
+    def test_stale_ssh_listener_is_detected(self):
+        # Observed on Ubuntu 24.04: the socket-activated sshd kept port 22 after the restart.
+        ss = ('LISTEN 0 128 100.86.106.55:2222 0.0.0.0:* users:(("sshd",pid=10907,fd=3))\n'
+              'LISTEN 0 4096 0.0.0.0:22 0.0.0.0:* users:(("sshd",pid=1059,fd=3))\n'
+              'LISTEN 0 4096 127.0.0.53%lo:53 0.0.0.0:* users:(("systemd-resolve",pid=1,fd=3))\n')
+        with self.assertRaisesRegex(RuntimeError, 'stale listener'):
+            host.verify_ssh_listening(2222, ['100.86.106.55'], ss)
+        host.verify_ssh_listening(2222, ['100.86.106.55'], ss.replace('0.0.0.0:22 ', '127.0.0.53:22 ').replace('"sshd",pid=1059', '"other",pid=1059'))
+
     def test_docker_merge_is_idempotent_and_preserves_unknown_settings(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'daemon.json'

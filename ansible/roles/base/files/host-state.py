@@ -199,9 +199,19 @@ def verify_ssh(port, addresses):
         raise RuntimeError("Existing sshd settings add other ports/listeners; reconcile them before restarting SSH")
 
 
+def verify_ssh_listening(port, addresses, output=None):
+    if output is None:
+        output = command(["/usr/bin/ss", "-H", "-tlnp"]).stdout
+    actual = {line.split()[3] for line in output.splitlines() if '"sshd"' in line}
+    expected = {f"[{address}]:{port}" if ":" in address else f"{address}:{port}" for address in addresses}
+    if actual != expected:
+        raise RuntimeError(f"sshd listens on {sorted(actual)}, expected {sorted(expected)}; "
+                           "a stale listener survives until it is stopped or the host reboots")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=["facts", "merge-docker", "define-windows", "network", "verify-ssh"])
+    parser.add_argument("action", choices=["facts", "merge-docker", "define-windows", "network", "verify-ssh", "verify-ssh-listening"])
     parser.add_argument("arguments", nargs="*")
     args = parser.parse_args()
     if args.action == "facts":
@@ -217,6 +227,8 @@ def main():
         network(Path(args.arguments[0]))
     elif args.action == "verify-ssh":
         verify_ssh(int(args.arguments[0]), args.arguments[1:])
+    elif args.action == "verify-ssh-listening":
+        verify_ssh_listening(int(args.arguments[0]), args.arguments[1:])
 
 
 if __name__ == "__main__":
