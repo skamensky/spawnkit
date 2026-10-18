@@ -404,8 +404,10 @@ subsystems; `nix/README.md` contains Home Manager setup details.
 APT remains responsible for Ubuntu drivers, system daemons and native build
 libraries. For example, Docker Engine, NVIDIA Container Toolkit, Tailscale/SSH
 services and libvirt are host setup; Home Manager's client packages do not install
-or configure those services. Keep `build-essential` and required project-specific
-native development libraries on Ubuntu. Add user packages through the appropriate
+or configure those services. The native build toolchain (`build-essential`,
+`pkg-config`, common `-dev` libraries; cmake/ninja on the laptop) is in the host
+profile's `base_packages`/`host_packages`, so source builds link against Ubuntu's
+glibc. Add other project-specific `-dev` libraries there too. Add user packages through the appropriate
 Home Manager module, build/check the flake, then commit and push.
 
 ### D3. Graphics, assistants and language tools

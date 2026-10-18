@@ -11,7 +11,6 @@
     description = "Install declared mise runtimes during activation (network required).";
   };
   config = {
-    home.packages = [ pkgs.uv ];
     programs.mise = {
       enable = true;
       enableBashIntegration = true;

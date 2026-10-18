@@ -18,8 +18,6 @@
   };
   home.packages = with pkgs; [
     cloudflared
-    cmake
-    ninja
     poppler-utils
     ffmpeg
     imagemagick

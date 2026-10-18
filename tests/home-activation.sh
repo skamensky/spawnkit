@@ -63,4 +63,4 @@ env -u __HM_SESS_VARS_SOURCED -u __HM_PROFILE_SOURCED \
   XDG_STATE_HOME="$test_home/.local/state" XDG_CACHE_HOME="$test_home/.cache" \
   PATH="$test_home/.nix-profile/bin:/nix/var/nix/profiles/default/bin:/usr/bin:/bin" \
   bash --noprofile --norc "$repo/tests/noninteractive.sh"
-printf '%s\n' 'Isolated activation passed twice; unmanaged .bashrc preserved; noninteractive Node, Python and uv verified.'
+printf '%s\n' 'Isolated activation passed twice; unmanaged .bashrc preserved; noninteractive Node, Python, uv and native source build verified.'

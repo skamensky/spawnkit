@@ -1,6 +1,9 @@
 # Shared host defaults. Native services are opt-in.
 user: shmuel
-base_packages: [ca-certificates, python3-apt, build-essential, pkg-config]
+# Ubuntu owns the native build toolchain and headers so source builds (uv, npm)
+# link against the same glibc and libraries as the system; Home Manager ships none.
+base_packages: [ca-certificates, python3-apt, build-essential, pkg-config, libssl-dev, libffi-dev,
+  zlib1g-dev, libbz2-dev, liblzma-dev, libreadline-dev, libsqlite3-dev, libpq-dev]
 # Profile-specific Ubuntu packages, installed in addition to base_packages.
 host_packages: []
 docker: false

@@ -193,6 +193,7 @@ Changing settings, updating a version and changing source code are separate task
 | Change | Procedure |
 | --- | --- |
 | Settings, aliases, environment or service behavior | Edit the owning Home Manager module or tracked configuration; validate and switch. Never edit generated home files. |
+| Claude Code or Codex version | Automatic: a scheduled workflow bumps the `llm-agents` input. Immediately: `home-config update-agents`, switch, commit flake.lock. |
 | Version of a Nix package | Update the relevant input or package expression, then check/build and review the lockfile diff. Updating Nixpkgs can change many packages together. |
 | Default Python or Node version | Edit `config/runtimes/mise.toml`, refresh its `mise.lock`, validate and commit both; activate to install the declared versions. |
 | Runtime version for one project | Edit its `mise.toml` and lockfile; install and test there. |

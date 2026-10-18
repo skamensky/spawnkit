@@ -1,6 +1,8 @@
 [tools]
 python = "3.12.15"
 node = "24.22.0"
+# One owner for Python tooling: uv and its interpreters both come from mise.
+uv = "0.13.1"
 
 [settings]
 idiomatic_version_file_enable_tools = ["python", "node"]

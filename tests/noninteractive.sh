@@ -29,5 +29,51 @@ uv_interpreter = subprocess.check_output(
     ['uv', 'run', '--no-project', 'python', '-c', 'import sys; print(sys.executable)'], text=True
 ).strip()
 assert Path(uv_interpreter).resolve() == interpreter, (interpreter, uv_interpreter)
-print('Verified Node', tools['node'], 'and mise/uv Python', tools['python'])
+uv_version = subprocess.check_output(['uv', '--version'], text=True).split()[1]
+assert uv_version == tools['uv'], (uv_version, tools['uv'])
+print('Verified Node', tools['node'], 'and mise/uv', tools['uv'], 'Python', tools['python'])
 PY
+# Source builds must use Ubuntu's toolchain and headers, never a Nix pkg-config or
+# library that would tie an extension to another glibc.
+for tool in uv pkg-config cc; do
+  resolved=$(command -v "$tool")
+  case "$tool:$resolved" in
+    uv:"$HOME/.local/share/mise/shims/uv"|pkg-config:/usr/bin/*|cc:/usr/bin/*) ;;
+    *) printf 'ERROR: %s resolves to %s\n' "$tool" "$resolved" >&2; exit 1 ;;
+  esac
+done
+build=$(mktemp -d)
+trap 'rm -rf -- "$build"' EXIT
+mkdir -p "$build/zv"
+cat > "$build/zv/pyproject.toml" <<'TOML'
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+[project]
+name = "spawnkit-zv"
+version = "0"
+TOML
+cat > "$build/zv/setup.py" <<'SETUP'
+import subprocess
+from setuptools import Extension, setup
+flags = subprocess.check_output(["pkg-config", "--cflags", "--libs", "zlib"], text=True).split()
+setup(ext_modules=[Extension("spawnkit_zv", ["zv.c"],
+    extra_compile_args=[f for f in flags if not f.startswith("-l")],
+    libraries=[f[2:] for f in flags if f.startswith("-l")])])
+SETUP
+cat > "$build/zv/zv.c" <<'C'
+#include <Python.h>
+#include <zlib.h>
+static PyObject *version(PyObject *self, PyObject *args) { return PyUnicode_FromString(zlibVersion()); }
+static PyMethodDef methods[] = {{"version", version, METH_NOARGS, NULL}, {NULL, NULL, 0, NULL}};
+static struct PyModuleDef module = {PyModuleDef_HEAD_INIT, "spawnkit_zv", NULL, -1, methods};
+PyMODINIT_FUNC PyInit_spawnkit_zv(void) { return PyModule_Create(&module); }
+C
+uv venv --quiet "$build/venv"
+uv pip install --quiet --no-cache --no-binary spawnkit-zv --python "$build/venv/bin/python" "$build/zv"
+"$build/venv/bin/python" -c 'import spawnkit_zv; print("Built native extension against zlib", spawnkit_zv.version())'
+extension=$(find "$build/venv" -name 'spawnkit_zv*.so')
+if ldd "$extension" | grep -q /nix/store; then
+  printf 'ERROR: native extension links Nix libraries:\n%s\n' "$(ldd "$extension")" >&2
+  exit 1
+fi

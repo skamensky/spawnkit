@@ -86,6 +86,13 @@ in
         repository = "https://github.com/skamensky/spawnkit";
         profile = selectProfile config.networking.hostName "nixos";
       };
+      # Same cache Ansible configures on Ubuntu for the llm-agents flake input.
+      nix.settings = {
+        extra-substituters = [ "https://cache.numtide.com" ];
+        extra-trusted-public-keys = [
+          "niks3.numtide.com-1:DTx8wZduET09hRmMtKdQDxNNthLQETkc/yaX7M4qK0g="
+        ];
+      };
       # mise downloads ordinary Linux binaries outside the Nix store.
       programs.nix-ld = {
         enable = true;

@@ -93,8 +93,8 @@ explicit SSH URLs and GitHub CLI is configured to use SSH.
 
 ## mise and uv
 
-Nix installs mise and uv. Development Python and Node come from mise, not
-Nixpkgs. `config/runtimes/mise.toml` declares exact versions; `config/runtimes/mise.lock` records
+Nix installs only mise. mise owns all Python tooling (uv and the interpreters
+it uses) and Node; none of it comes from Nixpkgs. `config/runtimes/mise.toml` declares exact versions; `config/runtimes/mise.lock` records
 download URLs and checksums for Linux x64/ARM64. Home Manager installs both files
 and runs `mise install --locked` during activation. Language dependencies stay
 in the project's existing package manager and lockfile.
@@ -122,11 +122,27 @@ the infrastructure lock covers global defaults, not every project's toolchain.
 To update the global defaults, edit exact versions in `config/runtimes/mise.toml`, then
 run `mise -C config/runtimes lock --platform linux-x64,linux-arm64` from this repo. Trust
 the reviewed config with mise when prompted. Build, test, commit and push both
-files. Native C build dependencies for downloaded Python/Node runtimes normally
-come from Ubuntu (`build-essential`, relevant development libraries); a project
-can independently declare a tested Nix tools/build environment. Do not inject
+files. The native build toolchain comes from Ubuntu through Ansible
+(`build-essential`, `pkg-config`, common `-dev` libraries, and cmake/ninja on the
+laptop); Home Manager ships none of it. A Nix `pkg-config` ahead of `/usr/bin`
+cannot see Ubuntu's headers, and Nix libraries would tie compiled extensions to
+another glibc. The activation test builds a C extension from source with uv and
+fails if it links anything in `/nix/store`. A project can independently declare
+a tested Nix tools/build environment. Do not inject
 Nix glibc or arbitrary Nix libraries into mise runtimes; see the library/toolchain
 boundary in [mixed-project workflows](../docs/workflows.md#9-mixed-node-python-and-nix-codebase).
+
+## Claude Code and Codex
+
+Both come from the `llm-agents` flake input (numtide/llm-agents.nix), which
+packages upstream releases within hours, rather than from Nixpkgs. A scheduled
+workflow (`update-agents.yml`, every six hours) moves only that input, runs the
+full check, build and activation test, then pushes flake.lock; `git pull` and
+`home-config switch` pick it up. For a release that has not been pinned yet, run
+`home-config update-agents`, then switch and commit flake.lock. The input keeps
+its own nixpkgs so its binary cache (`cache.numtide.com`) applies; host apply adds
+that cache to the Nix daemon, since untrusted users cannot. Without it Codex
+compiles from source.
 
 ## Repositories and assistant content
 

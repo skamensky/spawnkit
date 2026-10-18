@@ -44,7 +44,7 @@ def select_profile(registry, hostname, platform_kind, explicit=None):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=["select", "build", "switch", "check", "repos"])
+    parser.add_argument("action", choices=["select", "build", "switch", "check", "repos", "update-agents"])
     parser.add_argument("--repo", type=Path, default=default_repo(), help="Defaults to the enclosing checkout")
     parser.add_argument("--host", help="Explicit declared profile; unknown hostnames select default automatically")
     parser.add_argument("--hostname", default=socket.gethostname(), help="Override detection for inspection/testing")
@@ -86,10 +86,15 @@ def main():
         spec.loader.exec_module(module)
         module.bootstrap([catalog[n] for n in dict.fromkeys(names)], Path.home(), args.dry_run)
         return
+    if args.action == "update-agents":
+        # Moves only the fast-moving assistant CLIs; nixpkgs and the rest stay pinned.
+        subprocess.run(NIX + ["flake", "update", "llm-agents", "--flake", f"path:{repo}"], check=True)
     command = NIX + ["build", "--no-link", "--print-out-paths", reference]
     result = subprocess.check_output(command, text=True).strip()
     if args.action == "build":
         print(result)
+    elif args.action == "update-agents":
+        print(f"Built {result}\nActivate with home-config switch, then commit and push flake.lock.")
     else:
         # Home Manager checks collisions before changing existing dotfiles.
         os.execv(str(Path(result) / "activate"), [str(Path(result) / "activate")])

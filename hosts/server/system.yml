@@ -1,2 +1,1 @@
 # Minimal headless host; add only the services this machine needs.
-base_packages: [ca-certificates, python3-apt, build-essential, pkg-config]

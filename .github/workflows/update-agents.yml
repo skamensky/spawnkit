@@ -1,0 +1,39 @@
+name: Update Claude Code and Codex
+on:
+  schedule:
+    # Upstream releases several times a day; llm-agents usually packages within hours.
+    - cron: '17 */6 * * *'
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: update-agents
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: cachix/install-nix-action@3c6342b75005b9cc7c7d4069c3e9179247c89012
+        with:
+          extra_nix_config: |
+            extra-substituters = https://cache.numtide.com
+            extra-trusted-public-keys = niks3.numtide.com-1:DTx8wZduET09hRmMtKdQDxNNthLQETkc/yaX7M4qK0g=
+      - name: Move only the llm-agents input
+        run: nix flake update llm-agents
+      - name: Validate before pushing (pushes from this token do not trigger CI)
+        run: |
+          git diff --quiet flake.lock && exit 0
+          nix run .#home-config -- check --repo "$GITHUB_WORKSPACE"
+          nix run .#home-config -- build --repo "$GITHUB_WORKSPACE"
+          bash tests/home-activation.sh
+      - name: Commit and push the lockfile
+        run: |
+          git diff --quiet flake.lock && { echo 'Already current'; exit 0; }
+          # shellcheck disable=SC2016 # ${...} is Nix interpolation, not shell
+          versions=$(nix eval --raw --impure --expr '
+            let p = (builtins.getFlake (toString ./.)).inputs.llm-agents.packages.x86_64-linux;
+            in "claude-code ${p.claude-code.version}, codex ${p.codex.version}"')
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -am "Update assistant CLIs: $versions"
+          git push

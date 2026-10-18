@@ -10,6 +10,16 @@
     update_cache: true
     cache_valid_time: 3600
   when: not ansible_check_mode
+# Untrusted users cannot add substituters, so the daemon trusts the cache of the
+# llm-agents flake input (Claude Code, Codex) here; otherwise Codex compiles locally.
+- name: Use the llm-agents binary cache in the Nix daemon
+  ansible.builtin.blockinfile:
+    path: /etc/nix/nix.conf
+    marker: "# {mark} Spawnkit binary caches"
+    block: |
+      extra-substituters = https://cache.numtide.com
+      extra-trusted-public-keys = niks3.numtide.com-1:DTx8wZduET09hRmMtKdQDxNNthLQETkc/yaX7M4qK0g=
+  notify: Restart the Nix daemon
 - name: Create root-owned Spawnkit configuration directory
   ansible.builtin.file:
     path: /etc/spawnkit

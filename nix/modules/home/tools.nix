@@ -31,15 +31,13 @@ in
       p7zip
       vim
       shellcheck
-      gnumake
-      pkg-config
       sqlite
       postgresql
       rtk
       openssh
       mosh
-      claude-code
-      codex
+      inputs.llm-agents.packages.${system}.claude-code
+      inputs.llm-agents.packages.${system}.codex
       inputs.self.packages.${system}.home-config
       inputs.self.packages.${system}.host-config
     ]
