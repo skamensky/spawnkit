@@ -27,6 +27,7 @@
           - not (cfg.nvidia or cfg.virtualization or cfg.gpu_handoff or cfg.windows_vm) or 'microsoft' not in ansible_facts.kernel | lower
   roles:
     - role: base
+    - role: certificate_policy
     - role: docker
       when: cfg.docker
     - role: tailscale

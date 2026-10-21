@@ -1,0 +1,4 @@
+---
+- name: Rebuild Ubuntu certificate trust
+  ansible.builtin.command: update-ca-certificates --fresh
+  changed_when: true

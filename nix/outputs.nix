@@ -82,6 +82,12 @@ in
     default = { config, pkgs, ... }: {
       imports = [ home-manager.nixosModules.home-manager ];
       nixpkgs.config.allowUnfree = lib.mkDefault true;
+      security.pki.caCertificateBlacklist = [
+        "Comodo AAA Services root"
+        "emSign ECC Root CA - G3"
+        "emSign Root TLS CA - G3"
+        "emSign Root CS CA - G3"
+      ];
       environment.etc."spawnkit/enabled".text = builtins.toJSON {
         repository = "https://github.com/skamensky/spawnkit";
         profile = selectProfile config.networking.hostName "nixos";
@@ -191,6 +197,7 @@ in
             nativeBuildInputs = [
               pkgs.python3
               pkgs.git
+              pkgs.openssl
             ];
           }
           ''

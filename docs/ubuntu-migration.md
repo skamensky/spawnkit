@@ -568,3 +568,14 @@ What it does:
 - After about a month without needing Windows: Shmuel decides whether to delete C: and the recovery partition, and to grow p5.
 - Before that, the 313 GB `ext4.vhdx` is the last full copy of the WSL world. Ask whether to archive it (external drive) or let it go.
 - Then apply the generated-run retention policy to `~/.codex/sessions` and `~/tmp`.
+
+## Certificate trust during migration
+
+See [certificate-trust.md](certificate-trust.md) for the October 2026 eMudhra
+distrust policy. Ubuntu system trust and the Java update guard belong to the
+Ansible `certificate_policy` role; user runtime CA selection belongs to Home
+Manager. Preserve that ownership split. The unmarked-host emergency installer
+does not enroll a machine. Windows current-user distrust is not machine-wide,
+Termux updates do not patch Android system trust, and existing clients may cache
+old roots. Native deployment and per-client rejection tests remain separate from
+Nix profile and Ansible syntax validation.

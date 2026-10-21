@@ -11,6 +11,7 @@
     ./virtualization.nix
     ./git.nix
     ./shell.nix
+    ./certificate-policy.nix
     ./tools.nix
     ./runtimes.nix
     ./repositories.nix

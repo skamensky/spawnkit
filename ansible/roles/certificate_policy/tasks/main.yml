@@ -1,0 +1,73 @@
+---
+- name: Keep Ubuntu certificate trust current
+  ansible.builtin.apt:
+    name:
+      - ca-certificates
+      - libnss3-tools
+    state: latest
+    update_cache: true
+    cache_valid_time: 3600
+  when: not ansible_check_mode
+
+- name: Keep the incident's affected root paths explicitly disabled
+  ansible.builtin.lineinfile:
+    path: /etc/ca-certificates.conf
+    regexp: "^!?mozilla/{{ item | regex_escape }}$"
+    line: "!mozilla/{{ item }}"
+  loop:
+    - emSign_ECC_Root_CA_-_G3.crt
+    - emSign_Root_TLS_CA_-_G3.crt
+    - emSign_Root_CS_CA_-_G3.crt
+    - Comodo_AAA_Services_root.crt
+  notify: Rebuild Ubuntu certificate trust
+
+- name: Install reviewed certificate fingerprint policy
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../config/certificate-denylist.json"
+    dest: /etc/ssl/spawnkit-certificate-denylist.json
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Create certificate helper directory
+  ansible.builtin.file:
+    path: /usr/local/libexec/spawnkit
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Install explicit bundle auditor and filter
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../scripts/certificate-policy.py"
+    dest: /usr/local/libexec/spawnkit/certificate-policy.py
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Audit the generated system bundle on each certificate update
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../config/certificate-update-hook.sh"
+    dest: /etc/ca-certificates/update.d/zz-spawnkit-denylist-audit
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Check whether Java's shared CA store exists
+  ansible.builtin.stat:
+    path: /etc/ssl/certs/java/cacerts
+  register: certificate_policy_java
+
+- name: Remove stale compromised chains from Java's independent store
+  ansible.builtin.command:
+    argv:
+      - python3
+      - /usr/local/libexec/spawnkit/certificate-policy.py
+      - --policy
+      - /etc/ssl/spawnkit-certificate-denylist.json
+      - --java-store
+      - /etc/ssl/certs/java/cacerts
+      - --apply
+  register: certificate_policy_java_result
+  changed_when: (certificate_policy_java_result.stdout | from_json).results | selectattr('changed') | list | length > 0
+  when: not ansible_check_mode and certificate_policy_java.stat.exists
