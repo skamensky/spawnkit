@@ -44,7 +44,14 @@ the host enrolled. Reapplying is the supported convergence path.
 Reboot after NVIDIA/IOMMU changes and enroll the Ubuntu driver signing key if
 Secure Boot requests it. Log in again for Docker/libvirt/kvm group membership.
 Tailscale authentication is a separate deliberate login; no auth key enters Git.
-SSH is off by default and requires explicit listen addresses before enabling; the
+On authenticated hosts the Tailscale role also enables Tailscale SSH. If login
+happens after host apply, rerun apply or run `sudo tailscale set --ssh` after login.
+First-time enablement reroutes tailnet port 22 and can interrupt an OpenSSH
+session; apply locally or use an authenticated LAN/IAP/alternate-port recovery
+route. The role accepts that rerouting during explicit apply. Verify a fresh
+`tailscale ssh` command; browser reauthentication is controlled separately by the
+tailnet SSH policy. Host verification stays enabled.
+OpenSSH is off by default and requires explicit listen addresses before enabling; the
 laptop profile listens only on its tailnet address. Because that address appears
 only after tailscaled starts (and Ubuntu's unit does not restart sshd after a bind
 failure), the role enables `ip_nonlocal_bind` and orders sshd after tailscaled.
@@ -60,7 +67,7 @@ Existing cloud access is not replaced by an assumed configuration.
 | --- | --- |
 | `base` | Ubuntu build prerequisites plus profile `host_packages`, `/etc/spawnkit`, installed root helper |
 | `docker` | Ubuntu Engine, Compose/Buildx, membership, declared daemon settings |
-| `tailscale` | Signed repository/key, package, `tailscaled` service |
+| `tailscale` | Signed repository/key, package, `tailscaled` service, Tailscale SSH after login |
 | `ssh` | Key-only explicit listener drop-in, full listener verification, boot-safe tailnet bind, Ubuntu unit |
 | `nvidia` | Ubuntu recommended or pinned driver, optional PRIME profile, signed Container Toolkit repo/runtime |
 | `virtualization` | Ubuntu QEMU/libvirt/OVMF/swtpm, groups, IOMMU GRUB drop-in, dedicated NAT network |

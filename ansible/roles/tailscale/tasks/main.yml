@@ -28,7 +28,7 @@
       Signed-By: /etc/apt/keyrings/spawnkit-tailscale.gpg
 - name: Preview Tailscale host installation
   ansible.builtin.debug:
-    msg: Install tailscale and enable tailscaled; preserve identity and do not run tailscale up or enroll credentials.
+    msg: Install tailscale, enable tailscaled and enable Tailscale SSH after tailnet login; preserve identity and do not run tailscale up or enroll credentials.
   when: ansible_check_mode
 - name: Install Tailscale CLI and daemon together
   ansible.builtin.apt:
@@ -42,3 +42,31 @@
     enabled: true
     state: started
   when: not ansible_check_mode
+- name: Inspect Tailscale login state
+  ansible.builtin.command:
+    argv: [tailscale, status, --json]
+  register: tailscale_status
+  changed_when: false
+  when: not ansible_check_mode
+- name: Inspect Tailscale SSH preference
+  ansible.builtin.command:
+    argv: [tailscale, debug, prefs]
+  register: tailscale_prefs
+  changed_when: false
+  no_log: true
+  when:
+    - not ansible_check_mode
+    - (tailscale_status.stdout | from_json).BackendState == 'Running'
+- name: Enable Tailscale SSH on an authenticated personal host
+  ansible.builtin.command:
+    argv: [tailscale, set, --ssh, --accept-risk=lose-ssh]
+  when:
+    - not ansible_check_mode
+    - (tailscale_status.stdout | from_json).BackendState == 'Running'
+    - not (tailscale_prefs.stdout | from_json).RunSSH
+- name: Explain post-login SSH setup
+  ansible.builtin.debug:
+    msg: Complete the owner's Tailscale login, then rerun host apply or run sudo tailscale set --ssh. Tailnet SSH policy and a fresh connection must be verified separately.
+  when:
+    - not ansible_check_mode
+    - (tailscale_status.stdout | from_json).BackendState != 'Running'

@@ -340,6 +340,15 @@ runs implicitly from Home Manager or on every boot. Successful host apply create
 root-owned `/etc/spawnkit/enabled`; absence means the machine is not enrolled.
 This editing WSL environment remains unmarked. No manual sentinel creation.
 
+First-time personal-machine setup also enables Tailscale SSH. Complete the
+owner's tailnet login, then run `sudo tailscale set --ssh` or rerun host apply;
+the Tailscale Ansible role enables it on authenticated hosts. Use a local console
+or a verified LAN/IAP/alternate-port route when first enabling it because it
+reroutes tailnet port 22 and can disconnect OpenSSH sessions. Verify a fresh
+`tailscale ssh` command with automatic host verification. An additional browser
+check is a separate tailnet-policy setting; enabling the server alone does not
+remove it. Android, iOS/iPadOS and Windows need separate SSH servers.
+
 Native automation is implemented and offline tested, but native apply/hardware
 acceptance have not been performed. Initial laptop settings enable Docker,
 Tailscale, key-only SSH on `100.86.106.55:2222`, NVIDIA with PRIME on-demand,
