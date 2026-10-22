@@ -1,0 +1,86 @@
+---
+- name: Define the shared CI resource slice
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/githubrunner.slice
+    mode: '0644'
+    content: |
+      [Unit]
+      Description=Home-server GitHub Actions resource budget
+      [Slice]
+      CPUAccounting=yes
+      CPUQuota={{ runner_cpu_quota_percent }}%
+      MemoryAccounting=yes
+      MemoryHigh=24G
+  register: runner_resource_slice
+
+- name: Create the Docker resource drop-in directory
+  ansible.builtin.file:
+    path: /etc/systemd/system/docker.service.d
+    state: directory
+    mode: '0755'
+
+- name: Include the Docker daemon in the shared CI budget
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/docker.service.d/github-runner-resources.conf
+    mode: '0644'
+    content: |
+      [Service]
+      Slice=githubrunner.slice
+  register: docker_resource_unit
+
+- name: Check for existing Docker daemon settings
+  ansible.builtin.stat:
+    path: /etc/docker/daemon.json
+  register: docker_config_file
+
+- name: Read existing Docker daemon settings
+  ansible.builtin.slurp:
+    src: /etc/docker/daemon.json
+  register: docker_config_content
+  when: docker_config_file.stat.exists
+
+- name: Put new Docker containers in the shared CI budget
+  ansible.builtin.copy:
+    dest: /etc/docker/daemon.json
+    mode: '0644'
+    content: >-
+      {{ ((docker_config_content.content | b64decode | from_json)
+          if docker_config_file.stat.exists else {}) |
+         combine({'cgroup-parent': 'githubrunner.slice'}) | to_nice_json }}
+    validate: /usr/bin/dockerd --validate --config-file=%s
+  register: docker_resource_config
+
+- name: Require an idle Docker daemon before moving its resource group
+  when: docker_resource_unit.changed or docker_resource_config.changed
+  block:
+    - name: List running Docker containers
+      ansible.builtin.command: docker ps -q
+      changed_when: false
+      register: running_ci_containers
+    - name: Require the container workload to be drained
+      ansible.builtin.assert:
+        that: running_ci_containers.stdout | trim | length == 0
+        fail_msg: Drain running CI containers before applying the shared resource budget.
+
+- name: Activate the shared CI budget
+  ansible.builtin.systemd_service:
+    name: githubrunner.slice
+    daemon_reload: true
+    state: started
+
+- name: Apply the CPU budget to the active slice
+  ansible.builtin.command:
+    argv:
+      - systemctl
+      - set-property
+      - --runtime
+      - githubrunner.slice
+      - "CPUQuota={{ runner_cpu_quota_percent }}%"
+  changed_when: runner_resource_slice.changed
+
+- name: Restart the idle Docker daemon when its resource group changes
+  ansible.builtin.systemd_service:
+    name: docker.service
+    daemon_reload: true
+    state: restarted
+  when: docker_resource_unit.changed or docker_resource_config.changed

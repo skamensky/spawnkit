@@ -58,7 +58,7 @@
     groups: docker
     append: true
 
-- name: Create runner and tool-cache directories
+- name: Create shared tool-cache directories
   ansible.builtin.file:
     path: "{{ item }}"
     state: directory
@@ -66,7 +66,6 @@
     group: "{{ runner_user }}"
     mode: '0750'
   loop:
-    - "{{ runner_directory }}"
     - /var/cache/github-actions
     - /var/cache/github-actions/toolcache
 
@@ -76,15 +75,6 @@
     dest: "/var/cache/github-actions/runner-{{ runner_version }}.tar.gz"
     checksum: "sha256:{{ runner_archive_sha256 }}"
     mode: '0644'
-
-- name: Extract the runner
-  ansible.builtin.unarchive:
-    src: "/var/cache/github-actions/runner-{{ runner_version }}.tar.gz"
-    dest: "{{ runner_directory }}"
-    remote_src: true
-    owner: "{{ runner_user }}"
-    group: "{{ runner_user }}"
-    creates: "{{ runner_directory }}/bin/Runner.Listener"
 
 - name: Check whether Timeshift is installed
   ansible.builtin.stat:
@@ -110,71 +100,22 @@
          to_nice_json }}
   when: timeshift_policy.stat.exists
 
-- name: Register the repository-only runner
-  ansible.builtin.command:
-    argv:
-      - ./config.sh
-      - --unattended
-      - --url
-      - "https://github.com/{{ runner_repository }}"
-      - --name
-      - "{{ runner_name }}"
-      - --labels
-      - "{{ runner_labels | join(',') }}"
-      - --work
-      - _work
-    chdir: "{{ runner_directory }}"
-    creates: "{{ runner_directory }}/.runner"
-  environment:
-    ACTIONS_RUNNER_INPUT_TOKEN: "{{ lookup('ansible.builtin.env', 'RUNNER_REGISTRATION_TOKEN') }}"
-  become_user: "{{ runner_user }}"
-  no_log: true
+- name: Require a bounded worker count
+  ansible.builtin.assert:
+    that:
+      - runner_count | int >= 1
+      - runner_count | int <= 10
+      - runner_cpu_quota_percent | int >= 100
+      - runner_cpu_quota_percent | int <= 800
 
-- name: Restrict the provider-managed runner credentials
-  ansible.builtin.file:
-    path: "{{ runner_directory }}/{{ item }}"
-    owner: "{{ runner_user }}"
-    group: "{{ runner_user }}"
-    mode: '0600'
-  loop: [.credentials, .credentials_rsaparams]
+- name: Configure the shared resource budget
+  ansible.builtin.include_tasks: resources.yml
 
-- name: Install the official system service
-  ansible.builtin.command:
-    argv: [./svc.sh, install, "{{ runner_user }}"]
-    chdir: "{{ runner_directory }}"
-    creates: "{{ runner_directory }}/.service"
-
-- name: Read the installed unit name
-  ansible.builtin.slurp:
-    src: "{{ runner_directory }}/.service"
-  register: runner_unit_file
-
-- name: Resolve the unit name
-  ansible.builtin.set_fact:
-    runner_unit: "{{ runner_unit_file.content | b64decode | trim }}"
-
-- name: Create service environment drop-in directory
-  ansible.builtin.file:
-    path: "/etc/systemd/system/{{ runner_unit }}.d"
-    state: directory
-    mode: '0755'
-
-- name: Give jobs an isolated tool cache
-  ansible.builtin.copy:
-    dest: "/etc/systemd/system/{{ runner_unit }}.d/environment.conf"
-    mode: '0644'
-    content: |
-      [Service]
-      Environment=RUNNER_TOOL_CACHE=/var/cache/github-actions/toolcache
-  register: runner_environment
-
-- name: Enable and start the runner
-  ansible.builtin.systemd_service:
-    name: "{{ runner_unit }}"
-    enabled: true
-    daemon_reload: true
-    state: "{{ 'restarted' if runner_environment.changed else 'started' }}"
-
-- name: Report the installed runner
-  ansible.builtin.debug:
-    msg: "{{ runner_name }} serves {{ runner_repository }} through {{ runner_unit }}"
+- name: Configure each worker slot
+  ansible.builtin.include_tasks: instance.yml
+  loop: "{{ range(1, (runner_count | int) + 1) | list }}"
+  loop_control:
+    loop_var: runner_index
+  vars:
+    runner_instance_directory: "{{ runner_directory if runner_index == 1 else runner_directory ~ ('-%02d' | format(runner_index)) }}"
+    runner_instance_name: "{{ runner_name if runner_index == 1 else runner_name ~ ('-%02d' | format(runner_index)) }}"

@@ -588,3 +588,20 @@ does not enroll a machine. Windows current-user distrust is not machine-wide,
 Termux updates do not patch Android system trust, and existing clients may cache
 old roots. Native deployment and per-client rejection tests remain separate from
 Nix profile and Ansible syntax validation.
+
+
+## Mint home-server CI pool
+
+The home server uses the explicit `ansible/github-runner.yml` playbook, not full
+Ubuntu host enrollment. Its runner role provisions separate worker services and
+a shared CPU budget for workers, the Docker daemon and new containers. Worker
+count and CPU quota are declared in `hosts/server/github-runner.json`; apply only
+after draining running containers and worker jobs. The role validates Docker
+configuration before replacing it and checks for live containers before the
+required daemon restart.
+
+The October 22 native test found CPU/thermal limits before memory pressure; the
+normal target is two workers with a shared 70% CPU budget. Unique browser-test
+ports are part of each worker's service environment. Syntax checks and live host
+verification are recorded separately from untested full-reboot behavior. See
+[the home-server runbook](home-server.md#concurrent-ci-and-resource-budget).

@@ -109,8 +109,9 @@ The machine has an x86-64 CPU, VT-x and `/dev/kvm`. The CPU uses the
 available for jobs; no CPU frequency cap was introduced.
 
 The repository-only runner is `home-server-supa-crm` for `SkylineCapital/supa-crm`,
-with labels `self-hosted`, `Linux`, `X64`, `home-server`, and `supa-crm`. One runner
-process accepts one job at a time. Its boot-enabled systemd unit is
+with labels `self-hosted`, `Linux`, `X64`, `home-server`, and `supa-crm`. Each runner
+process accepts one job at a time. The normal pool has two processes. Its first
+boot-enabled systemd unit is
 `actions.runner.SkylineCapital-supa-crm.home-server-supa-crm.service`.
 
 Provision it explicitly from this checkout on the controller:
@@ -167,3 +168,41 @@ operation is the next useful reduction, but stopping LightDM logs out the
 existing desktop session. NFS has configured exports; inspect their purpose before disabling them.
 The NVIDIA driver's runtime D3 status is disabled on this older GPU, so do not
 claim it automatically powers off at idle.
+
+## Concurrent CI and resource budget
+
+The October 22 capacity test configured ten temporary workers and observed nine
+simultaneous jobs, near-full CPU use and CPU thermal throttling at 97-99 C, with
+more than 22 GiB of memory still available and no OOM events. Four heavy frontend
+jobs can already use most of the CPU. The conservative normal pool is two workers
+(rounding down 70% of a practical four-heavy-job ceiling), rather than treating
+available memory as permission to keep adding workers.
+
+`hosts/server/github-runner.json` declares the worker count and aggregate CPU
+quota. Each worker has a separate installation/workspace and `PLAYWRIGHT_PORT`
+(52001, 52002). The shared `githubrunner.slice` caps worker and Docker workload CPU
+time at 560%, equivalent to 70% of the host's eight logical CPUs. This is one
+aggregate budget, not 560% per worker. A 24 GiB memory high-water mark requests
+reclaim under pressure; it is not a hard per-job memory allocation.
+
+Docker's daemon and new containers share that slice. The role preserves existing
+Docker settings and requires running containers to be drained before restarting
+the daemon to move its cgroup. Apply worker service changes during an idle
+maintenance window. The worker-count limit bounds GitHub job intake; the kernel
+CPU quota throttles execution inside that budget. This is not a scheduler that
+predicts each job's future resource needs.
+
+Temporary workers use the distinct `home-server-benchmark` label. The manual
+frontend workflow can check any selected PR head without changing its branch;
+its CI harness comes from the workflow revision. The capacity test found and
+fixed a shared-port assumption in Playwright, so concurrent browser suites now
+bind separate loopback ports. See the task's capacity report for per-PR outcomes,
+raw metrics, and limits of the measurement. A full physical reboot remains untested.
+
+The provisioning wrapper temporarily removes the normal intake label, waits for
+active jobs to finish, applies the playbook, then restores intake. It also restores
+labels on ordinary errors. This drain was added after an initial live update
+restored intake too early and interrupted one check; that check was rerun. The
+drain's wait, error recovery, timeout and surplus-worker guard have regression
+coverage. When reducing an existing pool, retire surplus workers first; the
+wrapper refuses to leave extra workers running silently.
