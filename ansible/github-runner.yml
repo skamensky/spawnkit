@@ -1,0 +1,24 @@
+---
+# Narrow opt-in setup for the existing Mint home server. This does not enroll
+# the machine into the full Ubuntu host playbook or create a Spawnkit sentinel.
+- name: Configure the Supa-CRM home runner
+  hosts: all
+  become: true
+  gather_facts: true
+  vars_files:
+    - ../hosts/server/github-runner.json
+  pre_tasks:
+    - name: Require the expected Ubuntu-based home server
+      ansible.builtin.assert:
+        that:
+          - ansible_facts.os_family == 'Debian'
+          - ansible_facts.architecture == 'x86_64'
+    - name: Read enrolled Tailscale identity
+      ansible.builtin.command: tailscale status --json
+      changed_when: false
+      register: tailnet
+    - name: Verify this is the enrolled home server
+      ansible.builtin.assert:
+        that: (tailnet.stdout | from_json).Self.ID == runner_device_id
+  roles:
+    - github_runner

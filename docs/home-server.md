@@ -101,10 +101,58 @@ not be applied to this Mint 21.3 host as part of this narrow setting change.
 
 ## Runner preparation
 
-The machine has an x86-64 CPU, VT-x and `/dev/kvm`, Docker installed, and no
-running containers or GitHub Actions runner at inspection. The CPU uses the
+The machine has an x86-64 CPU, VT-x and `/dev/kvm`. The CPU uses the
 `intel_pstate` driver with the `powersave` governor. CPU capacity remains
 available for jobs; no CPU frequency cap was introduced.
+
+The repository-only runner is `home-server-supa-crm` for `SkylineCapital/supa-crm`,
+with labels `self-hosted`, `Linux`, `X64`, `home-server`, and `supa-crm`. One runner
+process accepts one job at a time. Its boot-enabled systemd unit is
+`actions.runner.SkylineCapital-supa-crm.home-server-supa-crm.service`.
+
+Provision it explicitly from this checkout on the controller:
+
+```bash
+python3 scripts/configure-github-runner.py --syntax-check
+python3 scripts/configure-github-runner.py
+```
+
+The wrapper uses the current pinned Nixpkgs Ansible package, the authenticated
+`gh` CLI, and strict direct SSH. It gets an expiring repository registration
+token into memory, passes it through the environment to a `no_log` registration
+task, and keeps it out of arguments, Git and inventory files. GitHub's resulting
+provider-managed credential files live only in the runner directory with mode
+0600. The initial official archive version and SHA256 are pinned in
+[`hosts/server/github-runner.json`](../hosts/server/github-runner.json); the
+provider's normal runner auto-updater remains enabled.
+
+[`ansible/github-runner.yml`](../ansible/github-runner.yml) is a narrow playbook
+for this enrolled Tailscale device ID. It does not run the full Ubuntu host
+configuration or create `/etc/spawnkit/enabled`. It provisions the existing Mint
+host, the non-sudo `github-runner` account, and the official service. The account
+belongs to the Docker group because validation workflows build containers;
+Docker access permits privileged host operations. Jobs run from
+`/opt/actions-runner/supa-crm`, with tool downloads in
+`/var/cache/github-actions/toolcache` and account state in
+`/var/lib/github-runner`.
+
+Chromium's system libraries are installed through APT so browser jobs do not need
+sudo. The role also refreshes Google's official signing key, whose newer Chrome
+subkey was absent from this old installation. Timeshift's existing policy is
+preserved, with the runner workspace, cache and account state excluded from
+future snapshots. Existing snapshots are retained.
+
+Validation workflow routing is proposed in
+[Supa-CRM PR 953](https://github.com/SkylineCapital/supa-crm/pull/953), targeting
+`dev`. Deployments, publishing, infrastructure apply and authenticated remote
+smoke workflows retain their GitHub-hosted routing.
+
+October 22 live acceptance: the runner is online and boot-enabled. Its first
+[status-monitor validation job](https://github.com/SkylineCapital/supa-crm/actions/runs/39776879722/job/119817960145)
+completed successfully on `home-server-supa-crm`, including Go setup/tests/vet,
+a Docker image build, Terraform setup/validation and runtime Terraform tests.
+A full physical reboot has not been exercised. Provider credentials are mode
+0600, and the CI account cannot use sudo.
 
 The desktop still starts through `graphical.target` and LightDM. Its clipboard
 monitor and Xorg are the largest persistent CPU consumers observed. Headless

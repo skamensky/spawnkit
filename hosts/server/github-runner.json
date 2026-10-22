@@ -1,0 +1,10 @@
+{
+  "runner_repository": "SkylineCapital/supa-crm",
+  "runner_name": "home-server-supa-crm",
+  "runner_user": "github-runner",
+  "runner_directory": "/opt/actions-runner/supa-crm",
+  "runner_labels": ["home-server", "supa-crm"],
+  "runner_device_id": "n4fDtMJMgv11CNTRL",
+  "runner_version": "2.337.0",
+  "runner_archive_sha256": "70920811a4f8ad4328818682bca5c6469c1c942fab52448868071d0063816613"
+}
