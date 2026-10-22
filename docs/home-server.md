@@ -49,7 +49,7 @@ ssh -o BatchMode=yes -o StrictHostKeyChecking=yes shmuel@home-server 'id -un; ho
 The laptop's known hosts now pins the verified ThinkPad key for the Tailscale
 name, full DNS name and currently discovered address. The intended CI workload is
 `SkylineCapital/supa-crm`; its old checkout under the server's `~/repos/supa-crm`
-points to a personal fork and is not the authoritative current codebase.
+pointed to a personal fork and was purged with the owner-authorized old dev files.
 
 The host key matched the laptop's pre-existing trusted `thinkpad` SSH entry at
 its former LAN address. A strict connection using that existing trust succeeded;
@@ -138,14 +138,18 @@ Docker access permits privileged host operations. Jobs run from
 
 Chromium's system libraries are installed through APT so browser jobs do not need
 sudo. The role also refreshes Google's official signing key, whose newer Chrome
-subkey was absent from this old installation. Timeshift's existing policy is
-preserved, with the runner workspace, cache and account state excluded from
-future snapshots. Existing snapshots are retained.
+subkey was absent from this old installation. Timeshift scheduling is
+disabled at the owner's request, and existing snapshots were deleted. The runner
+workspace, cache and account state are excluded if snapshots are created manually.
 
 Validation workflow routing is proposed in
 [Supa-CRM PR 953](https://github.com/SkylineCapital/supa-crm/pull/953), targeting
-`dev`. Deployments, publishing, infrastructure apply and authenticated remote
-smoke workflows retain their GitHub-hosted routing.
+`dev`. The repository Actions variable `CI_RUNNER=github-hosted` switches new
+validation runs to GitHub-hosted Ubuntu if the home server is unavailable;
+`CI_RUNNER=home-server` restores the default home runner. Cancel and rerun jobs
+that were already queued before changing the variable. This is manual failover,
+not an automatic health check. Deployments, publishing, infrastructure apply and
+authenticated remote smoke workflows retain their GitHub-hosted routing.
 
 October 22 live acceptance: the runner is online and boot-enabled. Its first
 [status-monitor validation job](https://github.com/SkylineCapital/supa-crm/actions/runs/39776879722/job/119817960145)
@@ -157,7 +161,6 @@ A full physical reboot has not been exercised. Provider credentials are mode
 The desktop still starts through `graphical.target` and LightDM. Its clipboard
 monitor and Xorg are the largest persistent CPU consumers observed. Headless
 operation is the next useful reduction, but stopping LightDM logs out the
-existing desktop session. NFS has configured exports, and Timeshift has an
-existing scheduled backup policy; inspect their purpose before disabling them.
+existing desktop session. NFS has configured exports; inspect their purpose before disabling them.
 The NVIDIA driver's runtime D3 status is disabled on this older GPU, so do not
 claim it automatically powers off at idle.

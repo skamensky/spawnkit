@@ -97,13 +97,15 @@
   register: timeshift_content
   when: timeshift_policy.stat.exists
 
-- name: Keep runner workspaces and caches out of system restore snapshots
+- name: Disable scheduled snapshots and exclude CI state
   ansible.builtin.copy:
     dest: /etc/timeshift/timeshift.json
     mode: '0644'
     content: >-
       {{ (timeshift_content.content | b64decode | from_json) |
-         combine({'exclude': (((timeshift_content.content | b64decode | from_json).exclude) +
+         combine({'schedule_boot': 'false', 'schedule_daily': 'false',
+         'schedule_hourly': 'false', 'schedule_monthly': 'false', 'schedule_weekly': 'false',
+         'exclude': (((timeshift_content.content | b64decode | from_json).exclude) +
          ['/opt/actions-runner/**', '/var/cache/github-actions/**', '/var/lib/github-runner/**']) | unique | list}) |
          to_nice_json }}
   when: timeshift_policy.stat.exists
