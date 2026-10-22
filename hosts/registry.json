@@ -3,5 +3,5 @@
   "laptop-wsl": { "hostnames": ["toplap123"], "environments": ["wsl"] },
   "laptop-ubuntu": { "hostnames": ["toplap123"], "environments": ["linux"] },
   "agent-vm": { "hostnames": ["safe-phone-controller"], "environments": ["linux", "nixos"] },
-  "server": { "hostnames": [], "environments": ["linux", "nixos"] }
+  "server": { "hostnames": ["home-server", "shmuel-thinkpad-t460p"], "environments": ["linux", "nixos"] }
 }

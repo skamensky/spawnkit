@@ -68,6 +68,10 @@ neither a project dependency lock nor a backup of local changes.
 machine profile. Unknown hostnames receive functional defaults. It is the only
 hostname map; host automation uses it too.
 
+The old ThinkPad T460p is assigned to the `server` profile as
+[`home-server`](docs/home-server.md), with its Tailscale identity and MCP access
+verification documented there.
+
 ## Build the user environment
 
 From this repository's root:
