@@ -14,6 +14,11 @@ its OS hostname.
 | Enrollment | October 22, 2026 |
 | Spawnkit profile | `server` |
 | OS | Linux Mint 21.3 (Ubuntu-based) |
+| CPU | Intel Core i7-6820HQ, 4 cores / 8 threads, 2.7 GHz base / 3.6 GHz maximum |
+| RAM | 32 GB DDR4-2133, 2 × 16 GB Samsung modules |
+| Storage | SanDisk SSD PLUS 480 GB SATA SSD |
+| Graphics | Intel HD 530 and NVIDIA GeForce 940MX, 2 GB VRAM |
+| Network hardware | Intel I219-LM Ethernet and Wireless 8260 |
 | SSH | OpenSSH over Tailscale, user `shmuel`, port 22 |
 | SSH host key (ED25519) | `SHA256:KOpbs59QJziYeIRAFtuoSxalXRkrVra5qCddNLnyOjw` |
 
@@ -51,3 +56,48 @@ This registration does not install or activate Spawnkit on the ThinkPad. Its
 `/etc/spawnkit/enabled` sentinel was absent during inspection. Recheck before changing its environment;
 host activation remains an explicit operation. Further server services belong in
 the appropriate Spawnkit subsystem when requested.
+
+## Closed-lid server operation
+
+On October 22, 2026, the installed systemd and MATE settings were changed and
+read back successfully. All three logind lid policies and its idle action report
+`ignore`; MATE's AC and battery lid actions report `nothing`, with computer idle
+sleep disabled. SSH and MCP reconnection passed after restarting logind. Physical
+lid closure and a full reboot have not been exercised; the lid was open during
+verification.
+
+The systemd source is [`hosts/server/logind.conf`](../hosts/server/logind.conf).
+Install it independently of full host enrollment, from this checkout on the
+server:
+
+```bash
+sudo install -D -m 0644 hosts/server/logind.conf /etc/systemd/logind.conf.d/90-home-server.conf
+export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus
+gsettings set org.mate.power-manager button-lid-ac 'nothing'
+gsettings set org.mate.power-manager button-lid-battery 'nothing'
+gsettings set org.mate.power-manager sleep-computer-ac 0
+gsettings set org.mate.power-manager sleep-computer-battery 0
+sudo systemctl restart systemd-logind
+```
+
+Run the `gsettings` commands as `shmuel` against the existing user session.
+Both layers matter because MATE takes the lid-switch inhibitor and handles
+events itself while its desktop session runs. See the
+[systemd 249 logind reference](https://www.freedesktop.org/software/systemd/man/249/logind.conf.html).
+The full Spawnkit Ansible playbook currently targets Ubuntu 24.04+, so it must
+not be applied to this Mint 21.3 host as part of this narrow setting change.
+
+## Runner preparation
+
+The machine has an x86-64 CPU, VT-x and `/dev/kvm`, Docker installed, and no
+running containers or GitHub Actions runner at inspection. The CPU uses the
+`intel_pstate` driver with the `powersave` governor. CPU capacity remains
+available for jobs; no CPU frequency cap was introduced.
+
+The desktop still starts through `graphical.target` and LightDM. Its clipboard
+monitor and Xorg are the largest persistent CPU consumers observed. Headless
+operation is the next useful reduction, but stopping LightDM logs out the
+existing desktop session. NFS has configured exports, and Timeshift has an
+existing scheduled backup policy; inspect their purpose before disabling them.
+The NVIDIA driver's runtime D3 status is disabled on this older GPU, so do not
+claim it automatically powers off at idle.
