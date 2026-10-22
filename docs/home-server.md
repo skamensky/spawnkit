@@ -40,6 +40,17 @@ Remote command access is **verified** through the deployed Personal MCP:
 {"machine":"home-server","user":"shmuel","ssh_mode":"openssh","command":"id -un; hostname"}
 ```
 
+When working from the laptop, use direct SSH in preference to the MCP bridge:
+
+```bash
+ssh -o BatchMode=yes -o StrictHostKeyChecking=yes shmuel@home-server 'id -un; hostname'
+```
+
+The laptop's known hosts now pins the verified ThinkPad key for the Tailscale
+name, full DNS name and currently discovered address. The intended CI workload is
+`SkylineCapital/supa-crm`; its old checkout under the server's `~/repos/supa-crm`
+points to a personal fork and is not the authoritative current codebase.
+
 The host key matched the laptop's pre-existing trusted `thinkpad` SSH entry at
 its former LAN address. A strict connection using that existing trust succeeded;
 the host's public key was then read through that authenticated session and pinned
@@ -63,8 +74,9 @@ On October 22, 2026, the installed systemd and MATE settings were changed and
 read back successfully. All three logind lid policies and its idle action report
 `ignore`; MATE's AC and battery lid actions report `nothing`, with computer idle
 sleep disabled. SSH and MCP reconnection passed after restarting logind. Physical
-lid closure and a full reboot have not been exercised; the lid was open during
-verification.
+lid closure was verified later that day: both the ACPI lid sensor and logind
+reported closed, and fresh direct SSH commands succeeded without a reboot or
+uptime reset. A full reboot has not been tested.
 
 The systemd source is [`hosts/server/logind.conf`](../hosts/server/logind.conf).
 Install it independently of full host enrollment, from this checkout on the
