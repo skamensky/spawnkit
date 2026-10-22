@@ -121,6 +121,8 @@ guest is kept warm indefinitely when there is no work.
 ## Maintenance and retirement
 
 Create `/etc/spawnkit-ci/paused` to stop new guest creation and drain idle guests.
+Guests also advertise `home-server-kvm` so controlled timing runs can select this
+pool without being assigned to another machine carrying the general labels.
 The controller deregisters an idle runner before destroying it. JIT runner labels
 are read-only, so they cannot close intake. GitHub rejects deregistration if a job
 has just been assigned; the controller then preserves that VM. Busy one-job guests

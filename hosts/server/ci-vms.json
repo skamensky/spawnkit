@@ -17,7 +17,8 @@
   "ci_runner_sha256": "70920811a4f8ad4328818682bca5c6469c1c942fab52448868071d0063816613",
   "ci_labels": [
     "home-server",
-    "supa-crm"
+    "supa-crm",
+    "home-server-kvm"
   ],
   "ci_job_timeout_seconds": 7200,
   "ci_idle_timeout_seconds": 1800
