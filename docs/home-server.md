@@ -146,14 +146,21 @@ subkey was absent from this old installation. Timeshift scheduling is
 disabled at the owner's request, and existing snapshots were deleted. The runner
 workspace, cache and account state are excluded if snapshots are created manually.
 
-Validation workflow routing is proposed in
-[Supa-CRM PR 953](https://github.com/SkylineCapital/supa-crm/pull/953), targeting
-`dev`. The repository Actions variable `CI_RUNNER=github-hosted` switches new
+Validation workflow routing is merged separately into `dev` through
+[Supa-CRM PR 953](https://github.com/SkylineCapital/supa-crm/pull/953) and `master`
+through [PR 956](https://github.com/SkylineCapital/supa-crm/pull/956). The repository
+Actions variable `CI_RUNNER=github-hosted` switches new
 validation runs to GitHub-hosted Ubuntu if the home server is unavailable;
 `CI_RUNNER=home-server` restores the default home runner. Cancel and rerun jobs
 that were already queued before changing the variable. This is manual failover,
 not an automatic health check. Deployments, publishing, infrastructure apply and
 authenticated remote smoke workflows retain their GitHub-hosted routing.
+
+The manual switch passed acceptance in both directions earlier on October 22.
+Later that day GitHub rejected hosted jobs because account payments had failed
+or the spending limit needed increasing. Hosted failover currently depends on
+resolving that account billing restriction; changing the routing variable alone
+cannot bypass it. The final live setting is `CI_RUNNER=home-server`.
 
 October 22 live acceptance: the runner is online and boot-enabled. Its first
 [status-monitor validation job](https://github.com/SkylineCapital/supa-crm/actions/runs/39776879722/job/119817960145)
