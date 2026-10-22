@@ -412,6 +412,24 @@ def reap_expired(c):
             destroy(vm_name(item['name']),keep_state=True)
 
 
+def retire_idle_registered(app,endpoint,item,path):
+    # JIT labels are read-only. Deregistration atomically closes job intake;
+    # GitHub rejects it if a job won the race with our idle observation.
+    try:
+        app.request(f"{endpoint}/{item['runner_id']}",'DELETE')
+    except urllib.error.HTTPError as error:
+        if error.code==422:
+            runner=app.request(f"{endpoint}/{item['runner_id']}")
+            if runner['busy']:
+                event('idle_retirement_deferred',name=item['name'])
+                return False
+        if error.code!=404:
+            raise
+    destroy(item['name'],keep_state=True)
+    path.unlink()
+    return True
+
+
 def serve(c):
     import fcntl
     require_current_kernel(c)
@@ -441,20 +459,13 @@ def serve(c):
             expired=age>c['ci_job_timeout_seconds']
             runner=registered.get(item['runner_id'])
             idle=runner is not None and not runner['busy'] and runner['status']=='online'
-            should_drain=(bool(item.get('intake_removed_at')) or draining or age>c['ci_idle_timeout_seconds'] or item['slot']>c['ci_slots']
+            should_drain=(draining or age>c['ci_idle_timeout_seconds'] or item['slot']>c['ci_slots']
                           or (idle and len(states)>desired))
-            if should_drain and runner is not None and not item.get('intake_removed_at'):
-                intake=c['ci_labels'][0]
-                if any(label['name']==intake for label in runner['labels']):
-                    app.request(f"{endpoint}/{item['runner_id']}/labels/{intake}",'DELETE')
-                item['intake_removed_at']=time.time()
-                path.write_text(json.dumps(item))
-                live[item['slot']]=item
-                continue
-            quiesced=time.time()-item.get('intake_removed_at',time.time())>=15
-            retire_idle=idle and should_drain and quiesced
-            if state.returncode or state.stdout.strip()=='shut off' or expired or retire_idle:
+            if state.returncode or state.stdout.strip()=='shut off' or expired:
                 retire_registered(app,endpoint,item,path)
+            elif idle and should_drain:
+                if not retire_idle_registered(app,endpoint,item,path):
+                    live[item['slot']]=item
             else:
                 live[item['slot']]=item
         if stopping:

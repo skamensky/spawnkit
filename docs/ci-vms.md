@@ -121,9 +121,10 @@ guest is kept warm indefinitely when there is no work.
 ## Maintenance and retirement
 
 Create `/etc/spawnkit-ci/paused` to stop new guest creation and drain idle guests.
-The controller removes an idle runner's intake label and waits at least one
-poll interval before retirement, allowing a concurrent assignment to become
-visible. Busy one-job guests finish normally. SIGTERM drains before exit;
+The controller deregisters an idle runner before destroying it. JIT runner labels
+are read-only, so they cannot close intake. GitHub rejects deregistration if a job
+has just been assigned; the controller then preserves that VM. Busy one-job guests
+finish normally. SIGTERM drains before exit;
 the systemd stop timeout accommodates the configured two-hour maximum lifetime.
 
 Stop the pool after draining before changing its controller or base image.

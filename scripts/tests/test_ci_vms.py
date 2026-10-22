@@ -13,6 +13,39 @@ spec.loader.exec_module(ci)
 
 
 class IsolationTests(unittest.TestCase):
+    def test_idle_deregistration_precedes_destroy_without_changing_jit_labels(self):
+        calls=[]
+        app=Mock()
+        app.request.side_effect=lambda *args:calls.append(args)
+        receipt=Mock()
+        item={'name':'ci-'+('a'*32),'runner_id':7}
+        with patch.object(ci,'destroy',side_effect=lambda *a,**kw:calls.append(('destroy',a,kw))):
+            self.assertTrue(ci.retire_idle_registered(app,'runners',item,receipt))
+        self.assertEqual(calls[0],('runners/7','DELETE'))
+        self.assertEqual(calls[1][0],'destroy')
+        receipt.unlink.assert_called_once()
+
+    def test_job_assignment_race_preserves_the_vm_and_receipt(self):
+        app=Mock()
+        app.request.side_effect=[ci.urllib.error.HTTPError('url',422,'busy',{},None),{'busy':True}]
+        receipt=Mock()
+        with patch.object(ci,'destroy') as destroy,patch.object(ci,'event'):
+            self.assertFalse(ci.retire_idle_registered(app,'runners',
+                {'name':'ci-'+('a'*32),'runner_id':7},receipt))
+        destroy.assert_not_called()
+        receipt.unlink.assert_not_called()
+
+    def test_failed_idle_deregistration_preserves_the_vm_and_receipt(self):
+        app=Mock()
+        app.request.side_effect=RuntimeError('API unavailable')
+        receipt=Mock()
+        with patch.object(ci,'destroy') as destroy:
+            with self.assertRaises(RuntimeError):
+                ci.retire_idle_registered(app,'runners',
+                    {'name':'ci-'+('a'*32),'runner_id':7},receipt)
+        destroy.assert_not_called()
+        receipt.unlink.assert_not_called()
+
     def test_incomplete_builder_cannot_replace_the_accepted_image(self):
         with tempfile.TemporaryDirectory() as tmp:
             root=Path(tmp)
