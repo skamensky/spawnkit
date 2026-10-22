@@ -13,6 +13,18 @@ spec.loader.exec_module(ci)
 
 
 class IsolationTests(unittest.TestCase):
+    def test_incomplete_builder_cannot_replace_the_accepted_image(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp)
+            (root/'build-name').write_text('ci-'+('a'*32))
+            accepted=root/'runner-base.qcow2'
+            accepted.write_bytes(b'accepted image')
+            with patch.object(ci,'ROOT',root),patch.object(ci,'run',return_value='running') as run,patch.object(ci,'guest_exec',return_value={'exitcode':127}):
+                with self.assertRaisesRegex(RuntimeError,'not ready'):
+                    ci.finalize_image()
+            self.assertEqual(accepted.read_bytes(),b'accepted image')
+            self.assertEqual(run.call_count,1)
+
     def test_guest_reservations_cannot_overcommit_host_memory_or_disk(self):
         with tempfile.TemporaryDirectory() as tmp:
             root=Path(tmp)

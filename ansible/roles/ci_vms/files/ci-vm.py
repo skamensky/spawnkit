@@ -240,7 +240,7 @@ def guest_exec(name, script, timeout=60):
 def build_image(c):
     if (ROOT/'runner-base.qcow2').exists():
         raise RuntimeError('Base already exists; rebuild explicitly during a drained maintenance window')
-    packages=['qemu-guest-agent','docker.io','docker-buildx','git','curl','ca-certificates',
+    packages=['qemu-guest-agent','docker.io','docker-buildx','git','gh','gcc','libc6-dev','time','curl','ca-certificates',
               'python3','python3-venv','python-is-python3','unzip','jq','libicu74','libssl3t64',
               'libkrb5-3','zlib1g','libnss3','libatk1.0-0t64','libatk-bridge2.0-0t64',
               'libcups2t64','libdrm2','libxkbcommon0','libxcomposite1','libxdamage1','libxfixes3',
@@ -297,7 +297,7 @@ def finalize_image():
     name=vm_name((ROOT/'build-name').read_text())
     if run('virsh','domstate',name)!='running':
         raise RuntimeError('Builder must be running for readiness verification')
-    result=guest_exec(name,'test -f /opt/ci-image-ready && test -x /opt/actions-runner/run.sh && systemctl is-active docker qemu-guest-agent')
+    result=guest_exec(name,'test -f /opt/ci-image-ready && test -x /opt/actions-runner/run.sh && gh --version && gcc --version && test -x /usr/bin/time && systemctl is-active docker qemu-guest-agent')
     if result['exitcode']!=0:
         raise RuntimeError('Builder is not ready')
     run('virsh','shutdown',name)

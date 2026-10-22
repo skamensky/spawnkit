@@ -20,6 +20,8 @@ MAC/IP anti-spoofing filter. A separate nftables table rejects guest access to
 the host, LAN, tailnet, link-local/metadata addresses, other guests and IPv6
 forwarding. The only host service exposed to guests is the bridge DNS resolver.
 Public IPv4 HTTP/HTTPS is allowed for GitHub, package registries and CI APIs.
+Public IPv4 PostgreSQL on TCP 5432 is allowed for authenticated dev smoke reads.
+The private/reserved-address deny rules apply before all allowed ports.
 No public listener is added for the controller.
 
 This server is dedicated to CI virtualization. All libvirt guests and the
@@ -62,8 +64,10 @@ sudo spawnkit-ci-vm build-image
 ```
 
 The builder installs signed Ubuntu packages and the checksum-pinned official
-runner, enables its guest agent and Docker, clears machine identity and SSH host
-keys, and leaves a readiness marker. Once provisioning finishes:
+runner, including GitHub CLI, GCC with libc development headers, and command timing.
+It enables its guest agent and Docker, clears machine identity and SSH host
+keys, and leaves a readiness marker. Finalization requires these workflow tools
+to be present before accepting the image. Once provisioning finishes:
 
 ```bash
 sudo spawnkit-ci-vm finalize-image
