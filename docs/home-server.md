@@ -59,9 +59,12 @@ Agent-vm's existing owner key authenticated without copying or adding a private
 key. Direct SSH and two separate MCP connections passed, including reconnection
 and verification of the device ID and DNS name.
 
-Use OpenSSH host verification; do not disable checking. Tailscale SSH was not
-enabled: it would replace the working port-22 SSH route. The rename required only
-`sudo tailscale set --hostname=home-server`. A full reboot has not been tested.
+Use host verification; do not disable checking. The initial setup used OpenSSH
+on the Tailscale address. Later on October 22, Tailscale SSH was observed enabled
+(`RunSSH: true`), and a fresh direct connection passed after the owner completed
+the tailnet policy browser check. Tailscale SSH now handles port 22 on that
+address. The rename itself used only `sudo tailscale set --hostname=home-server`.
+A full reboot has not been tested.
 
 This registration does not install or activate Spawnkit on the ThinkPad. Its
 `/etc/spawnkit/enabled` sentinel was absent during inspection. Recheck before changing its environment;
