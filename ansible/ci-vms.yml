@@ -1,0 +1,20 @@
+---
+- name: Configure disposable home CI virtual machines
+  hosts: all
+  become: true
+  gather_facts: true
+  vars_files:
+    - ../hosts/server/ci-vms.json
+  pre_tasks:
+    - name: Read enrolled Tailscale identity
+      ansible.builtin.command: tailscale status --json
+      changed_when: false
+      register: tailnet
+    - name: Require the enrolled Linux home server
+      ansible.builtin.assert:
+        that:
+          - ansible_facts.os_family == 'Debian'
+          - ansible_facts.architecture == 'x86_64'
+          - (tailnet.stdout | from_json).Self.ID == ci_device_id
+  roles:
+    - ci_vms

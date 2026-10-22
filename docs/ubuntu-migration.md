@@ -592,16 +592,19 @@ Nix profile and Ansible syntax validation.
 
 ## Mint home-server CI pool
 
-The home server uses the explicit `ansible/github-runner.yml` playbook, not full
-Ubuntu host enrollment. Its runner role provisions separate worker services and
-a shared CPU budget for workers, the Docker daemon and new containers. Worker
-count and CPU quota are declared in `hosts/server/github-runner.json`; apply only
-after draining running containers and worker jobs. The role validates Docker
-configuration before replacing it and checks for live containers before the
-required daemon restart.
+The home server uses the explicit `ansible/ci-vms.yml` playbook, not full Ubuntu
+host enrollment. It provisions native KVM/libvirt, a private filtered network,
+the shared VM budget and a host-owned queue controller. Pool size, guest resources,
+image hashes, kernel baseline and CPU quota are declared in
+`hosts/server/ci-vms.json`. Stage the supported kernel update and reboot before
+production activation. Each job runs in a fresh guest with its own Docker daemon;
+personal host files, sockets and credentials are not mounted into it.
 
-The October 22 native test found CPU/thermal limits before memory pressure; the
-normal target is two workers with a shared 70% CPU budget. Unique browser-test
-ports are part of each worker's service environment. Syntax checks and live host
-verification are recorded separately from untested full-reboot behavior. See
-[the home-server runbook](home-server.md#concurrent-ci-and-resource-budget).
+The October 22 final native acceptance passed seven jobs with three 8 GiB,
+four-vCPU guests under the verified effective `machine.slice` 70% CPU budget.
+Earlier custom-slice measurements did not consistently include recycled QEMU
+scopes and are not comparable capped-throughput results. The new kernel
+`5.15.0-198-generic`, closed-lid reboot, guest isolation, controller restart and
+return to zero were verified. CPU temperature reached 100 C with hardware thermal
+throttling. See [the disposable CI runbook](ci-vms.md) for authentication,
+isolation and maintenance. The original host-account runners were retired.

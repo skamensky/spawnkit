@@ -19,8 +19,8 @@ its OS hostname.
 | Storage | SanDisk SSD PLUS 480 GB SATA SSD |
 | Graphics | Intel HD 530 and NVIDIA GeForce 940MX, 2 GB VRAM |
 | Network hardware | Intel I219-LM Ethernet and Wireless 8260 |
-| SSH | OpenSSH over Tailscale, user `shmuel`, port 22 |
-| SSH host key (ED25519) | `SHA256:KOpbs59QJziYeIRAFtuoSxalXRkrVra5qCddNLnyOjw` |
+| SSH | Tailscale SSH, user `shmuel`, port 22 |
+| Underlying OpenSSH host key (ED25519), historical LAN route | `SHA256:KOpbs59QJziYeIRAFtuoSxalXRkrVra5qCddNLnyOjw` |
 
 Use the device ID to distinguish it from the expired 2023 ThinkPad enrollment
 (`nNbstF7CNTRL`). Discover addresses through live Tailscale inventory. Do not
@@ -43,7 +43,7 @@ Remote command access is **verified** through the deployed Personal MCP:
 When working from the laptop, use direct SSH in preference to the MCP bridge:
 
 ```bash
-ssh -o BatchMode=yes -o StrictHostKeyChecking=yes shmuel@home-server 'id -un; hostname'
+tailscale ssh shmuel@home-server 'id -un; hostname'
 ```
 
 The laptop's known hosts now pins the verified ThinkPad key for the Tailscale
@@ -64,7 +64,7 @@ on the Tailscale address. Later on October 22, Tailscale SSH was observed enable
 (`RunSSH: true`), and a fresh direct connection passed after the owner completed
 the tailnet policy browser check. Tailscale SSH now handles port 22 on that
 address. The rename itself used only `sudo tailscale set --hostname=home-server`.
-A full reboot has not been tested.
+A full reboot into kernel `5.15.0-198-generic` and fresh Tailscale SSH passed on October 22.
 
 This registration does not install or activate Spawnkit on the ThinkPad. Its
 `/etc/spawnkit/enabled` sentinel was absent during inspection. Recheck before changing its environment;
@@ -79,7 +79,7 @@ read back successfully. All three logind lid policies and its idle action report
 sleep disabled. SSH and MCP reconnection passed after restarting logind. Physical
 lid closure was verified later that day: both the ACPI lid sensor and logind
 reported closed, and fresh direct SSH commands succeeded without a reboot or
-uptime reset. A full reboot has not been tested.
+uptime reset. A full reboot into kernel `5.15.0-198-generic` and fresh Tailscale SSH passed on October 22.
 
 The systemd source is [`hosts/server/logind.conf`](../hosts/server/logind.conf).
 Install it independently of full host enrollment, from this checkout on the
@@ -102,114 +102,65 @@ events itself while its desktop session runs. See the
 The full Spawnkit Ansible playbook currently targets Ubuntu 24.04+, so it must
 not be applied to this Mint 21.3 host as part of this narrow setting change.
 
-## Runner preparation
+## Disposable CI VM pool
 
-The machine has an x86-64 CPU, VT-x and `/dev/kvm`. The CPU uses the
-`intel_pstate` driver with the `powersave` governor. CPU capacity remains
-available for jobs; no CPU frequency cap was introduced.
+The server has an x86-64 CPU, VT-x and `/dev/kvm`. The CPU uses `intel_pstate`
+with the `powersave` governor; job capacity remains available without a frequency
+cap. Its intended CI workload is `SkylineCapital/supa-crm`.
 
-The repository-only runner is `home-server-supa-crm` for `SkylineCapital/supa-crm`,
-with labels `self-hosted`, `Linux`, `X64`, `home-server`, and `supa-crm`. Each runner
-process accepts one job at a time. The normal pool has two processes. Its first
-boot-enabled systemd unit is
-`actions.runner.SkylineCapital-supa-crm.home-server-supa-crm.service`.
+The target pool uses disposable one-job KVM guests, with guest-local Docker and
+no host filesystem or Docker socket access. Source and operations are documented
+in [the CI VM runbook](ci-vms.md), with host values in
+[`hosts/server/ci-vms.json`](../hosts/server/ci-vms.json). Use the narrow
+`python3 scripts/configure-ci-vms.py` wrapper, not the full host playbook.
 
-Provision it explicitly from this checkout on the controller:
+Production status, October 22: the App-owned pool is active for the normal
+`home-server` queue, with **three slots, 8 GiB RAM and four virtual CPUs each**.
+The 24 GiB total guest allocation leaves nominal host memory headroom. All guests
+and the controller share the effective `machine.slice` CPUQuota=560% budget,
+equivalent to 70% of eight logical CPUs, with MemoryHigh=24G and MemoryMax=26G.
+This dedicated CI server's other libvirt guests would share that budget too.
+The controller checks actual QEMU thread placement and effective limits at launch.
 
-```bash
-python3 scripts/configure-github-runner.py --syntax-check
-python3 scripts/configure-github-runner.py
-```
+The final App-controlled acceptance batch passed seven jobs: three full frontend
+controls including browser contracts, three Gmail-panel jobs and one Go, Docker
+and Terraform job. It exercised three concurrent VMs, one-job recycling, automatic
+return to zero, forced controller restart recovery and guest file/network isolation.
+The supported host kernel was booted successfully with the lid closed. The original
+two host-account runners were disabled and deregistered; their dedicated account,
+workspaces and caches were removed with a root-only hash audit. No host runner
+with root-equivalent Docker access remains from this setup.
 
-The wrapper uses the current pinned Nixpkgs Ansible package, the authenticated
-`gh` CLI, and strict direct SSH. It gets an expiring repository registration
-token into memory, passes it through the environment to a `no_log` registration
-task, and keeps it out of arguments, Git and inventory files. GitHub's resulting
-provider-managed credential files live only in the runner directory with mode
-0600. The initial official archive version and SHA256 are pinned in
-[`hosts/server/github-runner.json`](../hosts/server/github-runner.json); the
-provider's normal runner auto-updater remains enabled.
+Earlier exploration passed twelve jobs at two 8 GiB guests and eight jobs at four
+6 GiB guests. Four 4 GiB guests failed all six heavy frontend controls. Recycled
+QEMU scopes in those earlier batches bypassed the intended custom slice, so those
+results cannot establish throughput under a consistent 70% CPU cap. The corrected
+three-VM batch passed under the verified effective parent-slice limit. It is a
+practical tested limit, not proof of an absolute optimum. No further sizing tests
+were run after the owner's final two-test allowance.
 
-[`ansible/github-runner.yml`](../ansible/github-runner.yml) is a narrow playbook
-for this enrolled Tailscale device ID. It does not run the full Ubuntu host
-configuration or create `/etc/spawnkit/enabled`. It provisions the existing Mint
-host, the non-sudo `github-runner` account, and the official service. The account
-belongs to the Docker group because validation workflows build containers;
-Docker access permits privileged host operations. Jobs run from
-`/opt/actions-runner/supa-crm`, with tool downloads in
-`/var/cache/github-actions/toolcache` and account state in
-`/var/lib/github-runner`.
+Corrected-batch total host CPU peaked at about 76%, including overhead outside
+the VM group. Temperature reached 100 C and hardware thermal throttling was
+observed. CPU quota does not establish cool operation. At an empty queue there
+are zero guest VMs, with the lightweight polling controller remaining active.
 
-Chromium's system libraries are installed through APT so browser jobs do not need
-sudo. The role also refreshes Google's official signing key, whose newer Chrome
-subkey was absent from this old installation. Timeshift scheduling is
-disabled at the owner's request, and existing snapshots were deleted. The runner
-workspace, cache and account state are excluded if snapshots are created manually.
+Validation workflow routing was promoted separately to dev through
+[PR 953](https://github.com/SkylineCapital/supa-crm/pull/953) and
+[PR 955](https://github.com/SkylineCapital/supa-crm/pull/955), and master through
+[PR 956](https://github.com/SkylineCapital/supa-crm/pull/956) and
+[PR 959](https://github.com/SkylineCapital/supa-crm/pull/959). Existing workflow
+labels let the VM pool serve both branches without merging unrelated dev changes.
 
-Validation workflow routing is merged separately into `dev` through
-[Supa-CRM PR 953](https://github.com/SkylineCapital/supa-crm/pull/953) and `master`
-through [PR 956](https://github.com/SkylineCapital/supa-crm/pull/956). The repository
-Actions variable `CI_RUNNER=github-hosted` switches new
-validation runs to GitHub-hosted Ubuntu if the home server is unavailable;
-`CI_RUNNER=home-server` restores the default home runner. Cancel and rerun jobs
-that were already queued before changing the variable. This is manual failover,
-not an automatic health check. Deployments, publishing, infrastructure apply and
-authenticated remote smoke workflows retain their GitHub-hosted routing.
+`CI_RUNNER=github-hosted` is the manual failover for new validation runs;
+`CI_RUNNER=home-server` restores the normal home pool. Already queued assignments
+need cancellation and rerun. This switch passed in both directions earlier that
+day, but GitHub later rejected hosted jobs because payments had failed or spending
+limits needed increasing. Hosted failover depends on resolving that billing
+restriction. No billing settings were changed. Deployments, publishing and remote
+smoke workflows retain their existing hosted routing.
 
-The manual switch passed acceptance in both directions earlier on October 22.
-Later that day GitHub rejected hosted jobs because account payments had failed
-or the spending limit needed increasing. Hosted failover currently depends on
-resolving that account billing restriction; changing the routing variable alone
-cannot bypass it. The final live setting is `CI_RUNNER=home-server`.
-
-October 22 live acceptance: the runner is online and boot-enabled. Its first
-[status-monitor validation job](https://github.com/SkylineCapital/supa-crm/actions/runs/39776879722/job/119817960145)
-completed successfully on `home-server-supa-crm`, including Go setup/tests/vet,
-a Docker image build, Terraform setup/validation and runtime Terraform tests.
-A full physical reboot has not been exercised. Provider credentials are mode
-0600, and the CI account cannot use sudo.
-
-The desktop still starts through `graphical.target` and LightDM. Its clipboard
-monitor and Xorg are the largest persistent CPU consumers observed. Headless
-operation is the next useful reduction, but stopping LightDM logs out the
-existing desktop session. NFS has configured exports; inspect their purpose before disabling them.
-The NVIDIA driver's runtime D3 status is disabled on this older GPU, so do not
-claim it automatically powers off at idle.
-
-## Concurrent CI and resource budget
-
-The October 22 capacity test configured ten temporary workers and observed nine
-simultaneous jobs, near-full CPU use and CPU thermal throttling at 97-99 C, with
-more than 22 GiB of memory still available and no OOM events. Four heavy frontend
-jobs can already use most of the CPU. The conservative normal pool is two workers
-(rounding down 70% of a practical four-heavy-job ceiling), rather than treating
-available memory as permission to keep adding workers.
-
-`hosts/server/github-runner.json` declares the worker count and aggregate CPU
-quota. Each worker has a separate installation/workspace and `PLAYWRIGHT_PORT`
-(52001, 52002). The shared `githubrunner.slice` caps worker and Docker workload CPU
-time at 560%, equivalent to 70% of the host's eight logical CPUs. This is one
-aggregate budget, not 560% per worker. A 24 GiB memory high-water mark requests
-reclaim under pressure; it is not a hard per-job memory allocation.
-
-Docker's daemon and new containers share that slice. The role preserves existing
-Docker settings and requires running containers to be drained before restarting
-the daemon to move its cgroup. Apply worker service changes during an idle
-maintenance window. The worker-count limit bounds GitHub job intake; the kernel
-CPU quota throttles execution inside that budget. This is not a scheduler that
-predicts each job's future resource needs.
-
-Temporary workers use the distinct `home-server-benchmark` label. The manual
-frontend workflow can check any selected PR head without changing its branch;
-its CI harness comes from the workflow revision. The capacity test found and
-fixed a shared-port assumption in Playwright, so concurrent browser suites now
-bind separate loopback ports. See the task's capacity report for per-PR outcomes,
-raw metrics, and limits of the measurement. A full physical reboot remains untested.
-
-The provisioning wrapper temporarily removes the normal intake label, waits for
-active jobs to finish, applies the playbook, then restores intake. It also restores
-labels on ordinary errors. This drain was added after an initial live update
-restored intake too early and interrupted one check; that check was rerun. The
-drain's wait, error recovery, timeout and surplus-worker guard have regression
-coverage. When reducing an existing pool, retire surplus workers first; the
-wrapper refuses to leave extra workers running silently.
+The desktop still starts through `graphical.target` and LightDM. Clipboard
+monitoring and Xorg were the largest persistent CPU consumers observed. Stopping
+LightDM logs out the desktop session; full headless conversion has not been done.
+NFS exports are preserved. The older NVIDIA GPU's runtime D3 status was disabled,
+so automatic GPU power-off at idle has not been established.

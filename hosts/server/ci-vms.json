@@ -1,0 +1,24 @@
+{
+  "ci_repository": "SkylineCapital/supa-crm",
+  "ci_repository_id": 833336584,
+  "ci_device_id": "n4fDtMJMgv11CNTRL",
+  "ci_network": "spawnkit-ci",
+  "ci_bridge": "virbr-ci",
+  "ci_subnet": "192.168.251",
+  "ci_cpu_quota_percent": 560,
+  "ci_min_host_kernel": "5.15.0-198",
+  "ci_slots": 3,
+  "ci_guest_vcpus": 4,
+  "ci_guest_memory_mib": 8192,
+  "ci_guest_disk_gib": 40,
+  "ci_image_url": "https://cloud-images.ubuntu.com/noble/20261017/noble-server-cloudimg-amd64.img",
+  "ci_image_sha256": "04e8f2461a16a44e78a370284471f29616cdd9baf1893df25807b71f985b6c94",
+  "ci_runner_version": "2.337.0",
+  "ci_runner_sha256": "70920811a4f8ad4328818682bca5c6469c1c942fab52448868071d0063816613",
+  "ci_labels": [
+    "home-server",
+    "supa-crm"
+  ],
+  "ci_job_timeout_seconds": 7200,
+  "ci_idle_timeout_seconds": 1800
+}

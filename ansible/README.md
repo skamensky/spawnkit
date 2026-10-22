@@ -5,9 +5,9 @@ The controller is packaged by the root Nix flake; it does not install host daemo
 through Nix. The current WSL machine has not been applied or enrolled.
 
 The existing Mint home server has a separate, explicit
-[`github-runner.yml`](github-runner.yml) playbook for its repository-only CI
-account and service. Run it through `scripts/configure-github-runner.py`, as
-documented in [the home-server guide](../docs/home-server.md). It validates the
+[`ci-vms.yml`](ci-vms.yml) playbook for disposable repository-only CI virtual
+machines. Run it through `scripts/configure-ci-vms.py`, as
+documented in [the CI VM guide](../docs/ci-vms.md). It validates the
 Tailscale device identity and does not enroll the host into the full Ubuntu
 configuration below.
 

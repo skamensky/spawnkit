@@ -1,0 +1,197 @@
+---
+- name: Install current host virtualization tools
+  ansible.builtin.apt:
+    name:
+      - qemu-system-x86
+      - qemu-utils
+      - libvirt-daemon-system
+      - libvirt-clients
+      - cloud-image-utils
+      - python3-yaml
+      - python3-cryptography
+      - nftables
+    state: latest
+    update_cache: true
+    cache_valid_time: 3600
+    install_recommends: false
+    lock_timeout: 120
+
+- name: Enable libvirt
+  ansible.builtin.systemd_service:
+    name: libvirtd
+    enabled: true
+    state: started
+
+- name: Stage the supported host kernel security update
+  ansible.builtin.apt:
+    name: linux-generic
+    state: latest
+    lock_timeout: 120
+
+- name: Create host-only controller directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0700'
+  loop:
+    - /etc/spawnkit-ci
+    - /var/lib/spawnkit-ci
+    - /var/lib/spawnkit-ci/slots
+    - /var/log/spawnkit-ci
+
+- name: Create the image directory readable by confined QEMU
+  ansible.builtin.file:
+    path: /var/lib/libvirt/images/spawnkit-ci
+    state: directory
+    owner: root
+    group: libvirt-qemu
+    mode: '0750'
+
+- name: Download the checksum-pinned Ubuntu base
+  ansible.builtin.get_url:
+    url: "{{ ci_image_url }}"
+    dest: /var/lib/libvirt/images/spawnkit-ci/ubuntu-base.qcow2
+    checksum: "sha256:{{ ci_image_sha256 }}"
+    mode: '0644'
+
+- name: Persist controller configuration
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../hosts/server/ci-vms.json"
+    dest: /etc/spawnkit-ci/config.json
+    mode: '0600'
+
+- name: Create the dedicated CI host's machine budget drop-in directory
+  ansible.builtin.file:
+    path: /etc/systemd/system/machine.slice.d
+    state: directory
+    mode: '0755'
+
+- name: Define the aggregate VM resource budget
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/machine.slice.d/90-spawnkit-ci.conf
+    mode: '0644'
+    content: |
+      [Unit]
+      Description=Disposable GitHub CI virtual machines
+      [Slice]
+      CPUAccounting=yes
+      CPUQuota={{ ci_cpu_quota_percent }}%
+      MemoryAccounting=yes
+      MemoryHigh=24G
+      MemoryMax=26G
+
+- name: Activate the aggregate VM resource budget
+  ansible.builtin.systemd_service:
+    name: machine.slice
+    daemon_reload: true
+    state: started
+
+- name: Apply the same budget immediately to the active machine slice
+  ansible.builtin.command:
+    argv:
+      - systemctl
+      - set-property
+      - --runtime
+      - machine.slice
+      - "CPUQuota={{ ci_cpu_quota_percent }}%"
+      - MemoryHigh=24G
+      - MemoryMax=26G
+  changed_when: false
+
+- name: Define the private NAT network
+  ansible.builtin.copy:
+    dest: /etc/spawnkit-ci/network.xml
+    mode: '0600'
+    content: |
+      <network>
+        <name>{{ ci_network }}</name>
+        <forward mode='nat'/>
+        <bridge name='{{ ci_bridge }}' stp='on' delay='0'/>
+        <port isolated='yes'/>
+        <ip address='{{ ci_subnet }}.1' netmask='255.255.255.0'/>
+      </network>
+  register: ci_network_xml
+
+- name: Define the CI network in libvirt
+  ansible.builtin.command: virsh net-define /etc/spawnkit-ci/network.xml
+  when: ci_network_xml.changed
+
+- name: Read active network state
+  ansible.builtin.command: "virsh net-info {{ ci_network }}"
+  changed_when: false
+  register: ci_network_state
+
+- name: Start the CI network
+  ansible.builtin.command: "virsh net-start {{ ci_network }}"
+  when: "'Active:         yes' not in ci_network_state.stdout"
+
+- name: Enable network startup
+  ansible.builtin.command: "virsh net-autostart {{ ci_network }}"
+  changed_when: "'Autostart:      yes' not in ci_network_state.stdout"
+
+- name: Install the host-owned VM controller
+  ansible.builtin.copy:
+    src: "{{ item.src }}"
+    dest: "{{ item.dest }}"
+    owner: root
+    group: root
+    mode: '0700'
+  loop:
+    - {src: ci-vm.py, dest: /usr/local/sbin/spawnkit-ci-vm}
+    - {src: ci-firewall.py, dest: /usr/local/sbin/spawnkit-ci-firewall}
+  notify: Restart CI firewall
+
+- name: Install the CI firewall service
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/spawnkit-ci-firewall.service
+    mode: '0644'
+    content: |
+      [Unit]
+      Description=Restrict disposable CI guest networking
+      After=network-online.target libvirtd.service
+      Before=spawnkit-ci-pool.service
+      Requires=libvirtd.service
+      [Service]
+      Type=oneshot
+      ExecStart=/usr/local/sbin/spawnkit-ci-firewall
+      RemainAfterExit=yes
+      [Install]
+      WantedBy=multi-user.target
+  notify: Restart CI firewall
+
+- name: Activate the CI bridge firewall
+  ansible.builtin.systemd_service:
+    name: spawnkit-ci-firewall
+    daemon_reload: true
+    enabled: true
+    state: started
+
+- name: Install the ephemeral pool service
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/spawnkit-ci-pool.service
+    mode: '0644'
+    content: |
+      [Unit]
+      Description=Disposable one-job GitHub runner VMs
+      Requires=libvirtd.service spawnkit-ci-firewall.service
+      After=network-online.target libvirtd.service spawnkit-ci-firewall.service
+      ConditionPathExists=/etc/spawnkit-ci/github-app.json
+      ConditionPathExists=/etc/spawnkit-ci/github-app.pem
+      ConditionPathExists=/var/lib/libvirt/images/spawnkit-ci/runner-base.qcow2
+      [Service]
+      ExecStart=/usr/local/sbin/spawnkit-ci-vm serve
+      Slice=machine.slice
+      Restart=on-failure
+      RestartSec=30
+      TimeoutStopSec=7500
+      UMask=0077
+      [Install]
+      WantedBy=multi-user.target
+
+- name: Persist pool startup without starting jobs during provisioning
+  ansible.builtin.systemd_service:
+    name: spawnkit-ci-pool
+    daemon_reload: true
+    enabled: true

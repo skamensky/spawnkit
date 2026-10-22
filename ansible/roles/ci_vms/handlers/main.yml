@@ -1,0 +1,6 @@
+---
+- name: Restart CI firewall
+  ansible.builtin.systemd_service:
+    name: spawnkit-ci-firewall
+    daemon_reload: true
+    state: restarted
