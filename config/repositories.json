@@ -15,7 +15,7 @@
     "path": "skamensky/google-automation",
     "url": "git@github.com:skamensky/google-automation.git",
     "branch": "master",
-    "revision": "459a11a98588bc931df1637601e28c34b2f6eb20"
+    "revision": "09bd2fc36b3c726f4532eceb9fa0e6af9ac43621"
   },
   "personal-supabase": {
     "path": "skamensky/personal-supabase",

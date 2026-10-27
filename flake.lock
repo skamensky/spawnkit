@@ -62,11 +62,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1792184324,
-        "narHash": "sha256-llwq0+5FDNsOEcjYsKskzDqvhJlHbg1RYxbGKXWS4hk=",
+        "lastModified": 1793092422,
+        "narHash": "sha256-5gbllxxR4hbfOMFTTYVZ3HKv5Tbl8/GSaKSb/J13TcM=",
         "owner": "skamensky",
         "repo": "google-automation",
-        "rev": "459a11a98588bc931df1637601e28c34b2f6eb20",
+        "rev": "09bd2fc36b3c726f4532eceb9fa0e6af9ac43621",
         "type": "github"
       },
       "original": {
