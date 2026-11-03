@@ -39,7 +39,10 @@
         copyq
         (if config.personal.desktop.session == "x11" then xclip else wl-clipboard)
       ]
-      ++ lib.optionals pkgs.stdenv.hostPlatform.isx86_64 [ google-chrome ];
+      ++ lib.optionals pkgs.stdenv.hostPlatform.isx86_64 [
+        # Linux Chrome lists the Vulkan adapters but hands WebGPU none without this.
+        (google-chrome.override { commandLineArgs = "--enable-features=Vulkan"; })
+      ];
     xdg.mimeApps.enable = true;
     systemd.user.services.copyq = {
       Unit = {
