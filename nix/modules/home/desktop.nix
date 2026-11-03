@@ -8,6 +8,15 @@
 {
   options.personal.desktop = {
     enable = lib.mkEnableOption "laptop GUI applications and host graphics integration";
+    # Match the host's GDM pin (desktop_session in hosts/<profile>/system.yml).
+    session = lib.mkOption {
+      type = lib.types.enum [
+        "wayland"
+        "x11"
+      ];
+      default = "wayland";
+      description = "Graphical session type; selects the clipboard tools.";
+    };
     nvidia = lib.mkOption {
       default = null;
       type = lib.types.nullOr (
@@ -28,7 +37,7 @@
         firefox
         vscode
         copyq
-        wl-clipboard
+        (if config.personal.desktop.session == "x11" then xclip else wl-clipboard)
       ]
       ++ lib.optionals pkgs.stdenv.hostPlatform.isx86_64 [ google-chrome ];
     xdg.mimeApps.enable = true;

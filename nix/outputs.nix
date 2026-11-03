@@ -18,6 +18,8 @@ let
     import nixpkgs {
       inherit system;
       config.allowUnfree = true;
+      # Shmuel accepted the NVIDIA driver license (2026-11-03) for the host GPU libraries.
+      config.nvidia.acceptLicense = true;
     };
   modulesFor =
     profile:

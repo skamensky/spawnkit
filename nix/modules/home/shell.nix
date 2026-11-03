@@ -51,7 +51,12 @@
       unbind -T copy-mode-vi MouseDragEnd1Pane
       unbind -T copy-mode MouseDragEnd1Pane
       bind-key -T copy-mode-vi y send-keys -X copy-pipe-and-cancel "${
-        if config.personal.environment == "wsl" then "clip.exe" else "${pkgs.wl-clipboard}/bin/wl-copy"
+        if config.personal.environment == "wsl" then
+          "clip.exe"
+        else if config.personal.desktop.session == "x11" then
+          "${pkgs.xclip}/bin/xclip -selection clipboard"
+        else
+          "${pkgs.wl-clipboard}/bin/wl-copy"
       }"
       bind-key j display-popup -E "tmux list-windows -F '#{window_index}: #{window_name}' | fzf --reverse | cut -d: -f1 | xargs -I {} tmux select-window -t {}"
     '';

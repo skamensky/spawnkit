@@ -426,7 +426,7 @@ Home Manager module, build/check the flake, then commit and push.
 ### D3. Graphics, assistants and language tools
 
 - The native laptop profile declares Firefox, Chrome on x86_64, VS Code, CopyQ,
-  wl-clipboard and a CopyQ user service (Solaar is an Ubuntu package because it
+  xclip (wl-clipboard when `personal.desktop.session` is wayland) and a CopyQ user service (Solaar is an Ubuntu package because it
   needs system udev rules). It uses Home Manager's
   `/run/opengl-driver` integration, so individual GUI packages do not need nixGL
   wrappers. Follow the activation warning's exact sudo setup command.
