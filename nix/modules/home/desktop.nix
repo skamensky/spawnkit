@@ -43,7 +43,18 @@
         # Linux Chrome lists the Vulkan adapters but hands WebGPU none without this.
         (google-chrome.override { commandLineArgs = "--enable-features=Vulkan"; })
       ];
-    xdg.mimeApps.enable = true;
+    xdg.mimeApps = {
+      enable = true;
+      defaultApplications = lib.mkIf pkgs.stdenv.hostPlatform.isx86_64 (
+        lib.genAttrs [
+          "text/html"
+          "x-scheme-handler/http"
+          "x-scheme-handler/https"
+          "x-scheme-handler/about"
+          "x-scheme-handler/unknown"
+        ] (_: "google-chrome.desktop")
+      );
+    };
     systemd.user.services.copyq = {
       Unit = {
         Description = "CopyQ clipboard history";
