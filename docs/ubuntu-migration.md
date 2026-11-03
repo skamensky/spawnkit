@@ -578,13 +578,12 @@ What it does:
 ---
 
 ## Phase F — Decommission (only on Shmuel's explicit go-ahead, weeks later)
-- After about a month without needing Windows: Shmuel decides whether to delete C: and the recovery partition, and to grow p5.
-- **Reclaim the dual-boot Windows partition (to-do).** The Windows VM (`docs/windows-vm.md`) replaces dual boot, so C: (`nvme0n1p3`, 470 GiB NTFS) can go. Layout: p1 EFI 0.25 GiB, p2 MSR, p3 C: 0.27–471 GiB, p5 Linux ext4 471–952 GiB, p4 WinRE 1.95 GiB at the end.
+- **Shrink the dual-boot Windows partition (to-do).** Keep the native Windows install: it's a licensed copy. Strip its data and leave it about 15 GiB of free space for an occasional login. Daily Windows use goes through the VM (`docs/windows-vm.md`). Layout: p1 EFI 0.25 GiB, p2 MSR, p3 C: 0.27–471 GiB, p5 Linux ext4 471–952 GiB, p4 WinRE 1.95 GiB at the end.
   1. Confirm with Shmuel that nothing on C: is still needed (C5 copied the Windows data). Archive or release the `ext4.vhdx` there first (next bullet).
-  2. Choose: delete C: entirely, or shrink it to a minimal bootable Windows as a fallback (about 40–60 GiB, shrunk from Windows itself or with `ntfsresize`).
-  3. The freed space sits *before* p5. ext4 grows only at its end, so growing `/` means moving p5's start. That needs a live USB and GParted, with p5 unmounted, and takes hours for about 150 GiB of data. Back up first. The alternative: put the freed space in a new partition, mounted for example at `/data` or used as a libvirt image pool, with no move.
-  4. If C: is deleted: remove the Windows Boot Manager EFI entry (`efibootmgr`) and its files in the ESP. Keep or drop p2 (MSR) and p4 (WinRE) with it. Do not touch the ESP's Ubuntu files.
-  5. Record the result in `MIGRATION-LOG.md`.
+  2. Boot native Windows once. Delete user data, the WSL distribution and large apps. Run Disk Cleanup, including system files. Turn off hibernation (`powercfg /h off`), and temporarily turn off the page file and System Restore so their files don't block shrinking.
+  3. Shrink C: in Disk Management to its used size plus about 15 GiB, then turn the page file back on. If Windows refuses because of unmovable files, run `ntfsresize` from Linux with C: unmounted, then shrink p3 with `parted`. Keep p2, p4 and the Windows Boot Manager EFI entry.
+  4. The freed space sits *before* p5. ext4 grows only at its end, so growing `/` means moving p5's start. That needs a live USB and GParted, with p5 unmounted, and takes hours for about 150 GiB of data. Back up first. The alternative: put the freed space in a new partition, mounted for example at `/data` or used as a libvirt image pool, with no move.
+  5. Check that Windows still boots from the firmware boot menu, then record the result in `MIGRATION-LOG.md`.
 - Before that, the 313 GB `ext4.vhdx` is the last full copy of the WSL world. Ask whether to archive it (external drive) or let it go.
 - Then apply the generated-run retention policy to `~/.codex/sessions` and `~/tmp`.
 
