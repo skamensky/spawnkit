@@ -15,12 +15,14 @@
       spawnkit-windows = {
         name = "Windows (Looking Glass)";
         exec = "host-config vm-view --notify";
+        icon = "computer";
         terminal = false;
         categories = [ "System" ];
       };
       spawnkit-windows-console = {
         name = "Windows installation console";
         exec = "host-config vm-console --notify";
+        icon = "utilities-terminal";
         terminal = false;
         categories = [ "System" ];
       };
