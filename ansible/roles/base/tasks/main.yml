@@ -31,28 +31,6 @@
     state: "{{ 'present' if cfg.desktop_session == 'x11' else 'absent' }}"
     backup: true
   when: cfg.desktop_session != ''
-# Xorg opens every seat0 DRM device through logind at startup, even ones it does not use
-# (AutoAddGPU off still leaves the RTX open), and that blocks the Windows handoff. Moving
-# the handoff GPU's DRM nodes to a seat with no master device hides them from Xorg, logind
-# and session ACLs: RTX-wired outputs and render offload go away on Linux; CUDA uses
-# /dev/nvidia* and is unaffected. Sorts after systemd's 71-seat.rules; applies on the
-# device's next udev event (boot).
-- name: Keep the desktop seat off the handoff GPU
-  ansible.builtin.copy:
-    dest: /etc/udev/rules.d/72-spawnkit-gpu-handoff.rules
-    owner: root
-    group: root
-    mode: '0644'
-    content: |
-      {% for device in cfg.gpu_devices if device.driver == 'nvidia' %}
-      SUBSYSTEM=="drm", KERNELS=="{{ device.address }}", ENV{ID_SEAT}="spawnkit-gpu-handoff", TAG-="master-of-seat"
-      {% endfor %}
-  when: cfg.gpu_handoff
-- name: Return handoff GPUs to the desktop seat
-  ansible.builtin.file:
-    path: /etc/udev/rules.d/72-spawnkit-gpu-handoff.rules
-    state: absent
-  when: not cfg.gpu_handoff
 - name: Create root-owned Spawnkit configuration directory
   ansible.builtin.file:
     path: /etc/spawnkit

@@ -16,6 +16,9 @@ from spawnkit_host import inventory, load_config, read_overrides, render_windows
 
 
 GPU_RESERVATION = Path("/run/spawnkit/gpu-owner.json")
+GUARD = "/usr/local/libexec/spawnkit/gpu-guard.py"
+# Seconds a deferred start waits for the desktop session to release the RTX.
+LOGOUT_TIMEOUT = 900
 
 
 def run(args, **kwargs):
@@ -41,6 +44,35 @@ def wait_for_gpu_return(name, timeout):
     if state != "shut off":
         raise ValueError(f"Windows is still {state} after {timeout}s; finish shutdown inside the guest (no forced power-off was sent)")
     raise ValueError("Windows is off but the GPU return was not verified; run host-config gpu-status, then gpu-guard.py reclaim once the Linux drivers are bound")
+
+
+def start_windows(name, notify):
+    """Detach the RTX from the desktop, then start Windows now or once its holders exit.
+
+    Returns False when the start waits for the user to log out.
+    """
+    held = json.loads(subprocess.check_output(["sudo", "/usr/bin/python3", GUARD, "detach-desktop"], text=True))
+    if not held:
+        try:
+            run(["/usr/bin/virsh", "-c", "qemu:///system", "start", name], capture_output=True, text=True)
+        except subprocess.CalledProcessError:
+            run(["sudo", "/usr/bin/python3", GUARD, "attach-desktop"])
+            raise
+        return True
+    # A root unit survives logout; a failed start returns the RTX to the desktop seat.
+    script = (f"/usr/bin/python3 {GUARD} await-idle {LOGOUT_TIMEOUT} && "
+              f"/usr/bin/virsh -c qemu:///system start {name} || "
+              f"{{ /usr/bin/python3 {GUARD} attach-desktop; exit 1; }}")
+    run(["sudo", "systemd-run", "--unit=spawnkit-windows-handoff", "--collect",
+         "--description=Start Windows once the desktop releases the RTX", "/bin/sh", "-c", script])
+    names = ", ".join(sorted({h["name"] for h in held}))
+    message = (f"The RTX is still open by: {names}. Log out now; Windows starts once they exit "
+               f"(limit {LOGOUT_TIMEOUT // 60} min). Log back in and open Windows (Looking Glass). "
+               "Progress: journalctl -u spawnkit-windows-handoff")
+    print(message)
+    if notify and shutil.which("notify-send"):
+        subprocess.run(["notify-send", "Spawnkit Windows VM", message], check=False)
+    return False
 
 
 def main():
@@ -111,7 +143,8 @@ def main():
                 info = subprocess.check_output(['/usr/bin/virsh', '-c', 'qemu:///system', 'net-info', network], text=True, env=os.environ | {'LC_ALL': 'C'})
                 if not any(line.split(':', 1)[0].strip() == 'Active' and line.split(':', 1)[1].strip() == 'yes' for line in info.splitlines()):
                     run(['/usr/bin/virsh', '-c', 'qemu:///system', 'net-start', network])
-                run(["/usr/bin/virsh", "-c", "qemu:///system", "start", name], capture_output=True, text=True)
+                if not start_windows(name, args.notify):
+                    return
             elif state != "running":
                 raise ValueError(f"VM is {state}; inspect it explicitly rather than forcing a reset")
             if args.action == "vm-view":

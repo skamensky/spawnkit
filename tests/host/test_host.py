@@ -237,9 +237,35 @@ class GPUHandoff(unittest.TestCase):
             state = Path(directory) / 'owner.json'
             state.write_text(json.dumps({'uuid': cfg['windows_uuid']}))
             slow = [subprocess.CalledProcessError(9, 'nvidia-smi'), subprocess.CompletedProcess([], 0)]
-            with patch.object(guard, 'inspect_devices', return_value=[]), patch.object(guard.subprocess, 'run', side_effect=slow):
+            with patch.object(guard, 'inspect_devices', return_value=[]), patch.object(guard.subprocess, 'run', side_effect=slow), \
+                    patch.object(guard, 'desktop_seat') as seat:
                 guard.release(cfg, state=state, delay=0)
             self.assertFalse(state.exists())
+            seat.assert_called_once_with(cfg, True, guard.SYSFS)
+
+    def test_detached_seat_rule_covers_only_the_nvidia_function_and_is_removed_on_attach(self):
+        cfg = gpu_config()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            rule = root / 'rules.d/72-spawnkit-gpu-handoff.rules'
+            drm = root / cfg['gpu_devices'][0]['address'] / 'drm/card9'
+            drm.mkdir(parents=True)
+            with patch.object(guard.subprocess, 'run') as run:
+                guard.desktop_seat(cfg, False, sysfs=root, rule=rule)
+                lines = rule.read_text().splitlines()
+                self.assertEqual(len(lines), sum(d['driver'] == 'nvidia' for d in cfg['gpu_devices']))
+                self.assertIn('ENV{ID_SEAT}="spawnkit-gpu-handoff"', lines[0])
+                self.assertIn(str(drm), run.call_args.args[0])
+                guard.desktop_seat(cfg, True, sysfs=root, rule=rule)
+            self.assertFalse(rule.exists())
+
+    def test_awaiting_holders_returns_the_gpu_to_the_desktop_on_timeout(self):
+        cfg = gpu_config()
+        with patch.object(guard, 'inspect_devices', return_value=['/dev/fake']), \
+                patch.object(guard, 'users', return_value=[os.getpid()]), patch.object(guard, 'desktop_seat') as seat:
+            with self.assertRaisesRegex(RuntimeError, 'GPU busy'):
+                guard.await_idle(cfg, 0, delay=0)
+        seat.assert_called_once_with(cfg, True)
 
     def test_known_desktop_holders_get_specific_advice(self):
         with patch.object(guard, 'users', return_value=[os.getpid()]), \

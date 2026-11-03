@@ -124,8 +124,14 @@ drivers and `nvidia-smi -L`. It never forces power-off; on timeout it reports
 which of the two did not happen. A Windows installer without guest power handling
 may need shutdown from inside Windows.
 
-1. The launcher starts the dedicated NAT network if needed, then asks libvirt to
-   start the domain. It never applies Ansible implicitly.
+1. The launcher starts the dedicated NAT network if needed and detaches the RTX
+   from the desktop seat (`gpu-guard.py detach-desktop`, a runtime udev rule under
+   `/run`). If nothing still holds the RTX it asks libvirt to start the domain.
+   Otherwise it schedules the root unit `spawnkit-windows-handoff`, which waits up
+   to 15 minutes for the holders to exit (normally: you log out, which ends Xorg
+   and the session's apps), then starts Windows; log back in and open Looking
+   Glass. A timeout or failed start returns the RTX to the desktop seat. It never
+   applies Ansible implicitly.
 2. The root `prepare begin` hook validates the actual domain UUID/PCI functions,
    requires `managed='yes'`, checks IOMMU isolation and original drivers, and
    checks GPU/DRM/audio device users with `fuser`.
@@ -168,12 +174,14 @@ in the migration log.
   console access first.
   Under Xorg, Ubuntu's PRIME on-demand config adds the RTX as a GPU screen, and
   Xorg opens every seat0 DRM device through logind even with `AutoAddGPU off`
-  (measured 2026-11-03: Xorg still held `/dev/dri/card2`). With `gpu_handoff`
-  enabled, the base role's udev rule moves the RTX's DRM nodes to a seat with no
-  master device, so neither Xorg nor session ACLs reach them. It applies at
-  boot. The cost is no RTX-wired outputs and no render offload on Linux; CUDA
-  still works. Apps that load NVIDIA's EGL/Vulkan drivers can still hold
-  `/dev/nvidiactl`, and the handoff guard names them.
+  (measured 2026-11-03: Xorg still held `/dev/dri/card2`), keeping it until the
+  session ends. The Linux desktop therefore owns the RTX by default (render
+  offload, RTX-wired outputs, CUDA), and starting Windows from a running X
+  session means logging out once: the launcher moves the RTX's DRM nodes to a
+  seat with no master device, so the next greeter/session and its ACLs never
+  reach it. The release hook moves them back after verifying the GPU return;
+  CUDA is available at once, and the X session regains render offload at the
+  next login. The rule lives in `/run`, so a reboot also returns the RTX.
 
 - **Display wiring.** On many Legion models the HDMI port is wired to the RTX
   and the internal panel to Intel (or a MUX switches it). A monitor on an RTX

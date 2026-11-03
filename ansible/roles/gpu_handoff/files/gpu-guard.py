@@ -11,12 +11,14 @@ import xml.etree.ElementTree as ET
 SYSFS = Path('/sys/bus/pci/devices')
 STATE = Path('/run/spawnkit/gpu-owner.json')
 CONFIG = Path('/etc/spawnkit/windows.json')
+# Runtime-only (cleared at boot), so the Linux desktop owns the RTX by default.
+SEAT_RULE = Path('/run/udev/rules.d/72-spawnkit-gpu-handoff.rules')
 # Holders that are not ordinary GPU jobs get specific advice instead of a bare PID.
 ADVICE = {
     'gnome-shell': 'the desktop compositor opened the RTX; drive all Linux displays from the Intel iGPU '
                    '(dGPU-wired outputs cannot stay in use) and log out/in, see docs/windows-vm.md',
     'Xwayland': 'Xwayland opened the RTX (usually a PRIME-offloaded X11 app); close it or log out/in',
-    'Xorg': 'an X server opened the RTX; use PRIME on-demand and an iGPU-only session',
+    'Xorg': 'the X session uses the RTX; host-config vm-start detaches it and starts Windows after you log out',
     'nvidia-persistenced': 'run: sudo systemctl stop nvidia-persistenced (disable it to make this permanent)',
     'nvidia-powerd': 'run: sudo systemctl stop nvidia-powerd',
 }
@@ -81,6 +83,47 @@ def inspect_devices(cfg, sysfs=SYSFS):
     return sorted(n for n in nodes if Path(n).exists())
 
 
+def desktop_seat(cfg, attached, sysfs=SYSFS, rule=SEAT_RULE):
+    """Attach the handoff GPU to the desktop seat or move it to a seat with no master device.
+
+    Xorg opens every seat0 DRM device through logind at startup and keeps it until the
+    session ends. A detached GPU is hidden from new display servers, logind and session
+    ACLs; already open descriptors stay until their owners exit (logout).
+    """
+    if attached:
+        rule.unlink(missing_ok=True)
+    else:
+        rule.parent.mkdir(parents=True, exist_ok=True)
+        rule.write_text(''.join(
+            f'SUBSYSTEM=="drm", KERNELS=="{d["address"]}", ENV{{ID_SEAT}}="spawnkit-gpu-handoff", TAG-="master-of-seat"\n'
+            for d in cfg['gpu_devices'] if d['driver'] == 'nvidia'))
+    nodes = [str(n) for d in cfg['gpu_devices'] for n in (sysfs / d['address'] / 'drm').glob('*')]
+    subprocess.run(['/usr/bin/udevadm', 'control', '--reload'], check=True, timeout=30)
+    if nodes:
+        subprocess.run(['/usr/bin/udevadm', 'trigger', '--action=change', '--settle', *nodes], check=True, timeout=60)
+
+
+def holders(nodes):
+    descriptions = []
+    for pid in users(nodes):
+        try:
+            name = Path(f'/proc/{pid}/comm').read_text().strip()
+        except OSError:
+            name = 'exited'
+        descriptions.append({'pid': pid, 'name': name})
+    return descriptions
+
+
+def await_idle(cfg, timeout, delay=2):
+    """Wait for the detached GPU's remaining holders to exit; reattach on timeout."""
+    deadline = time.monotonic() + timeout
+    while holders(inspect_devices(cfg)):
+        if time.monotonic() > deadline:
+            desktop_seat(cfg, True)
+            require_idle(inspect_devices(cfg))
+        time.sleep(delay)
+
+
 def users(nodes):
     if not nodes:
         return []
@@ -91,16 +134,12 @@ def users(nodes):
 
 
 def require_idle(nodes):
-    pids = users(nodes)
-    if pids:
+    found = holders(nodes)
+    if found:
         descriptions = []
-        for pid in pids:
-            try:
-                name = Path(f'/proc/{pid}/comm').read_text().strip()
-            except OSError:
-                name = 'exited'
-            hint = ADVICE.get(name)
-            descriptions.append(f'{pid} ({name}' + (f': {hint})' if hint else ')'))
+        for holder in found:
+            hint = ADVICE.get(holder['name'])
+            descriptions.append(f'{holder["pid"]} ({holder["name"]}' + (f': {hint})' if hint else ')'))
         raise RuntimeError('GPU busy; nothing was stopped. Close GPU jobs/containers/apps or explicitly stop '
                            'the owning service: ' + ', '.join(descriptions))
 
@@ -148,6 +187,7 @@ def release(cfg, state=STATE, sysfs=SYSFS, attempts=5, delay=2):
                 raise
             time.sleep(delay)
     state.unlink()
+    desktop_seat(cfg, True, sysfs)
 
 
 def main():
@@ -163,6 +203,16 @@ def main():
             devices.append(expected | {'current_driver': driver.resolve().name if driver.exists() else None})
         print(json.dumps({'reservation': json.loads(STATE.read_text()) if STATE.exists() else None,
                           'devices': devices}, indent=2))
+        return
+    if sys.argv[1:] == ['detach-desktop']:
+        desktop_seat(cfg, False)
+        print(json.dumps(holders(inspect_devices(cfg))))
+        return
+    if sys.argv[1:] == ['attach-desktop']:
+        desktop_seat(cfg, True)
+        return
+    if sys.argv[1:2] == ['await-idle']:
+        await_idle(cfg, int(sys.argv[2]))
         return
     if sys.argv[1:] == ['reclaim']:
         # Manual recovery: clears a stale reservation only after verifying the GPU is back on Linux.
