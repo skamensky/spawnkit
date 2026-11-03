@@ -92,6 +92,17 @@ in
       recursive = true;
     };
     dconf.settings."org/gnome/shell".enabled-extensions = [ quietAttentionUuid ];
+    # Flameshot replaces GNOME's screenshot tool on Print (X11 session).
+    services.flameshot.enable = true;
+    dconf.settings."org/gnome/shell/keybindings".show-screenshot-ui = [ ];
+    dconf.settings."org/gnome/settings-daemon/plugins/media-keys".custom-keybindings = [
+      "/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/flameshot/"
+    ];
+    dconf.settings."org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/flameshot" = {
+      name = "Flameshot";
+      command = "${pkgs.flameshot}/bin/flameshot gui";
+      binding = "Print";
+    };
     xdg.mimeApps = {
       enable = true;
       defaultApplications = lib.mkIf pkgs.stdenv.hostPlatform.isx86_64 (
