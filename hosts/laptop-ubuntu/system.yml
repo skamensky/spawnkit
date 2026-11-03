@@ -21,8 +21,8 @@ ssh_listen_addresses: [100.86.106.55]
 # Native facts 2026-11-03: the RTX and its audio function are alone in IOMMU group 13;
 # the internal panel is on the Intel iGPU. With the X11 pin, Xorg is kept off the RTX.
 gpu_handoff: true
-# Needs a licensed Windows ISO and the VirtIO ISO staged first (docs/windows-vm.md section 2).
-windows_vm: false
+# Pass the staged Windows and VirtIO ISOs to vm-define (docs/windows-vm.md section 2).
+windows_vm: true
 gpu_devices:
   - {address: "0000:01:00.0", driver: nvidia}
   - {address: "0000:01:00.1", driver: snd_hda_intel}
