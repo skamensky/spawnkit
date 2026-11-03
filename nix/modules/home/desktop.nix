@@ -43,6 +43,11 @@
         # Linux Chrome lists the Vulkan adapters but hands WebGPU none without this.
         (google-chrome.override { commandLineArgs = "--enable-features=Vulkan"; })
       ];
+    # English and Hebrew keyboard layouts; GNOME switches with Super+Space.
+    dconf.settings."org/gnome/desktop/input-sources".sources = [
+      (lib.hm.gvariant.mkTuple [ "xkb" "us" ])
+      (lib.hm.gvariant.mkTuple [ "xkb" "il" ])
+    ];
     xdg.mimeApps = {
       enable = true;
       defaultApplications = lib.mkIf pkgs.stdenv.hostPlatform.isx86_64 (

@@ -13,7 +13,7 @@ virtualization: true
 iommu: true
 # Solaar needs Ubuntu's udev rules for Logitech receiver access; cmake and ninja join the
 # Ubuntu build toolchain so they find system libraries.
-host_packages: [solaar, cmake, ninja-build]
+host_packages: [solaar, cmake, ninja-build, language-pack-he, language-pack-gnome-he, hunspell-he, culmus]
 webex: true
 nix_chrome: true
 # Same tailnet identity and listener as the WSL node (migration C4); key-only.
