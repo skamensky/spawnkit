@@ -16,6 +16,8 @@ gpu_handoff: false
 windows_vm: false
 # Cisco Webex .deb (installed once; it self-updates) plus its AppArmor userns exception.
 webex: false
+# AppArmor userns exception for Home Manager's Chrome (desktop hosts on Ubuntu 24.04+).
+nix_chrome: false
 nvidia_driver_package: ""
 # Hybrid laptops: "on-demand" keeps the desktop on the iGPU. Empty leaves PRIME alone.
 nvidia_prime: ""

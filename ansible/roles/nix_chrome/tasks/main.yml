@@ -1,0 +1,9 @@
+---
+- name: Allow Home Manager's Chrome sandbox to create user namespaces
+  ansible.builtin.copy:
+    src: nix-chrome.apparmor
+    dest: /etc/apparmor.d/nix-chrome
+    owner: root
+    group: root
+    mode: '0644'
+  notify: Load Nix Chrome AppArmor profile

@@ -1,0 +1,11 @@
+# Ubuntu 24.04 restricts unprivileged user namespaces. Ubuntu's chrome profile only
+# covers /opt/google/chrome, so Home Manager's Chrome falls back to the SUID sandbox,
+# which cannot be setuid inside the read-only Nix store, and aborts at launch.
+abi <abi/4.0>,
+include <tunables/global>
+
+profile nix-chrome /nix/store/*-google-chrome-*/share/google/chrome/chrome flags=(unconfined) {
+  userns,
+
+  include if exists <local/nix-chrome>
+}
