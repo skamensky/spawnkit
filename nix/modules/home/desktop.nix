@@ -5,6 +5,43 @@
   isNixOS ? false,
   ...
 }:
+let
+  quietAttentionUuid = "quiet-window-attention@spawnkit";
+  # GNOME's WindowAttentionHandler binds its display signals in its constructor,
+  # so disconnect them while enabled and reconnect the stock handler on disable.
+  quietAttentionExtension = pkgs.linkFarm quietAttentionUuid {
+    "metadata.json" = pkgs.writeText "metadata.json" (
+      builtins.toJSON {
+        uuid = quietAttentionUuid;
+        name = "Quiet window attention";
+        description = "Hide the 'window is ready' notifications.";
+        shell-version = [
+          "46"
+          "47"
+          "48"
+        ];
+      }
+    );
+    "extension.js" = pkgs.writeText "extension.js" ''
+      import * as Main from 'resource:///org/gnome/shell/ui/main.js';
+      import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
+
+      export default class QuietWindowAttention extends Extension {
+          enable() {
+              global.display.disconnectObject(Main.windowAttentionHandler);
+          }
+
+          disable() {
+              const handler = Main.windowAttentionHandler;
+              global.display.connectObject(
+                  'window-demands-attention', handler._onWindowDemandsAttention.bind(handler),
+                  'window-marked-urgent', handler._onWindowDemandsAttention.bind(handler),
+                  handler);
+          }
+      }
+    '';
+  };
+in
 {
   options.personal.desktop = {
     enable = lib.mkEnableOption "laptop GUI applications and host graphics integration";
@@ -48,6 +85,13 @@
       (lib.hm.gvariant.mkTuple [ "xkb" "us" ])
       (lib.hm.gvariant.mkTuple [ "xkb" "il" ])
     ];
+    # Suppress GNOME's '"<window>" is ready' banners (window-demands-attention);
+    # the dock still highlights the app.
+    xdg.dataFile."gnome-shell/extensions/${quietAttentionUuid}" = {
+      source = quietAttentionExtension;
+      recursive = true;
+    };
+    dconf.settings."org/gnome/shell".enabled-extensions = [ quietAttentionUuid ];
     xdg.mimeApps = {
       enable = true;
       defaultApplications = lib.mkIf pkgs.stdenv.hostPlatform.isx86_64 (
