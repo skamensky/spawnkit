@@ -14,7 +14,7 @@ virtualization: false
 iommu: false
 gpu_handoff: false
 windows_vm: false
-# AppArmor userns exception for the Cisco Webex .deb; installing Webex itself is manual.
+# Cisco Webex .deb (installed once; it self-updates) plus its AppArmor userns exception.
 webex: false
 nvidia_driver_package: ""
 # Hybrid laptops: "on-demand" keeps the desktop on the iGPU. Empty leaves PRIME alone.

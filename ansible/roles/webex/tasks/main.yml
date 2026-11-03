@@ -1,4 +1,17 @@
 ---
+- name: Inspect installed Ubuntu packages
+  ansible.builtin.package_facts:
+    manager: apt
+- name: Preview Webex installation
+  ansible.builtin.debug:
+    msg: Install Cisco's current Webex .deb; the app updates itself afterwards.
+  when: ansible_check_mode and 'webex' not in ansible_facts.packages
+# Cisco publishes no APT repository, only a rolling unversioned .deb over HTTPS, so its
+# hash cannot be pinned. Install once; the in-app updater owns later versions.
+- name: Install Cisco Webex
+  ansible.builtin.apt:
+    deb: https://binaries.webex.com/WebexDesktop-Ubuntu-Official-Package/Webex.deb
+  when: not ansible_check_mode and 'webex' not in ansible_facts.packages
 - name: Allow the Webex CEF sandbox to create user namespaces
   ansible.builtin.copy:
     src: webex.apparmor
