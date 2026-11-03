@@ -11,6 +11,7 @@
     sha256 = "sha256-WXWobuRb/8tib1GuM9EWmxCBhqLqR61lHnLxP6S21vk=";
   };
   personal.virtualization.enable = pkgs.stdenv.hostPlatform.isx86_64;
+  personal.virtualization.passthroughAudio = [ "0000:01:00.1" ];
   # Ubuntu daemon packages include these clients; do not install parallel copies.
   personal.clients.docker = false;
   personal.clients.tailscale = false;
