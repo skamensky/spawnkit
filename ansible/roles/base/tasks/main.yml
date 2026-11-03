@@ -31,6 +31,26 @@
     state: "{{ 'present' if cfg.desktop_session == 'x11' else 'absent' }}"
     backup: true
   when: cfg.desktop_session != ''
+# Ubuntu's PRIME on-demand config adds the NVIDIA GPU as an Xorg GPU screen, which keeps
+# the RTX open for the whole session and blocks the Windows handoff. Xorg then drives only
+# the boot iGPU: RTX-wired outputs and Xorg render offload go away; CUDA is unaffected.
+# Takes effect when Xorg next starts.
+- name: Keep Xorg off the handoff GPU
+  ansible.builtin.copy:
+    dest: /etc/X11/xorg.conf.d/20-spawnkit-gpu-handoff.conf
+    owner: root
+    group: root
+    mode: '0644'
+    content: |
+      Section "ServerFlags"
+          Option "AutoAddGPU" "off"
+      EndSection
+  when: cfg.desktop_session == 'x11' and cfg.gpu_handoff
+- name: Let Xorg use every GPU again
+  ansible.builtin.file:
+    path: /etc/X11/xorg.conf.d/20-spawnkit-gpu-handoff.conf
+    state: absent
+  when: not (cfg.desktop_session == 'x11' and cfg.gpu_handoff)
 - name: Create root-owned Spawnkit configuration directory
   ansible.builtin.file:
     path: /etc/spawnkit
