@@ -43,7 +43,8 @@ class Configuration(unittest.TestCase):
                          {'ssh': True}, {'ssh_port': 70000}, {'looking_glass_mib': 123},
                          {'windows_disk': '../disk'}, {'network_dhcp_start': '10.0.0.1'},
                          {'gpu_devices': [{'address': 'not-pci', 'driver': 'nvidia'}]},
-                         {'host_packages': ['bad;name']}, {'nvidia_prime': 'hybrid'}, {'nvidia_prime': 'on-demand'}):
+                         {'host_packages': ['bad;name']}, {'nvidia_prime': 'hybrid'}, {'nvidia_prime': 'on-demand'},
+                         {'desktop_session': 'xorg'}):
             with self.subTest(settings=settings), self.assertRaises(ValueError):
                 load_config(ROOT, 'default', settings)
 

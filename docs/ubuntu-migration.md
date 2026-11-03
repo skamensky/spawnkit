@@ -302,6 +302,10 @@ sudo umount /mnt/wsl-old && sudo qemu-nbd -d /dev/nbd0 && sudo umount /mnt/win
 ### D1. Hardware checks
 No manual driver or package installs here: the NVIDIA driver, PRIME on-demand
 mode and Solaar (with its udev rules) come from the Ansible run in D2.
+The laptop profile pins `nvidia-driver-580` (550 is retired and Ubuntu's 550
+package now pulls in 580) and `desktop_session: x11`. Without the pin, GDM
+silently switches to Wayland whenever the NVIDIA module is missing, as happened
+after the first kernel 7.0 update. The pin takes effect at the next login.
 ```bash
 mokutil --sb-state        # Secure Boot state decides whether D2 asks for MOK enrollment
 lspci -nnk | grep -A3 -Ei 'vga|3d|audio'
@@ -475,12 +479,12 @@ table to audit old files and migration conflicts; make persistent changes in
 `spawnkit`, rather than editing the generated home files.
 | File | Now | Change to |
 |---|---|---|
-| `~/.tmux.conf` | `copy-pipe-and-cancel "clip.exe"` | `"wl-copy"` |
+| `~/.tmux.conf` | `copy-pipe-and-cancel "clip.exe"` | `"wl-copy"` on Wayland, `"xclip -selection clipboard"` on the X11 laptop profile |
 | `~/.bashrc` ~L148–155 | `alias powershell='powershell.exe'`; ChatGPT launcher with `WAYLAND_DISPLAY=/mnt/wslg/...` | delete |
 | `~/.mybashrc` | Claude desktop launcher with `/mnt/wslg` | delete |
 | `~/.mybashrc.sh` | `alias wslpath=...`; commented `/mnt/c` PATH/WINHOME lines | delete |
 | `~/.mybashrc.sh` | plaintext `export` secrets | should already be gone (A2); verify |
-| `~/bin/clipimg` | PowerShell clipboard-image grab | rewrite with `wl-paste --type image/png` |
+| `~/bin/clipimg` | PowerShell clipboard-image grab | rewrite with `wl-paste --type image/png` (Wayland) or `xclip -selection clipboard -t image/png -o` (X11) |
 | `/etc/wsl.conf` | — | not needed on native |
 | `~/.ssh/config` | `thinkpad` 10.100.102.7, `phone` over tailnet, `corteza`, `myserver` via cloudflared | keep; test each |
 | anything | other references to `/mnt/c`, `.exe`, `wslg` | `grep -rnE '/mnt/c|\.exe\b|wslg' ~/.bashrc ~/.mybashrc* ~/.profile ~/.config/shell ~/bin ~/.local/bin` and fix them |

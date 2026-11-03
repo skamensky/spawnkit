@@ -32,7 +32,7 @@ def load_config(repo, profile, overrides=None):
     for key in ('gpu_devices', 'ssh_listen_addresses', 'base_packages', 'host_packages'):
         if not isinstance(cfg[key], list):
             raise ValueError(f'{key} must be a list')
-    for key in ('windows_name', 'looking_glass_name', 'network_name', 'network_bridge', 'windows_disk', 'windows_iso', 'virtio_iso', 'nvidia_driver_package', 'nvidia_prime', 'windows_uuid', 'network_uuid'):
+    for key in ('windows_name', 'looking_glass_name', 'network_name', 'network_bridge', 'windows_disk', 'windows_iso', 'virtio_iso', 'nvidia_driver_package', 'nvidia_prime', 'desktop_session', 'windows_uuid', 'network_uuid'):
         if not isinstance(cfg[key], str):
             raise ValueError(f'{key} must be a string')
     for key in ('base_packages', 'host_packages'):
@@ -42,6 +42,8 @@ def load_config(repo, profile, overrides=None):
         raise ValueError('nvidia_prime must be empty, on-demand, intel or nvidia')
     if cfg['nvidia_prime'] and not cfg['nvidia']:
         raise ValueError('nvidia_prime requires nvidia')
+    if cfg['desktop_session'] not in ('', 'x11', 'wayland'):
+        raise ValueError('desktop_session must be empty, x11 or wayland')
     for key in ("docker", "tailscale", "ssh", "nvidia", "virtualization", "iommu", "gpu_handoff", "windows_vm"):
         if not isinstance(cfg[key], bool):
             raise ValueError(f"{key} must be a boolean")

@@ -20,6 +20,17 @@
       extra-substituters = https://cache.numtide.com
       extra-trusted-public-keys = niks3.numtide.com-1:DTx8wZduET09hRmMtKdQDxNNthLQETkc/yaX7M4qK0g=
   notify: Restart the Nix daemon
+# GDM reads this at the next login; restarting it here would end the running session.
+# "wayland" only drops the override: GDM's own udev rules may still pick X11 on NVIDIA.
+- name: Pin the GDM login session type
+  ansible.builtin.lineinfile:
+    path: /etc/gdm3/custom.conf
+    regexp: '^#?\s*WaylandEnable\s*='
+    line: WaylandEnable=false
+    insertafter: '^\[daemon\]'
+    state: "{{ 'present' if cfg.desktop_session == 'x11' else 'absent' }}"
+    backup: true
+  when: cfg.desktop_session != ''
 - name: Create root-owned Spawnkit configuration directory
   ansible.builtin.file:
     path: /etc/spawnkit

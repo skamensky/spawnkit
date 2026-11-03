@@ -3,6 +3,12 @@ docker: true
 tailscale: true
 nvidia: true
 nvidia_prime: on-demand
+# 550 is retired (Ubuntu's 550 package now depends on 580). Pin the 580 long-term branch
+# instead of following ubuntu-drivers' "recommended" newer branch.
+nvidia_driver_package: nvidia-driver-580
+# Shmuel prefers Xorg for stability. GDM otherwise flips to Wayland whenever the
+# NVIDIA module is missing, e.g. after a kernel update without matching modules.
+desktop_session: x11
 virtualization: true
 iommu: true
 # Solaar needs Ubuntu's udev rules for Logitech receiver access; cmake and ninja join the
