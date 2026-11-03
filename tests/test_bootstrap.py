@@ -38,6 +38,35 @@ class HostSelectionTests(unittest.TestCase):
             selector.select_profile(self.registry, "whatever", "linux", "typo")
 
 
+class GpuDriverLinkTests(unittest.TestCase):
+    def setup_generation(self, root):
+        package = root / "store/gpu"
+        (package / "bin").mkdir(parents=True)
+        (package / "lib/tmpfiles.d").mkdir(parents=True)
+        (package / "bin/non-nixos-gpu-setup").touch()
+        (root / "gen/home-path/bin").mkdir(parents=True)
+        (root / "gen/home-path/bin/non-nixos-gpu-setup").symlink_to(package / "bin/non-nixos-gpu-setup")
+        return root / "gen", package / "lib/tmpfiles.d/non-nixos-gpu.conf"
+
+    def test_stale_link_runs_setup_only_on_enabled_hosts(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            generation, wanted = self.setup_generation(root)
+            link = root / "non-nixos-gpu.conf"
+            link.symlink_to(root / "old.conf")
+            (root / "enabled").touch()
+            with patch.object(selector, "GPU_LINK", link), patch.object(selector.subprocess, "run") as run:
+                selector.link_gpu_drivers(generation, root / "missing")
+                run.assert_not_called()
+                selector.link_gpu_drivers(generation, root / "enabled")
+                run.assert_called_once_with(["sudo", str(generation / "home-path/bin/non-nixos-gpu-setup")], check=True)
+                link.unlink()
+                link.symlink_to(wanted)
+                run.reset_mock()
+                selector.link_gpu_drivers(generation, root / "enabled")
+                run.assert_not_called()
+
+
 class RepositorySafetyTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()

@@ -12,6 +12,7 @@ import subprocess
 
 NIX = ["nix", "--extra-experimental-features", "nix-command flakes"]
 SYSTEMS = {"x86_64": "x86_64-linux", "aarch64": "aarch64-linux"}
+GPU_LINK = Path("/etc/tmpfiles.d/non-nixos-gpu.conf")
 
 
 def default_repo():
@@ -28,6 +29,20 @@ def environment():
     if "microsoft" in Path("/proc/sys/kernel/osrelease").read_text().lower():
         return "wsl"
     return "linux"
+
+
+def link_gpu_drivers(generation, enabled=Path("/etc/spawnkit/enabled")):
+    """Point /run/opengl-driver at this generation's drivers; GUI apps see no GPU otherwise."""
+    setup = Path(generation) / "home-path/bin/non-nixos-gpu-setup"
+    if not setup.exists():
+        return
+    wanted = setup.resolve().parent.parent / "lib/tmpfiles.d/non-nixos-gpu.conf"
+    if GPU_LINK.is_symlink() and Path(os.readlink(GPU_LINK)) == wanted:
+        return
+    if not enabled.exists():
+        print(f"Graphics drivers are not linked for this generation; run: sudo {setup}")
+        return
+    subprocess.run(["sudo", str(setup)], check=True)
 
 
 def select_profile(registry, hostname, platform_kind, explicit=None):
@@ -97,7 +112,8 @@ def main():
         print(f"Built {result}\nActivate with home-config switch, then commit and push flake.lock.")
     else:
         # Home Manager checks collisions before changing existing dotfiles.
-        os.execv(str(Path(result) / "activate"), [str(Path(result) / "activate")])
+        subprocess.run([str(Path(result) / "activate")], check=True)
+        link_gpu_drivers(result)
 
 
 if __name__ == "__main__":

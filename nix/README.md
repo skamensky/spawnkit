@@ -172,8 +172,10 @@ agent history and credentials are separate migration items.
 
 The native laptop profile uses Home Manager's `targets.genericLinux.gpu`
 integration. It exposes graphics libraries through `/run/opengl-driver`; GUI
-packages need no per-app nixGL wrapper. Home Manager prints the exact
-`non-nixos-gpu-setup` command to run with sudo when the host link needs updating.
+packages need no per-app nixGL wrapper. On Spawnkit-enabled hosts `home-config
+switch` runs the generation's `non-nixos-gpu-setup` with sudo whenever
+`/etc/tmpfiles.d/non-nixos-gpu.conf` points at another generation; elsewhere it
+prints that command. Without the link, Chrome reports no WebGPU adapter.
 WSL and headless profiles do not enable this native graphics setup.
 
 The Intel/Mesa path is configured. Before NVIDIA offloading on native Ubuntu,
