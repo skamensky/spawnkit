@@ -166,12 +166,14 @@ in the migration log.
   `mutter-device-ignore` are reported to be timing-sensitive and can break the
   session, so none is installed automatically; test any such rule manually with
   console access first.
-  Under Xorg (`desktop_session: x11`) the culprit is Xorg itself: Ubuntu's
-  PRIME on-demand config adds the RTX as a GPU screen. With `gpu_handoff`
-  enabled, the base role installs `AutoAddGPU off` so Xorg drives only the
-  iGPU. Measured on this laptop (2026-11-03): before that, Xorg held
-  `/dev/dri/card2` and `/dev/nvidia*`. The cost is no RTX-wired outputs and no
-  Xorg render offload on Linux; CUDA and other compute still work.
+  Under Xorg, Ubuntu's PRIME on-demand config adds the RTX as a GPU screen, and
+  Xorg opens every seat0 DRM device through logind even with `AutoAddGPU off`
+  (measured 2026-11-03: Xorg still held `/dev/dri/card2`). With `gpu_handoff`
+  enabled, the base role's udev rule moves the RTX's DRM nodes to a seat with no
+  master device, so neither Xorg nor session ACLs reach them. It applies at
+  boot. The cost is no RTX-wired outputs and no render offload on Linux; CUDA
+  still works. Apps that load NVIDIA's EGL/Vulkan drivers can still hold
+  `/dev/nvidiactl`, and the handoff guard names them.
 
 - **Display wiring.** On many Legion models the HDMI port is wired to the RTX
   and the internal panel to Intel (or a MUX switches it). A monitor on an RTX
