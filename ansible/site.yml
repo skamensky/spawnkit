@@ -40,6 +40,8 @@
       when: cfg.virtualization
     - role: gpu_handoff
       when: cfg.gpu_handoff
+    - role: webex
+      when: cfg.webex
   post_tasks:
     - name: Complete service handlers before marking the host managed
       ansible.builtin.meta: flush_handlers

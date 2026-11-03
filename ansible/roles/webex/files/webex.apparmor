@@ -1,0 +1,10 @@
+# Ubuntu 24.04 restricts unprivileged user namespaces; Webex's CEF sandbox needs one
+# and otherwise aborts at launch in libcef.so. Same pattern as Ubuntu's chrome profile.
+abi <abi/4.0>,
+include <tunables/global>
+
+profile webex /opt/Webex/bin/CiscoCollabHost flags=(unconfined) {
+  userns,
+
+  include if exists <local/webex>
+}

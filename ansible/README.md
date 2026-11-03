@@ -72,6 +72,7 @@ Existing cloud access is not replaced by an assumed configuration.
 | `nvidia` | Ubuntu recommended or pinned driver, optional PRIME profile, signed Container Toolkit repo/runtime |
 | `virtualization` | Ubuntu QEMU/libvirt/OVMF/swtpm, groups, IOMMU GRUB drop-in, dedicated NAT network |
 | `gpu_handoff` | Separate libvirt lifecycle hook, GPU policy, Looking Glass tmpfiles rule |
+| `webex` | AppArmor profile letting the manually installed Webex .deb create its sandbox user namespace |
 | `windows_vm` | Explicit `vm-define` playbook; managed domain and new disk, no automatic start |
 
 Ubuntu supplies the system service units. This repository stores settings and

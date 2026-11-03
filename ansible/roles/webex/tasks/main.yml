@@ -1,0 +1,9 @@
+---
+- name: Allow the Webex CEF sandbox to create user namespaces
+  ansible.builtin.copy:
+    src: webex.apparmor
+    dest: /etc/apparmor.d/webex
+    owner: root
+    group: root
+    mode: '0644'
+  notify: Load Webex AppArmor profile
