@@ -4,6 +4,6 @@
   <forward mode='nat'/>
   <bridge name='{{ cfg.network_bridge }}' stp='on' delay='0'/>
   <ip address='{{ cfg.network_address }}' netmask='{{ cfg.network_netmask }}'>
-    <dhcp><range start='{{ cfg.network_dhcp_start }}' end='{{ cfg.network_dhcp_end }}'/></dhcp>
+    <dhcp><range start='{{ cfg.network_dhcp_start }}' end='{{ cfg.network_dhcp_end }}'/>{% if cfg.windows_address %}<host mac='{{ cfg.windows_mac }}' name='{{ cfg.windows_name }}' ip='{{ cfg.windows_address }}'/>{% endif %}</dhcp>
   </ip>
 </network>

@@ -24,6 +24,9 @@ ssh_listen_addresses: [100.86.106.55]
 gpu_handoff: true
 # Pass the staged Windows and VirtIO ISOs to vm-define (docs/windows-vm.md section 2).
 windows_vm: true
+windows_mac: "52:54:00:a1:8d:c3"
+windows_address: 192.168.123.10
+windows_share: /home/shmuel/Shared
 gpu_devices:
   - {address: "0000:01:00.0", driver: nvidia}
   - {address: "0000:01:00.1", driver: snd_hda_intel}

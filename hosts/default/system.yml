@@ -38,6 +38,11 @@ virtio_iso: ""
 windows_video: vga
 looking_glass_mib: 128
 looking_glass_name: spawnkit-windows
+# Fixed guest MAC and DHCP reservation give Linux a stable SSH address for Windows.
+windows_mac: ""
+windows_address: ""
+# Host directory exported to Windows over virtiofs (tag spawnkit-share).
+windows_share: ""
 
 network_name: spawnkit
 network_uuid: "7c04dc12-ce53-4f15-b404-18afe3190591"

@@ -2,10 +2,12 @@
 """Inspect, preview and explicitly apply the selected Ubuntu host configuration."""
 
 import argparse
+import base64
 import json
 import os
 from pathlib import Path
 import socket
+import sys
 import shutil
 import subprocess
 import tempfile
@@ -23,6 +25,22 @@ LOGOUT_TIMEOUT = 900
 
 def run(args, **kwargs):
     return subprocess.run(args, check=True, **kwargs)
+
+
+def guest_exec(name, script):
+    """Run PowerShell in the guest as SYSTEM through the QEMU guest agent; return its exit code."""
+    def agent(request):
+        out = subprocess.check_output(["/usr/bin/virsh", "-c", "qemu:///system", "qemu-agent-command", name, json.dumps(request), "--timeout", "30"], text=True)
+        return json.loads(out)["return"]
+    encoded = base64.b64encode(("$ProgressPreference = 'SilentlyContinue'\n" + script).encode("utf-16-le")).decode()
+    pid = agent({"execute": "guest-exec", "arguments": {
+        "path": "powershell.exe", "arg": ["-NoProfile", "-NonInteractive", "-EncodedCommand", encoded], "capture-output": True}})["pid"]
+    while not (status := agent({"execute": "guest-exec-status", "arguments": {"pid": pid}}))["exited"]:
+        time.sleep(0.5)
+    for key, stream in (("out-data", sys.stdout), ("err-data", sys.stderr)):
+        if key in status:
+            stream.write(base64.b64decode(status[key]).decode("utf-8", "replace"))
+    return status.get("exitcode", 0)
 
 
 def native_only():
@@ -77,7 +95,7 @@ def start_windows(name, notify):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=["select", "inventory", "check", "render", "plan", "apply", "facts", "vm-define", "vm-start", "vm-stop", "vm-view", "vm-console", "gpu-status"])
+    parser.add_argument("action", choices=["select", "inventory", "check", "render", "plan", "apply", "facts", "vm-define", "vm-start", "vm-stop", "vm-view", "vm-console", "vm-exec", "gpu-status"])
     parser.add_argument("--repo", type=Path, default=selector().default_repo(), help="Defaults to the enclosing checkout")
     parser.add_argument("--host", help="Explicit profile; normal selection shares the Home Manager registry")
     parser.add_argument("--hostname", default=socket.gethostname())
@@ -87,6 +105,7 @@ def main():
     parser.add_argument("--ask-become-pass", action="store_true")
     parser.add_argument("--notify", action="store_true", help="Also display desktop notifications for command failures")
     parser.add_argument("--timeout", type=int, default=300, help="vm-stop: seconds to wait for guest shutdown and GPU return")
+    parser.add_argument("--command", help="vm-exec: PowerShell to run as SYSTEM; read from stdin when omitted")
     parser.add_argument("--windows-iso", type=Path)
     parser.add_argument("--virtio-iso", type=Path)
     args = parser.parse_args()
@@ -121,7 +140,7 @@ def main():
             (args.output / "windows.xml").write_text(xml)
             (args.output / "windows.json").write_text(json.dumps(cfg, indent=2) + "\n")
             print(args.output)
-        elif args.action in ("vm-start", "vm-stop", "vm-view", "vm-console", "gpu-status"):
+        elif args.action in ("vm-start", "vm-stop", "vm-view", "vm-console", "vm-exec", "gpu-status"):
             native_only()
             installed = Path("/etc/spawnkit/windows.json")
             if not installed.is_file():
@@ -133,6 +152,8 @@ def main():
             name = active["windows_name"]
             if args.action == "vm-console":
                 os.execvp("virt-manager", ["virt-manager", "--connect", "qemu:///system", "--show-domain-console", name])
+            if args.action == "vm-exec":
+                raise SystemExit(guest_exec(name, args.command if args.command is not None else sys.stdin.read()))
             state = subprocess.check_output(["/usr/bin/virsh", "-c", "qemu:///system", "domstate", name], text=True, env=os.environ | {'LC_ALL': 'C'}).strip()
             if args.action == "vm-stop":
                 if state != "shut off":

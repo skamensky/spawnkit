@@ -5,7 +5,7 @@
   when: ansible_check_mode
 - name: Install the Ubuntu virtualization stack
   ansible.builtin.apt:
-    name: [qemu-kvm, qemu-utils, libvirt-daemon-system, libvirt-clients, ovmf, swtpm, swtpm-tools, virtinst, libxml2-utils, pciutils, psmisc]
+    name: [qemu-kvm, qemu-utils, libvirt-daemon-system, libvirt-clients, ovmf, swtpm, swtpm-tools, virtinst, libxml2-utils, pciutils, psmisc, virtiofsd]
     state: present
   when: not ansible_check_mode
 - name: Grant local VM access

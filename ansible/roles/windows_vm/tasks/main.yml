@@ -19,6 +19,25 @@
       - (installed_gpu_policy.content | b64decode | from_json).looking_glass_name == cfg.looking_glass_name
       - (installed_gpu_policy.content | b64decode | from_json).looking_glass_mib == cfg.looking_glass_mib
     fail_msg: Apply the matching host policy before defining Windows.
+- name: Create the directory shared with Windows
+  ansible.builtin.file:
+    path: "{{ cfg.windows_share }}"
+    state: directory
+    owner: "{{ cfg.user }}"
+    group: "{{ cfg.user }}"
+    mode: '0755'
+  when: cfg.windows_share | length > 0
+- name: Name the Windows guest for SSH clients
+  ansible.builtin.copy:
+    dest: /etc/ssh/ssh_config.d/50-spawnkit-windows.conf
+    content: |
+      Host {{ cfg.windows_name }}
+        HostName {{ cfg.windows_address }}
+        User {{ cfg.user }}
+    owner: root
+    group: root
+    mode: '0644'
+  when: cfg.windows_address | length > 0
 - name: Render the desired persistent VM definition
   ansible.builtin.template:
     src: windows.xml.j2

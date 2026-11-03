@@ -182,8 +182,16 @@ def network(filename):
         new_range = desired.find('./ip/dhcp/range')
         if old_range is None or old_range.attrib != new_range.attrib:
             raise RuntimeError('Existing DHCP range differs; review the network change explicitly')
+        hosts = lambda root: {ET.tostring(h, encoding='unicode').strip() for h in root.findall('./ip/dhcp/host')}
+        old_hosts, new_hosts = hosts(tree), hosts(desired)
+        active = name in command(VIRSH + ['net-list', '--name']).stdout.splitlines()
+        scope = ['--live', '--config'] if active else ['--config']
+        for entry in old_hosts - new_hosts:
+            command(VIRSH + ['net-update', name, 'delete', 'ip-dhcp-host', entry, *scope])
+        for entry in new_hosts - old_hosts:
+            command(VIRSH + ['net-update', name, 'add', 'ip-dhcp-host', entry, *scope])
         command(VIRSH + ["net-autostart", "--disable", name])
-        print("unchanged")
+        print("changed" if old_hosts != new_hosts else "unchanged")
         return
     command(VIRSH + ["net-define", str(filename)])
     command(VIRSH + ["net-autostart", "--disable", name])

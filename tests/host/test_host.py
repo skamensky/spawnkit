@@ -44,7 +44,10 @@ class Configuration(unittest.TestCase):
                          {'windows_disk': '../disk'}, {'network_dhcp_start': '10.0.0.1'},
                          {'gpu_devices': [{'address': 'not-pci', 'driver': 'nvidia'}]},
                          {'host_packages': ['bad;name']}, {'nvidia_prime': 'hybrid'}, {'nvidia_prime': 'on-demand'},
-                         {'desktop_session': 'xorg'}):
+                         {'desktop_session': 'xorg'}, {'windows_mac': '52:54:00:AA:00:01'},
+                         {'windows_address': '192.168.123.10'},
+                         {'windows_mac': '52:54:00:aa:00:01', 'windows_address': '192.168.123.50'},
+                         {'windows_share': 'relative/share'}):
             with self.subTest(settings=settings), self.assertRaises(ValueError):
                 load_config(ROOT, 'default', settings)
 
@@ -59,6 +62,15 @@ class Configuration(unittest.TestCase):
         tree.find('./devices/hostdev').set('managed', 'no')
         with self.assertRaises(RuntimeError):
             guard.validate_domain(cfg, ET.tostring(tree))
+
+    def test_domain_exposes_agent_share_and_fixed_mac(self):
+        cfg = gpu_config() | {'windows_mac': '52:54:00:aa:00:01', 'windows_share': '/home/shmuel/Shared'}
+        tree = ET.fromstring(render_windows(ROOT, cfg))
+        self.assertEqual(tree.find('./devices/interface/mac').get('address'), '52:54:00:aa:00:01')
+        self.assertIsNotNone(tree.find("./devices/channel/target[@name='org.qemu.guest_agent.0']"))
+        self.assertEqual(tree.find('./devices/filesystem/source').get('dir'), '/home/shmuel/Shared')
+        self.assertEqual(tree.find('./memoryBacking/access').get('mode'), 'shared')
+        self.assertIsNone(ET.fromstring(render_windows(ROOT, gpu_config() | {'windows_share': ''})).find('./devices/filesystem'))
 
     def test_other_domain_cannot_take_reserved_gpu(self):
         cfg = gpu_config()

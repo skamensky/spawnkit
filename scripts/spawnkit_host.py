@@ -32,7 +32,7 @@ def load_config(repo, profile, overrides=None):
     for key in ('gpu_devices', 'ssh_listen_addresses', 'base_packages', 'host_packages'):
         if not isinstance(cfg[key], list):
             raise ValueError(f'{key} must be a list')
-    for key in ('windows_name', 'looking_glass_name', 'network_name', 'network_bridge', 'windows_disk', 'windows_iso', 'virtio_iso', 'nvidia_driver_package', 'nvidia_prime', 'desktop_session', 'windows_uuid', 'network_uuid'):
+    for key in ('windows_name', 'looking_glass_name', 'network_name', 'network_bridge', 'windows_disk', 'windows_iso', 'virtio_iso', 'nvidia_driver_package', 'nvidia_prime', 'desktop_session', 'windows_uuid', 'network_uuid', 'windows_mac', 'windows_address', 'windows_share'):
         if not isinstance(cfg[key], str):
             raise ValueError(f'{key} must be a string')
     for key in ('base_packages', 'host_packages'):
@@ -96,7 +96,17 @@ def load_config(repo, profile, overrides=None):
         devices.add(address)
     if cfg["gpu_handoff"] and not any(d["driver"] == "nvidia" for d in cfg["gpu_devices"]):
         raise ValueError("GPU handoff must include the NVIDIA graphics function")
-    for key in ("windows_disk", "windows_iso", "virtio_iso"):
+    if cfg['windows_mac'] and not re.fullmatch(r'52:54:00(:[0-9a-f]{2}){3}', cfg['windows_mac']):
+        raise ValueError('windows_mac must be a lowercase 52:54:00 libvirt address')
+    if cfg['windows_address']:
+        if not cfg['windows_mac']:
+            raise ValueError('windows_address requires windows_mac')
+        address = ipaddress.IPv4Address(cfg['windows_address'])
+        if address not in net or address in (net.network_address, net.broadcast_address, ipaddress.IPv4Address(cfg['network_address'])):
+            raise ValueError('windows_address must be a usable guest address within the declared network')
+        if ipaddress.IPv4Address(cfg['network_dhcp_start']) <= address <= ipaddress.IPv4Address(cfg['network_dhcp_end']):
+            raise ValueError('windows_address must lie outside the dynamic DHCP range')
+    for key in ("windows_disk", "windows_iso", "virtio_iso", "windows_share"):
         if cfg[key] and (not Path(cfg[key]).is_absolute() or any(c in cfg[key] for c in "\n\r\x00<>\"'&") or ".." in Path(cfg[key]).parts):
             raise ValueError(f"{key} must be an absolute local path")
     if not cfg['windows_disk'].startswith('/var/lib/libvirt/images/'):

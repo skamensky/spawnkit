@@ -3,6 +3,9 @@
   <uuid>{{ cfg.windows_uuid }}</uuid>
   <metadata><spawnkit:managed xmlns:spawnkit='https://github.com/skamensky/spawnkit'/></metadata>
   <memory unit='MiB'>{{ cfg.windows_memory_mib }}</memory>
+{% if cfg.windows_share %}
+  <memoryBacking><source type='memfd'/><access mode='shared'/></memoryBacking>
+{% endif %}
   <vcpu placement='static'>{{ cfg.windows_vcpus }}</vcpu>
   <os firmware='efi'>
     <type arch='x86_64' machine='q35'>hvm</type>
@@ -26,10 +29,14 @@
 {% endif %}
 {% endfor %}
     <controller type='usb' model='qemu-xhci'/>
-    <interface type='network'><source network='{{ cfg.network_name }}'/><model type='virtio'/></interface>
+    <interface type='network'>{% if cfg.windows_mac %}<mac address='{{ cfg.windows_mac }}'/>{% endif %}<source network='{{ cfg.network_name }}'/><model type='virtio'/></interface>
     <input type='tablet' bus='usb'/><input type='keyboard' bus='usb'/>
     <graphics type='spice' autoport='yes' listen='127.0.0.1'><listen type='address' address='127.0.0.1'/></graphics>
     <channel type='spicevmc'><target type='virtio' name='com.redhat.spice.0'/></channel>
+    <channel type='unix'><target type='virtio' name='org.qemu.guest_agent.0'/></channel>
+{% if cfg.windows_share %}
+    <filesystem type='mount' accessmode='passthrough'><driver type='virtiofs'/><source dir='{{ cfg.windows_share }}'/><target dir='spawnkit-share'/></filesystem>
+{% endif %}
     <video><model type='{{ cfg.windows_video }}'/></video>
     <sound model='ich9'/><audio id='1' type='spice'/>
     <tpm model='tpm-crb'><backend type='emulator' version='2.0'/></tpm>

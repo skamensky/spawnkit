@@ -160,6 +160,35 @@ Confirm the guest is off, then run
 only if every configured function is back on its declared driver and
 `nvidia-smi -L` works. A reboot clears it too; neither touches Windows data.
 
+## 4 Guest integration
+
+The definition always carries a QEMU guest agent channel. After installing the
+VirtIO guest tools (`virtio-win-guest-tools.exe` from the VirtIO ISO), Linux can run
+PowerShell in Windows as SYSTEM without a password or network:
+
+```bash
+host-config vm-exec --command 'Get-Service sshd'
+host-config vm-exec < script.ps1
+```
+
+The exit code and output streams are the guest command's. Use it for bootstrap
+and recovery; routine automation can use SSH.
+
+- **Stable address:** `windows_mac` pins the guest NIC and `windows_address`
+  reserves it outside the dynamic DHCP range. Changing an existing reservation is
+  applied live with `virsh net-update`. Ansible adds `Host <windows_name>` under
+  `/etc/ssh/ssh_config.d/`, so `ssh windows` reaches the guest's OpenSSH server
+  (Windows optional feature `OpenSSH.Server`, PowerShell default shell, the Linux
+  public key in `C:\ProgramData\ssh\administrators_authorized_keys`). From
+  Windows, reach Linux through its declared SSH listener.
+- **Shared folder:** `windows_share` exports a host directory over virtiofs
+  (shared memfd memory backing, tag `spawnkit-share`); Ansible creates it for the
+  user. In Windows, install WinFsp, set DWORDs `OverrideUid`/`OverrideGid` under
+  `HKLM\SOFTWARE\VirtIO-FS` to the Linux user's IDs so created files belong to that
+  user, and set the `VirtioFsSvc` service to automatic. It appears as drive `Z:`.
+- **Clipboard:** the SPICE agent (`spice-vdagent-x64` MSI from spice-space.org)
+  carries clipboard through Looking Glass's SPICE connection.
+
 ## Laptop-specific risks (unverified on the Legion 5 16IRX9)
 
 These decide feasibility and can only be measured natively; record each result
