@@ -46,6 +46,13 @@
         # Groups the viewer's window under this launcher in the dock.
         settings.StartupWMClass = "looking-glass-client";
       };
+      spawnkit-windows-shutdown = {
+        name = "Shut down Windows";
+        exec = "host-config vm-stop --notify";
+        icon = "system-shutdown";
+        terminal = false;
+        categories = [ "System" ];
+      };
       spawnkit-windows-console = {
         name = "Windows installation console";
         exec = "host-config vm-console --notify";
@@ -54,7 +61,7 @@
         categories = [ "System" ];
       };
     };
-    # Pin the Windows launcher to the dock without replacing the user's own pins.
+    # Pin the Windows launchers to the dock without replacing the user's own pins.
     home.activation.pinWindowsLauncher = lib.hm.dag.entryAfter [ "dconfSettings" ] ''
       # gsettings, unlike dconf, also reports GNOME's default pins; without the dconf
       # module it would read and write a private keyfile instead.
@@ -62,11 +69,17 @@
       gsettings=${pkgs.glib.bin}/bin/gsettings
       if [ -n "''${DBUS_SESSION_BUS_ADDRESS:-}" ] &&
           favorites=$($gsettings get org.gnome.shell favorite-apps 2>/dev/null); then
-        case "$favorites" in
-          *"'spawnkit-windows.desktop'"*) ;;
-          "@as []") run $gsettings set org.gnome.shell favorite-apps "['spawnkit-windows.desktop']" ;;
-          *) run $gsettings set org.gnome.shell favorite-apps "''${favorites%]}, 'spawnkit-windows.desktop']" ;;
-        esac
+        updated=$favorites
+        for launcher in spawnkit-windows.desktop spawnkit-windows-shutdown.desktop; do
+          case "$updated" in
+            *"'$launcher'"*) ;;
+            "@as []") updated="['$launcher']" ;;
+            *) updated="''${updated%]}, '$launcher']" ;;
+          esac
+        done
+        if [ "$updated" != "$favorites" ]; then
+          run $gsettings set org.gnome.shell favorite-apps "$updated"
+        fi
       fi
     '';
   };

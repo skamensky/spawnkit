@@ -308,7 +308,7 @@ def main():
     parser.add_argument("--vars-file", type=Path, help="Local host setting overrides, e.g. installation media paths")
     parser.add_argument("--output", type=Path, help="Output directory for render; ISO file for guest-media")
     parser.add_argument("--ask-become-pass", action="store_true")
-    parser.add_argument("--notify", action="store_true", help="Also display desktop notifications for command failures")
+    parser.add_argument("--notify", action="store_true", help="Also display desktop notifications for command failures and vm-stop progress")
     parser.add_argument("--gui", action="store_true", help="vm-start/vm-view/vm-install: offer to close programs holding the RTX")
     parser.add_argument("--pid", type=int, action="append", default=[], help="gpu-release: holder to close (repeatable)")
     parser.add_argument("--force", action="store_true", help="gpu-release: SIGKILL holders still running after SIGTERM")
@@ -387,9 +387,14 @@ def main():
                 raise SystemExit(guest_exec(name, args.command if args.command is not None else sys.stdin.read()))
             state = subprocess.check_output(["/usr/bin/virsh", "-c", "qemu:///system", "domstate", name], text=True, env=os.environ | {'LC_ALL': 'C'}).strip()
             if args.action == "vm-stop":
+                notify = args.notify and shutil.which("notify-send")
                 if state != "shut off":
+                    if notify:
+                        subprocess.run(["notify-send", "Spawnkit Windows VM", "Shutting down Windows…"], check=False)
                     run(["/usr/bin/virsh", "-c", "qemu:///system", "shutdown", name])
                 wait_for_gpu_return(name, args.timeout)
+                if notify:
+                    subprocess.run(["notify-send", "Spawnkit Windows VM", "Windows is off and the RTX is back on Ubuntu."], check=False)
             elif state == "shut off":
                 network = active['network_name']
                 info = subprocess.check_output(['/usr/bin/virsh', '-c', 'qemu:///system', 'net-info', network], text=True, env=os.environ | {'LC_ALL': 'C'})
