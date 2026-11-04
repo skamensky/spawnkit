@@ -80,11 +80,35 @@ in
         vscode
         copyq
         (if config.personal.desktop.session == "x11" then xclip else wl-clipboard)
+        # Common web and document fonts, so pages that name Verdana, Arial,
+        # Calibri and the like render as designed instead of a fallback.
+        corefonts
+        vista-fonts
+        liberation_ttf
+        dejavu_fonts
+        noto-fonts
+        noto-fonts-cjk-sans
+        noto-fonts-cjk-serif
+        noto-fonts-color-emoji
+        culmus
+        roboto
+        open-sans
+        lato
+        inter
+        source-sans
+        source-serif
+        source-code-pro
+        ibm-plex
+        fira-code
+        jetbrains-mono
+        ubuntu-classic
       ]
       ++ lib.optionals pkgs.stdenv.hostPlatform.isx86_64 [
         # Linux Chrome lists the Vulkan adapters but hands WebGPU none without this.
         (google-chrome.override { commandLineArgs = "--enable-features=Vulkan"; })
       ];
+    # Lets fontconfig find the Home Manager profile's fonts on Ubuntu.
+    fonts.fontconfig.enable = true;
     # English and Hebrew keyboard layouts; GNOME switches with Super+Space.
     dconf.settings."org/gnome/desktop/input-sources".sources = [
       (lib.hm.gvariant.mkTuple [ "xkb" "us" ])
