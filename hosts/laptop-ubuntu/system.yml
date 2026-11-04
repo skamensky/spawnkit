@@ -22,8 +22,9 @@ ssh_listen_addresses: [100.86.106.55]
 # Native facts 2026-11-03: the RTX and its audio function are alone in IOMMU group 13;
 # the internal panel is on the Intel iGPU. With the X11 pin, Xorg is kept off the RTX.
 gpu_handoff: true
-# Pass the staged Windows and VirtIO ISOs to vm-define (docs/windows-vm.md section 2).
+# Installed 2026-11-03; the RTX virtual display replaced the VGA console 2026-11-04.
 windows_vm: true
+windows_video: none
 windows_mac: "52:54:00:a1:8d:c3"
 windows_address: 192.168.123.10
 windows_share: /home/shmuel/Shared

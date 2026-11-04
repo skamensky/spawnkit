@@ -47,7 +47,7 @@ class Configuration(unittest.TestCase):
                          {'desktop_session': 'xorg'}, {'windows_mac': '52:54:00:AA:00:01'},
                          {'windows_address': '192.168.123.10'},
                          {'windows_mac': '52:54:00:aa:00:01', 'windows_address': '192.168.123.50'},
-                         {'windows_share': 'relative/share'}):
+                         {'windows_share': 'relative/share'}, {'windows_vcpus': 7}):
             with self.subTest(settings=settings), self.assertRaises(ValueError):
                 load_config(ROOT, 'default', settings)
 
@@ -71,6 +71,7 @@ class Configuration(unittest.TestCase):
         self.assertEqual(tree.find('./devices/filesystem/source').get('dir'), '/home/shmuel/Shared')
         self.assertEqual(tree.find('./memoryBacking/access').get('mode'), 'shared')
         self.assertIsNone(ET.fromstring(render_windows(ROOT, gpu_config() | {'windows_share': ''})).find('./devices/filesystem'))
+        self.assertEqual(tree.find('./cpu/topology').attrib, {'sockets': '1', 'dies': '1', 'cores': '4', 'threads': '2'})
 
     def test_other_domain_cannot_take_reserved_gpu(self):
         cfg = gpu_config()

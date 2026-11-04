@@ -55,6 +55,9 @@ def load_config(repo, profile, overrides=None):
     for key in ("windows_memory_mib", "windows_vcpus", "windows_disk_gib", "looking_glass_mib", "ssh_port"):
         if type(cfg[key]) is not int or cfg[key] < 1:
             raise ValueError(f"{key} must be a positive integer")
+    if cfg["windows_vcpus"] % 2:
+        # One socket of two-thread cores: Windows Home uses only one CPU socket.
+        raise ValueError("windows_vcpus must be even")
     if cfg["ssh_port"] > 65535:
         raise ValueError("Invalid SSH port")
     size = cfg["looking_glass_mib"]

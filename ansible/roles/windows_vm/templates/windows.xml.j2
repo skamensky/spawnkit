@@ -14,7 +14,7 @@
     <bootmenu enable='yes'/>
   </os>
   <features><acpi/><apic/><hyperv mode='passthrough'/><smm state='on'/></features>
-  <cpu mode='host-passthrough' check='none' migratable='off'/>
+  <cpu mode='host-passthrough' check='none' migratable='off'><topology sockets='1' dies='1' cores='{{ cfg.windows_vcpus // 2 }}' threads='2'/></cpu>
   <clock offset='localtime'><timer name='hypervclock' present='yes'/></clock>
   <on_poweroff>destroy</on_poweroff><on_reboot>restart</on_reboot><on_crash>destroy</on_crash>
   <devices>

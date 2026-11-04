@@ -102,6 +102,20 @@ newer than stable B7, so adopting it also means packaging a matching Linux clien
 treat that as a separate, measured change. The SPICE VGA console alone does not
 establish a captured NVIDIA desktop.
 
+The laptop uses the signed Virtual Display Driver
+(`VirtualDrivers/Virtual-Display-Driver`, tested 25.7.23, hardware ID `Root\MttVDD`).
+Its `C:\VirtualDisplayDriver\vdd_settings.xml` sets `<gpu><friendlyname>` to the
+RTX adapter name and lists only the panel mode (2560x1600@60), so that mode is used.
+Create the root device node, trust the catalog signer in the machine
+TrustedPublisher store and run `pnputil /add-driver MttVDD.inf /install`; trusting
+a publisher is a security change the owner performs. After the PCI layout
+changes (for example removing VGA), Windows re-enumerates the RTX and needs a
+minute to reinstall it; restart the virtual display device and the Looking Glass
+service if capture then reports no output device.
+
+The domain presents one socket of two-thread cores (`windows_vcpus` must be
+even) because Windows Home uses only one CPU socket.
+
 Verify Windows apps, sound, input and fullscreen behavior. Once GPU display works,
 shut Windows down, set `windows_video: none`, clear installation ISO settings for
 normal operation, and rerun `vm-define`. VGA can instead remain declared if the
