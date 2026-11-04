@@ -301,10 +301,14 @@ and recovery; routine automation can use SSH.
 - **Input stall watchdog:** `vm-view` runs `scripts/lg-watchdog.py` beside the
   viewer. While the viewer is focused, the pointer is over it and X sees input, its
   SPICE input channels must send; the main channel (the client's first socket) and
-  any channel streaming while the user is idle (the microphone) do not count. After
-  4 s without traffic it appends the evidence to
-  `~/.local/state/spawnkit/looking-glass-stalls.jsonl`, shows a notification and
-  restarts the viewer; more than five restarts in ten minutes stops `vm-view`. The
+  any channel streaming while the user is idle (the microphone) do not count. After a
+  click that refocuses the viewer, the B7 client sometimes stops forwarding input
+  until the pointer leaves and re-enters its window (reproduced with and without
+  the keyboard grab; Windows' cursor stays visible and receives nothing). After 2 s
+  without traffic the watchdog moves the pointer just outside the window and back;
+  a second stall within 30 s shows a notification and restarts the viewer. Each
+  event is appended to `~/.local/state/spawnkit/looking-glass-stalls.jsonl` with its
+  `action`; more than five restarts in ten minutes stops `vm-view`. The
   viewer's own log is `~/.local/state/spawnkit/looking-glass.log`.
 - **Clipboard history:** CopyQ runs on both systems and Ctrl+` opens it on whichever
   one has the keyboard. Ubuntu's CopyQ saves new items within 10 s, and a user path
