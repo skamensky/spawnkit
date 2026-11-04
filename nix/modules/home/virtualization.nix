@@ -36,31 +36,45 @@
             })
           '') config.personal.virtualization.passthroughAudio;
         };
-    xdg.desktopEntries = {
-      spawnkit-windows = {
-        name = "Windows";
-        exec = "host-config vm-view --notify --gui";
-        icon = "${./spawnkit-windows.svg}";
-        terminal = false;
-        categories = [ "System" ];
-        # Groups the viewer's window under this launcher in the dock.
-        settings.StartupWMClass = "looking-glass-client";
-      };
-      spawnkit-windows-shutdown = {
-        name = "Shut down Windows";
-        exec = "host-config vm-stop --notify";
-        icon = "system-shutdown";
-        terminal = false;
-        categories = [ "System" ];
-      };
-      spawnkit-windows-console = {
-        name = "Windows installation console";
-        exec = "host-config vm-console --notify";
-        icon = "utilities-terminal";
-        terminal = false;
-        categories = [ "System" ];
-      };
-    };
+    # Launchers live in ~/.local/share/applications rather than the profile: GNOME
+    # Shell never notices launchers added to a profile directory that a switch
+    # replaces, so a new one stays out of the dock until the next login.
+    xdg.dataFile =
+      lib.mapAttrs'
+        (
+          id: entry:
+          lib.nameValuePair "applications/${id}.desktop" {
+            source = "${
+              pkgs.makeDesktopItem (
+                {
+                  name = id;
+                  terminal = false;
+                  categories = [ "System" ];
+                }
+                // entry
+              )
+            }/share/applications/${id}.desktop";
+          }
+        )
+        {
+          spawnkit-windows = {
+            desktopName = "Windows";
+            exec = "host-config vm-view --notify --gui";
+            icon = "${./spawnkit-windows.svg}";
+            # Groups the viewer's window under this launcher in the dock.
+            startupWMClass = "looking-glass-client";
+          };
+          spawnkit-windows-shutdown = {
+            desktopName = "Shut down Windows";
+            exec = "host-config vm-stop --notify";
+            icon = "system-shutdown";
+          };
+          spawnkit-windows-console = {
+            desktopName = "Windows installation console";
+            exec = "host-config vm-console --notify";
+            icon = "utilities-terminal";
+          };
+        };
     # Pin the Windows launchers to the dock without replacing the user's own pins.
     home.activation.pinWindowsLauncher = lib.hm.dag.entryAfter [ "dconfSettings" ] ''
       # gsettings, unlike dconf, also reports GNOME's default pins; without the dconf

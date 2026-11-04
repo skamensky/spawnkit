@@ -189,11 +189,15 @@ lets the user run exactly the guard's `status`, `holders`, `detach-desktop`,
 `attach-desktop` and `schedule-start` (the logout-deferred start unit) without a
 password; `reclaim` and everything else still need sudo authentication.
 
-The desktop entries are **Windows** and **Windows installation console**.
-Activation pins **Windows** to the dock (appended to the user's own pins) with a
-four-pane icon, and the viewer's window groups under it. The viewer opens
-fullscreen. Launch failures also produce a desktop notification. The latter opens the console; start first if the VM is off. Closing
-Looking Glass leaves Windows running. `vm-stop` requests an ACPI shutdown and waits
+The desktop entries are **Windows**, **Shut down Windows** and **Windows
+installation console**, installed in `~/.local/share/applications` because GNOME
+Shell does not notice launchers added to the replaced profile directory until the
+next login. Activation pins **Windows** (four-pane icon; the viewer's window groups
+under it) and **Shut down Windows** (`vm-stop --notify`, with notifications when
+shutdown starts and when the RTX is back) to the dock, appended to the user's own
+pins. The viewer opens fullscreen. Launch failures also produce a desktop
+notification. The console entry opens the console; start first if the VM is off.
+Closing Looking Glass leaves Windows running. `vm-stop` requests an ACPI shutdown and waits
 (default 300 s, `--timeout`) until the domain is `shut off` **and** the release
 hook has cleared the reservation, which it only does after verifying the Linux
 drivers and `nvidia-smi -L`. It never forces power-off; on timeout it reports
