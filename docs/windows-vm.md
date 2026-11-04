@@ -135,7 +135,7 @@ bootstrap through the guest agent; `guest-media --output <iso>` renders the CD a
 through the guest agent) for that run. The role downloads pinned, SHA-256-verified
 installers to `C:\ProgramData\spawnkit\cache` and installs the VirtIO guest tools,
 WinFsp and the virtiofs service (when `windows_share` is set), Tailscale, Chrome,
-Webex (per machine, no autostart), the Virtual Display Driver, the Looking Glass host and NVIDIA's display driver 621.01
+Webex (per machine, started at sign-in by an HKLM Run value), the Virtual Display Driver, the Looking Glass host and NVIDIA's display driver 621.01
 (driver package only, from `nvlti.inf`; when the RTX already runs another version
 it stops and points to the procedure below). It sets `windows_timezone`, keeps
 Windows Update from replacing drivers (`ExcludeWUDriversInQualityUpdate` and

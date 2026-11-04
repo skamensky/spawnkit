@@ -165,6 +165,11 @@
     path: '{{ windows_guest_cache }}\{{ windows_guest_pins.webex.file }}'
     creates_path: C:\Program Files\Cisco Spark\CiscoCollabHost.exe
     arguments: ALLUSERS=1 ACCEPT_EULA=TRUE AUTOSTART_WITH_WINDOWS=false /norestart
+- name: Start Webex at sign-in
+  ansible.windows.win_regedit:
+    path: HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run
+    name: Webex
+    data: '"C:\Program Files\Cisco Spark\CiscoCollabHost.exe"'
 
 - name: Install CopyQ
   ansible.windows.win_package:
