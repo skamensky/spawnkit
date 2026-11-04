@@ -387,7 +387,8 @@ def main():
                 if spice is None or int(spice.get('port', '-1')) < 1:
                     raise ValueError('The running VM has no active local SPICE port')
                 # Calls in Windows open the microphone without a prompt; Looking Glass still shows its indicator.
-                os.execvp("looking-glass-client", ["looking-glass-client", "-f", f"/dev/shm/{active['looking_glass_name']}", 'spice:host=127.0.0.1', f"spice:port={spice.get('port')}", 'audio:micDefault=allow'])
+                # While focused, the keyboard belongs to Windows (Alt+Tab, Super); Right Ctrl is the escape key.
+                os.execvp("looking-glass-client", ["looking-glass-client", "-f", f"/dev/shm/{active['looking_glass_name']}", 'spice:host=127.0.0.1', f"spice:port={spice.get('port')}", 'audio:micDefault=allow', 'input:grabKeyboardOnFocus=yes', 'input:escapeKey=KEY_RIGHTCTRL'])
         else:
             if args.action == "vm-define" or (args.action in ("plan", "apply") and any(cfg[k] for k in ("nvidia", "virtualization", "gpu_handoff", "windows_vm"))):
                 native_only()

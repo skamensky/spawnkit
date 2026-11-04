@@ -285,3 +285,9 @@
     name: NoLockScreen
     data: 1
     type: dword
+- name: Set the pointer speed
+  ansible.windows.win_regedit:
+    path: HKCU:\Control Panel\Mouse
+    name: MouseSensitivity
+    data: '{{ windows_guest_mouse_sensitivity }}'
+    type: string

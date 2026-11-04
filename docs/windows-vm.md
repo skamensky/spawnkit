@@ -289,6 +289,11 @@ and recovery; routine automation can use SSH.
   PipeWire; `vm-view` passes `audio:micDefault=allow`, so calls open the microphone
   without a prompt (Looking Glass still shows its recording indicator). The desktop
   launcher picks up launcher changes only after a Home Manager switch.
+- **Keyboard and mouse:** while focused, Looking Glass grabs the keyboard
+  (`input:grabKeyboardOnFocus`), so Alt+Tab and Super go to Windows. Right Ctrl is
+  the escape key: tap it to toggle input capture, hold it with F for fullscreen or Q
+  to close the viewer (Windows keeps running). The guest role sets the pointer
+  speed to `windows_guest_mouse_sensitivity` (6 of 20).
 - **USB devices:** `windows_usb_devices` lists `{vendor, product}` IDs (0x-prefixed
   hex) libvirt hands to Windows at start (`startupPolicy='optional'`, so an absent
   device does not block boot). Linux loses them until the VM stops. The laptop

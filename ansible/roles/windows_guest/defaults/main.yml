@@ -2,6 +2,8 @@
 # Pinned guest software. Downloads are verified against these hashes before use;
 # updating one means changing its URL, hash and (for bundles) product_id together.
 windows_guest_cache: C:\ProgramData\spawnkit\cache
+# Windows pointer speed, 1-20 (Windows' default is 10); takes effect at the next sign-in.
+windows_guest_mouse_sensitivity: 6
 windows_guest_pins:
   virtio_tools:
     url: https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/archive-virtio/virtio-win-0.1.302-1/virtio-win-guest-tools.exe
