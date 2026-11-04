@@ -126,6 +126,9 @@ in
       recursive = true;
     };
     dconf.settings."org/gnome/shell".enabled-extensions = [ quietAttentionUuid ];
+    # Encodes through /run/opengl-driver: VA-API on the Intel iGPU, NVENC on the RTX
+    # whenever the Windows VM is not holding it.
+    programs.obs-studio.enable = true;
     # Flameshot replaces GNOME's screenshot tool on Print (X11 session).
     services.flameshot.enable = true;
     dconf.settings."org/gnome/shell/keybindings".show-screenshot-ui = [ ];

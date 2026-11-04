@@ -514,7 +514,7 @@ table to audit old files and migration conflicts; make persistent changes in
 | AutoHotkey (`mine.ahk` = 2004Scape mining macro) | 🔁 xdotool/ydotool; only if Shmuel wants it |
 | Wispr Flow | ❓ likely no Linux client → whisper-based dictation (nerd-dictation, Speech Note) |
 | Logi Options+ | 🔁 Solaar |
-| OBS | ⏳ **TODO:** move from the obsproject PPA into Spawnkit (below) |
+| OBS | ✅ Home Manager `programs.obs-studio`; finish the PPA removal (below) |
 | Shotcut, Krita, VLC, qBittorrent, LibreOffice, Wireshark, balenaEtcher, 7-Zip (p7zip) | ✅ |
 | K-Lite | 🔁 `ubuntu-restricted-extras` |
 | Tor Browser | ✅ `torbrowser-launcher` |
@@ -522,15 +522,21 @@ table to audit old files and migration conflicts; make persistent changes in
 | NVIDIA App, Dolby, Intel XTU, Lenovo Vantage/Now/AvatarMaster, Legion Arena, Nahimic, Copilot, Npcap, USBPcap, WinFsp, TMOG | ❌ |
 | `dd.accdb` | 🔁 `mdbtools` / LibreOffice Base, or the CSV export from A5 |
 
-**TODO: OBS in Spawnkit.** OBS is installed by hand from the obsproject PPA,
-the only GUI app outside Spawnkit; `do-release-upgrade` flags it as a foreign
-package. Move it to Home Manager's `programs.obs-studio` (plugins declared
-there; scenes and settings in `~/.config/obs-studio` stay untouched), then
-`sudo apt purge obs-studio` and delete the PPA source. GPU support is part of
-the task, not a follow-up: confirm OBS gets Ubuntu's drivers through
-`targets.genericLinux.gpu`, VA-API/QSV encoding works on the Intel iGPU, and NVENC works on
-the RTX while it is not handed to the Windows VM. If the virtual camera is
-wanted, add `v4l2loopback-dkms` through Ansible.
+**OBS in Spawnkit (2026-11-04).** OBS 32.2.2 now comes from Home Manager's
+`programs.obs-studio` in `desktop.nix`; scenes and settings in
+`~/.config/obs-studio` are untouched. It encodes through `/run/opengl-driver`:
+its log shows FFmpeg VAAPI H.264/HEVC and QuickSync on the Intel iGPU. Remaining:
+
+- [ ] Confirm NVENC with the Windows VM shut down (the RTX is on `vfio-pci` while
+  it runs, so OBS logs `NVENC not supported`).
+- [ ] After `do-release-upgrade`: `sudo apt purge obs-studio` and delete the
+  obsproject PPA source, so `/usr/bin/obs` stops shadowing nothing and the next
+  upgrade has no foreign package.
+- [ ] The scene's "Audio Capture Device (ALSA)" source fails to open `default`
+  under Nix's ALSA, which cannot load Ubuntu's PipeWire ALSA plugin. Desktop
+  Audio and Mic/Aux (PulseAudio capture) work; drop the ALSA source unless it
+  captures something they do not.
+- [ ] Virtual camera: add `v4l2loopback-dkms` through Ansible only if wanted.
 
 ### D6. Migrate Ditto clipboard history → CopyQ
 Ditto (Windows) holds **17,820 clips from 2025-01-20 to 2026-10-15**: 16.9k text (958 with Hebrew), 9k with HTML, 39 RTF, 96 copied-file lists, and **783 images stored as raw bitmaps (3.4 GB of the 3.9 GB DB)**. There are no Ditto groups, pinned clips or shortcuts, so it's a flat history.
@@ -552,6 +558,55 @@ What it does:
 - **Privacy:** clipboard history likely contains passwords and tokens. Keep `Ditto.db` and `export/` out of git, gists and chat. Once Shmuel confirms CopyQ has everything, ask whether to delete `~/windows-import/ditto/` (keep the original on C: until Phase F).
 
 ---
+
+### D7. TODO: KDE Plasma 6 trial (after the 26.04 upgrade)
+
+Decided 2026-11-04. GNOME looks wrong to Shmuel; he wants a modern, sleek, fast
+desktop with one taskbar at the bottom and nothing at the top, good fractional
+scaling (the panel is 2560x1600 at 13.5", about 190 DPI), normal floating windows
+(no keyboard-driven tiling) and room to try themes. Defaults matter less than
+themeability; config may be harder than dconf as long as it can be declared.
+KDE Plasma 6 on **Wayland** fits; X11 was ruled out because fractional scaling
+there is a workaround on every desktop. Plasma 5.27 (all that 24.04 ships) was
+rejected in favor of upgrading Ubuntu: 26.04 (`resolute`) ships Plasma 6.6.6.
+GNOME stays installed, so the session is chosen at login and the trial is reversible.
+
+- **Packages (Ansible, laptop profile):** `kde-plasma-desktop` and `kde-spectacle`,
+  not `kubuntu-desktop`, which swaps the display manager to SDDM and pulls in the
+  whole Kubuntu app set. Keep GDM.
+- **Session pin:** `desktop_session: x11` writes `WaylandEnable=false`, which
+  hides every Wayland session from GDM. Switch the laptop to `wayland` and check
+  that GDM's NVIDIA udev rules do not force X11 (580 enables `nvidia-drm`
+  modeset by default). The pin existed because GDM silently fell back between
+  session types when the NVIDIA module was missing; GNOME on Xorg stays selectable.
+- **GPU handoff:** the panel (eDP) and the HDMI/DP connectors seen so far are on
+  the Intel iGPU, `card1` at `pci-0000:00:02.0`; that was checked while vfio held
+  the RTX, so first confirm no external port is wired to the RTX. KWin opens every DRM device it finds, which would
+  keep the RTX busy and break the VM's GPU handoff, so restrict it with
+  `KWIN_DRM_DEVICES` from a Plasma env script (`~/.config/plasma-workspace/env/`).
+  The variable is colon-separated, so resolve the by-path link to `/dev/dri/cardN`
+  in the script instead of writing the path (it contains colons).
+- **Screenshots:** Spectacle on Print replaces Flameshot in Plasma with the same
+  workflow: drag a region, nothing happens until Enter, then copy to the clipboard
+  and close; no save dialog. Flameshot stays for the GNOME/X11 session.
+- **Declarative config:** add the `plasma-manager` flake input (nix-community,
+  branch `trunk`, Plasma 6) and a Home Manager `plasma.nix` module: one bottom
+  panel, no top panel, display scale (start at 150%), Spectacle shortcut and
+  settings, and the chosen theme. Leave `overrideConfig` off during the trial so
+  changes made in System Settings survive activation.
+- **Theme trial:** a Plasma theme applies to the whole session; it cannot differ
+  per virtual desktop. Install candidates (nixpkgs: `whitesur-kde`,
+  `catppuccin-kde`, `nordic`, `sweet-nova`, `utterly-nord-plasma`, plus Kvantum
+  `kdePackages.qtstyleplugin-kvantum`, `papirus-icon-theme`, `tela-icon-theme`,
+  `bibata-cursors`) or use System Settings → Global Theme → Get New. Preview in
+  System Settings, or cycle quickly with a small script around
+  `plasma-apply-lookandfeel -a <id>`. True side-by-side would need a nested
+  windowed Plasma session with a separate config home; set it up only if quick
+  switching is not enough. Pin the winner in `plasma.nix`.
+- **Verify on Wayland:** fractional scaling is sharp in Chrome, VS Code and
+  Electron apps; CopyQ still records history (Klipper is the fallback); Looking
+  Glass captures and releases input; Citrix and Webex run under XWayland; the
+  Windows VM still takes the RTX; Hebrew/English switching still works.
 
 ## Phase E — Resume + verify (native)
 
