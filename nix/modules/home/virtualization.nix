@@ -56,8 +56,10 @@
     };
     # Pin the Windows launcher to the dock without replacing the user's own pins.
     home.activation.pinWindowsLauncher = lib.hm.dag.entryAfter [ "dconfSettings" ] ''
-      # gsettings, unlike dconf, also reports GNOME's default pins.
-      gsettings=${pkgs.glib}/bin/gsettings
+      # gsettings, unlike dconf, also reports GNOME's default pins; without the dconf
+      # module it would read and write a private keyfile instead.
+      export GIO_EXTRA_MODULES=${pkgs.dconf.lib}/lib/gio/modules
+      gsettings=${pkgs.glib.bin}/bin/gsettings
       if [ -n "''${DBUS_SESSION_BUS_ADDRESS:-}" ] &&
           favorites=$($gsettings get org.gnome.shell favorite-apps 2>/dev/null); then
         case "$favorites" in
