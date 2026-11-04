@@ -292,7 +292,7 @@ and recovery; routine automation can use SSH.
   without a prompt (Looking Glass still shows its recording indicator). The desktop
   launcher picks up launcher changes only after a Home Manager switch.
 - **Keyboard and mouse:** while focused, Looking Glass grabs the keyboard
-  (`input:grabKeyboardOnFocus`), so Alt+Tab and Super go to Windows. Right Ctrl is
+  (`input:grabKeyboardOnFocus`), so Alt+Tab and Super go to Windows. Insert is
   the escape key: tap it to toggle input capture, hold it with F for fullscreen or Q
   to close the viewer (Windows keeps running). The guest role sets the pointer
   speed to `windows_guest_mouse_sensitivity` (6 of 20).
