@@ -107,6 +107,16 @@ in
         # Linux Chrome lists the Vulkan adapters but hands WebGPU none without this.
         (google-chrome.override { commandLineArgs = "--enable-features=Vulkan"; })
       ];
+    # GNOME Shell never notices launchers added to a profile directory that a switch
+    # replaces, so link every profile app into ~/.local/share/applications, which stays
+    # put and which GNOME and KDE watch. Its unmanaged launchers are left alone.
+    xdg.dataFile."applications" = {
+      source = pkgs.runCommand "profile-launchers" { } ''
+        mkdir $out
+        for f in ${config.home.path}/share/applications/*.desktop; do ln -s "$f" $out/; done
+      '';
+      recursive = true;
+    };
     # Lets fontconfig find the Home Manager profile's fonts on Ubuntu.
     fonts.fontconfig.enable = true;
     # Dark mode; GTK3 apps ignore color-scheme and need Ubuntu's dark Yaru theme.
