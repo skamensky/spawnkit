@@ -274,7 +274,8 @@ def view_looking_glass(command, port):
 def start_without_rtx(name):
     """Start the persistent domain once from its definition minus the RTX, leaving the definition intact.
 
-    A virtio display replaces the RTX; with nothing for Looking Glass to capture, its shared memory goes too.
+    A virtio display replaces the RTX. Looking Glass cannot capture without a GPU, so its shared memory goes
+    too; at boot the guest's display selection task moves the desktop off the virtual monitor.
     """
     tree = ET.fromstring(subprocess.check_output(["/usr/bin/virsh", "-c", "qemu:///system", "dumpxml", "--inactive", name], text=True))
     devices = tree.find("devices")

@@ -204,8 +204,15 @@ Windows once from its definition minus the RTX functions and Looking Glass memor
 with a virtio display instead; the stored definition is unchanged. The RTX stays on
 Ubuntu, the guard reserves nothing, and the view opens the SPICE console in
 virt-manager because Looking Glass has nothing to capture. Expect basic graphics
-only; shut down and start normally to get the RTX back. While Windows runs, either
-launcher opens the viewer that matches how it was started. `vm-stop` requests an ACPI shutdown and waits
+only; shut down and start normally to get the RTX back. At boot the guest's
+`Spawnkit display` task (`display-select.ps1`) disables the virtual monitor when no
+RTX is present, so the desktop moves to the virtio display, and re-enables it on the
+next RTX boot for Looking Glass. While Windows runs without the RTX, Ubuntu apps
+such as Chrome's GPU process can open it, so a later normal start may ask to close
+them. While Windows runs, either launcher opens the viewer that matches how it was
+started.
+
+`vm-stop` requests an ACPI shutdown and waits
 (default 300 s, `--timeout`) until the domain is `shut off` **and** the release
 hook has cleared the reservation, which it only does after verifying the Linux
 drivers and `nvidia-smi -L`. It never forces power-off; on timeout it reports

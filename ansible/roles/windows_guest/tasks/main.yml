@@ -282,6 +282,39 @@
   ansible.windows.win_powershell:
     script: "{{ lookup('ansible.builtin.file', 'virtual-display-device.ps1') }}"
   notify: Restart Looking Glass
+- name: Install the display selection script
+  ansible.windows.win_powershell:
+    parameters:
+      Content: "{{ lookup('ansible.builtin.file', 'display-select.ps1') }}"
+    script: |
+      [CmdletBinding(SupportsShouldProcess)]
+      param([string]$Content)
+      $ErrorActionPreference = 'Stop'
+      $WhatIfPreference = $false
+      $path = 'C:\ProgramData\spawnkit\display-select.ps1'
+      $Ansible.Changed = -not (Test-Path $path) -or [IO.File]::ReadAllText($path) -ne $Content
+      if ($Ansible.Changed -and -not $Ansible.CheckMode) {
+          New-Item -ItemType Directory -Force (Split-Path $path) | Out-Null
+          [IO.File]::WriteAllText($path, $Content)
+      }
+- name: Select the display at boot
+  ansible.windows.win_powershell:
+    parameters:
+      Arguments: -NoProfile -ExecutionPolicy Bypass -File C:\ProgramData\spawnkit\display-select.ps1
+    script: |
+      [CmdletBinding(SupportsShouldProcess)]
+      param([string]$Arguments)
+      $ErrorActionPreference = 'Stop'
+      $WhatIfPreference = $false
+      $task = Get-ScheduledTask -TaskName 'Spawnkit display' -ErrorAction SilentlyContinue
+      $Ansible.Changed = -not $task -or $task.Actions[0].Arguments -ne $Arguments
+      if ($Ansible.Changed -and -not $Ansible.CheckMode) {
+          $action = New-ScheduledTaskAction -Execute powershell.exe -Argument $Arguments
+          $trigger = New-ScheduledTaskTrigger -AtStartup
+          $principal = New-ScheduledTaskPrincipal -UserId SYSTEM -LogonType ServiceAccount -RunLevel Highest
+          $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Minutes 5)
+          Register-ScheduledTask -TaskName 'Spawnkit display' -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Force | Out-Null
+      }
 
 - name: Install the Looking Glass host
   ansible.windows.win_package:
