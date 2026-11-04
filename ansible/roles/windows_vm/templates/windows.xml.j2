@@ -40,7 +40,9 @@
 {% endfor %}
     <controller type='usb' model='qemu-xhci'/>
     <interface type='network'>{% if cfg.windows_mac %}<mac address='{{ cfg.windows_mac }}'/>{% endif %}<source network='{{ cfg.network_name }}'/><model type='virtio'/></interface>
-    <input type='tablet' bus='usb'/><input type='keyboard' bus='usb'/>
+    <!-- Looking Glass's install guide says to remove the tablet: its absolute positioning competes with
+         the relative motion Looking Glass sends. vioinput from the guest tools drives virtio input. -->
+    <input type='mouse' bus='virtio'/><input type='keyboard' bus='virtio'/>
     <graphics type='spice' autoport='yes' listen='127.0.0.1'><listen type='address' address='127.0.0.1'/></graphics>
     <channel type='spicevmc'><target type='virtio' name='com.redhat.spice.0'/></channel>
     <channel type='unix'><target type='virtio' name='org.qemu.guest_agent.0'/></channel>

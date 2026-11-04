@@ -24,6 +24,7 @@ def module(name, path):
 host = module('host_state', 'ansible/roles/base/files/host-state.py')
 guard = module('gpu_guard', 'ansible/roles/gpu_handoff/files/gpu-guard.py')
 cli = module('host_config', 'scripts/host-config.py')
+watchdog = module('lg_watchdog', 'scripts/lg-watchdog.py')
 
 
 def gpu_config():
@@ -427,6 +428,22 @@ class GPUHandoff(unittest.TestCase):
                 (group / 'class').write_text('0x020000')
             with self.assertRaisesRegex(RuntimeError, 'also contains'):
                 guard.inspect_devices(cfg, root)
+
+
+class LookingGlassWatchdog(unittest.TestCase):
+    def test_spice_channels_exclude_main_and_other_processes(self):
+        ss = '\n'.join([
+            'ESTAB 0 0 127.0.0.1:50274 127.0.0.1:5900 users:(("looking-glass-c",pid=7,fd=20))',
+            '\t cubic bytes_sent:1746 bytes_acked:1746',
+            'ESTAB 0 0 127.0.0.1:50262 127.0.0.1:5900 users:(("looking-glass-c",pid=7,fd=17))',
+            '\t cubic bytes_sent:480 bytes_acked:480',
+            'ESTAB 0 0 127.0.0.1:50270 127.0.0.1:5900 users:(("looking-glass-c",pid=7,fd=18))',
+            '\t cubic bytes_sent:210 bytes_acked:210',
+            'ESTAB 0 0 127.0.0.1:50300 127.0.0.1:5900 users:(("remote-viewer",pid=9,fd=17))',
+            '\t cubic bytes_sent:999 bytes_acked:999',
+        ])
+        with patch.object(watchdog.subprocess, 'run', return_value=subprocess.CompletedProcess([], 0, ss, '')):
+            self.assertEqual(watchdog.spice_sent(7, 5900), {'50270': 210, '50274': 1746})
 
 
 if __name__ == '__main__':

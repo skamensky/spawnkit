@@ -296,6 +296,16 @@ and recovery; routine automation can use SSH.
   the escape key: tap it to toggle input capture, hold it with F for fullscreen or Q
   to close the viewer (Windows keeps running). The guest role sets the pointer
   speed to `windows_guest_mouse_sensitivity` (6 of 20).
+  The VM has virtio mouse and keyboard devices and no USB tablet, as Looking Glass
+  requires.
+- **Input stall watchdog:** `vm-view` runs `scripts/lg-watchdog.py` beside the
+  viewer. While the viewer is focused, the pointer is over it and X sees input, its
+  SPICE input channels must send; the main channel (the client's first socket) and
+  any channel streaming while the user is idle (the microphone) do not count. After
+  4 s without traffic it appends the evidence to
+  `~/.local/state/spawnkit/looking-glass-stalls.jsonl`, shows a notification and
+  restarts the viewer; more than five restarts in ten minutes stops `vm-view`. The
+  viewer's own log is `~/.local/state/spawnkit/looking-glass.log`.
 - **USB devices:** `windows_usb_devices` lists `{vendor, product}` IDs (0x-prefixed
   hex) libvirt hands to Windows at start (`startupPolicy='optional'`, so an absent
   device does not block boot). Linux loses them until the VM stops. The laptop

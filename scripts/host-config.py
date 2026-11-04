@@ -253,6 +253,24 @@ def close_holders(held):
     return remaining
 
 
+def view_looking_glass(command, port):
+    """Run the viewer, restarting it when lg-watchdog finds it has stopped forwarding input."""
+    state = Path(os.environ.get('XDG_STATE_HOME', Path.home() / '.local/state')) / 'spawnkit'
+    state.mkdir(parents=True, exist_ok=True)
+    restarts = []
+    while True:
+        with (state / 'looking-glass.log').open('a') as log:
+            client = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT)
+        watchdog = subprocess.Popen(['/usr/bin/python3', '-I', str(Path(__file__).with_name('lg-watchdog.py')), '--pid', str(client.pid), '--port', str(port), '--log', str(state / 'looking-glass-stalls.jsonl')])
+        client.wait()
+        if watchdog.wait() != 75:
+            return
+        now = time.monotonic()
+        restarts = [t for t in restarts if t > now - 600] + [now]
+        if len(restarts) > 5:
+            raise RuntimeError(f"Looking Glass stalled {len(restarts)} times in ten minutes; see {state / 'looking-glass-stalls.jsonl'}")
+
+
 def start_windows(name, notify, gui):
     """Detach the RTX from the desktop, then start Windows now or once its holders exit.
 
@@ -388,7 +406,7 @@ def main():
                     raise ValueError('The running VM has no active local SPICE port')
                 # Calls in Windows open the microphone without a prompt; Looking Glass still shows its indicator.
                 # While focused, the keyboard belongs to Windows (Alt+Tab, Super); Right Ctrl is the escape key.
-                os.execvp("looking-glass-client", ["looking-glass-client", "-f", f"/dev/shm/{active['looking_glass_name']}", 'spice:host=127.0.0.1', f"spice:port={spice.get('port')}", 'audio:micDefault=allow', 'input:grabKeyboardOnFocus=yes', 'input:escapeKey=KEY_RIGHTCTRL'])
+                view_looking_glass(['looking-glass-client', '-f', f"/dev/shm/{active['looking_glass_name']}", 'spice:host=127.0.0.1', f"spice:port={spice.get('port')}", 'audio:micDefault=allow', 'input:grabKeyboardOnFocus=yes', 'input:escapeKey=KEY_RIGHTCTRL'], int(spice.get('port')))
         else:
             if args.action == "vm-define" or (args.action in ("plan", "apply") and any(cfg[k] for k in ("nvidia", "virtualization", "gpu_handoff", "windows_vm"))):
                 native_only()
