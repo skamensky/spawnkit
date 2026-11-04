@@ -204,6 +204,16 @@ and recovery; routine automation can use SSH.
   user. In Windows, install WinFsp, set DWORDs `OverrideUid`/`OverrideGid` under
   `HKLM\SOFTWARE\VirtIO-FS` to the Linux user's IDs so created files belong to that
   user, and set the `VirtioFsSvc` service to automatic. It appears as drive `Z:`.
+- **NVIDIA driver updates:** with 616.56 the passed-through RTX bug-checked
+  (0x7E in `nvlddmkm.sys`) whenever the driver unloaded: on device disable, guest
+  reboot, and inside NVIDIA's installer (exit 9). Each crash destroyed the domain
+  and the RTX returned to Linux intact. To replace a driver that cannot unload,
+  extract the package (`tar.exe -xf <driver>.exe -C <dir>`), stage the INF that
+  names the GPU's `SUBSYS` (`pnputil /add-driver <dir>\Display.Driver\nvlti.inf`
+  for the Legion), set `HKLM\SYSTEM\CurrentControlSet\Services\nvlddmkm` `Start`
+  to 4, start the guest again, then `pnputil /add-driver ... /install`; the INF
+  restores `Start` to 3. 621.01 (32.0.16.2101) shut down cleanly. Afterwards
+  restart the virtual display device and the Looking Glass host service.
 - **Clipboard:** the SPICE agent (`spice-vdagent-x64` MSI from spice-space.org)
   carries clipboard through Looking Glass's SPICE connection.
 
