@@ -554,7 +554,7 @@ What it does:
    - `~/tmp/family-desk/publish-core` (already marked prunable; ask before pruning)
 3. Open Codex and confirm that **supa-gcp-alerts**, **declarative-schemas** and **lead import** are listed. Reopen each one, read its checkpoint note, and continue only with Shmuel's go-ahead.
 4. Claude: `claude --resume` from each project cwd lists the old transcripts. The Claude desktop app shows its old Code-tab sessions.
-5. Recreate tmux: `tmain` (→ `supa-crm/start-tmux-session.sh`). Restore the local Supabase for lead import from `~/tmp/ubuntu-migration/db/` if it was dumped.
+5. Recreate tmux: `tmain` (→ `supa-crm/start-tmux-session.sh`).
 
 ### E2. Verification checklist
 - [ ] `nvidia-smi` works; PRIME on-demand; suspend/resume; Wi-Fi 6E; external monitor as an extended display (no monitor audio needed); webcam; audio
@@ -565,13 +565,13 @@ What it does:
 - [ ] the agent-work snapshot matches; old Codex threads visible; `claude --resume` works; worktrees repaired
 - [ ] `repos-status` regenerated on native matches the pre-migration file (except for the deliberate pushes)
 - [x] no `/mnt/c`, `.exe` or `wslg` references left in shell config (D4 grep is empty)
-- [ ] no plaintext secrets in dotfiles
+- [ ] no plaintext secrets in dotfiles (2026-11-04: active dotfiles clean, every old export matches the store; awaiting Shmuel's OK to delete `~/.mybashrc`, `~/.mybashrc.sh`, `~/.bashrc.pre-spawnkit` and stray credential lines in shell history)
 - [ ] Family Desk, arnona-bot, bank-records automation, google-automation, personal-sms and clockify-sheets-sync each run end-to-end once
 - [x] Required Ubuntu host packages/services configured; Tailscale daemon reachable through the managed CLI
-- [ ] Docker works; supa-crm local stack starts
+- [x] Docker works (2026-11-04: Engine 29.1.3 reachable without sudo); the supa-crm local stack is not part of the migration
 - [ ] Before adopting the Windows VM: busy-GPU start refusal, Windows GPU acceleration and repeated return to Linux verified
 - [x] Citrix access works (2026-11-04: Workspace app 24.11 from the `citrix` role)
-- [ ] Windows Downloads/Documents/Desktop present in `~/windows-import`; unsaved Notepad++ tabs reviewed
+- [ ] Windows Downloads/Documents/Desktop present in `~/windows-import` (2026-11-04: rsync dry run against read-only C: shows no differences except the deliberately skipped `Chrome Passwords.csv` and the portable `Desktop/Tor Browser`); all 51 Notepad++ backups imported, review by Shmuel pending
 - [x] CopyQ autostarts; the `Ditto/*` tabs exist; the import printed "verified per tab"; a Hebrew clip and an image paste correctly (2026-11-04)
 - [ ] log complete; summary given to Shmuel
 
