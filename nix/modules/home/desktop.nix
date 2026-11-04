@@ -109,6 +109,11 @@ in
       ];
     # Lets fontconfig find the Home Manager profile's fonts on Ubuntu.
     fonts.fontconfig.enable = true;
+    # Dark mode; GTK3 apps ignore color-scheme and need Ubuntu's dark Yaru theme.
+    dconf.settings."org/gnome/desktop/interface" = {
+      color-scheme = "prefer-dark";
+      gtk-theme = "Yaru-dark";
+    };
     # English and Hebrew keyboard layouts; GNOME switches with Super+Space.
     dconf.settings."org/gnome/desktop/input-sources".sources = [
       (lib.hm.gvariant.mkTuple [ "xkb" "us" ])
