@@ -402,11 +402,30 @@ class GPUHandoff(unittest.TestCase):
             self.assertEqual(cli.release_holders([10], force=True), [])
         self.assertEqual([c.args for c in kill.call_args_list], [(10, cli.signal.SIGTERM), (10, cli.signal.SIGKILL)])
 
-    def test_picker_leaves_session_holders_to_logout(self):
-        held = [holder(10, name='Xorg', closable=False)]
-        with patch.object(cli.subprocess, 'run') as run:
-            self.assertEqual(cli.close_holders(held), held)
-        run.assert_not_called()
+    def test_picker_lists_session_holders_and_leaves_them_to_logout(self):
+        held = [holder(10, name='gnome-shell', closable=False), holder(11)]
+        chose = subprocess.CompletedProcess([], 0, '10 11\n', '')
+        with patch.object(cli.subprocess, 'run', return_value=chose) as dialog, patch.object(cli.os, 'kill') as kill, \
+                patch.object(cli, 'guard_holders', side_effect=[held, held[:1]]):
+            self.assertEqual(cli.close_holders(held), held[:1])
+        self.assertIn('Log out', dialog.call_args.args[0])
+        kill.assert_called_once_with(11, cli.signal.SIGTERM)
+
+    def test_picker_can_start_without_the_rtx(self):
+        held = [holder(10, name='gnome-shell', closable=False)]
+        chose = subprocess.CompletedProcess([], 1, 'Start without RTX\n', '')
+        with patch.object(cli.subprocess, 'run', return_value=chose), patch.object(cli, 'run') as attach:
+            self.assertIsNone(cli.close_holders(held, offer_without_rtx=True))
+        attach.assert_not_called()
+
+    def test_start_refuses_to_wait_for_holders_a_logout_cannot_release(self):
+        powerd = holder(10, name='nvidia-powerd', closable=False) | {'uid': 0}
+        with patch.object(cli.subprocess, 'run', return_value=subprocess.CompletedProcess([], 3)), \
+                patch.object(cli.subprocess, 'check_output', return_value=json.dumps([powerd])), \
+                patch.object(cli, 'run') as run:
+            with self.assertRaisesRegex(ValueError, 'nvidia-powerd'):
+                cli.start_windows('windows', notify=False, gui=False)
+        self.assertIn('attach-desktop', run.call_args.args[0])
 
     def test_picker_closes_chosen_holders(self):
         held = [holder(10)]

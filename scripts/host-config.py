@@ -226,27 +226,42 @@ def release_holders(pids, force):
     return remaining
 
 
-def close_holders(held):
+def release_hint(holder):
+    """How a holder lets go of the RTX, as the start dialog shows it."""
+    if holder["closable"]:
+        return "Close it"
+    if holder["name"] in SESSION_HOLDERS:
+        return "Log out"
+    return f"Stop it as its owner (a service: sudo systemctl stop {holder['name']})"
+
+
+def close_holders(held, offer_without_rtx=False):
     """Dialog front end for gpu-holders/gpu-release; returns the holders that remain.
 
-    Display-server and other users' holders are left to the logout handoff.
+    Every holder is listed with how it releases the RTX; only the user's own programs
+    can be closed here, and display-server holders are left to the logout handoff.
+    With offer_without_rtx, returns None when the user picks starting without the RTX.
     """
-    if not all(h["closable"] for h in held):
-        return held
-    rows = [field for h in held for field in ("TRUE", str(h["pid"]), h["name"], h["command"][:150])]
-    picked = subprocess.run(["zenity", "--list", "--checklist", "--title=Start Windows", "--width=1000", "--height=420",
-                             "--text=These programs are using the RTX. Close the checked ones to hand it to Windows "
-                             "(unsaved work in them is lost):",
-                             "--column=Close", "--column=PID", "--column=Program", "--column=Command",
-                             "--print-column=2", "--separator= ", "--ok-label=Close and start Windows", *rows],
+    rows = [field for h in held for field in ("TRUE" if h["closable"] else "FALSE", str(h["pid"]), h["name"],
+                                              release_hint(h), h["command"][:120])]
+    extra = ["--extra-button=Start without RTX"] if offer_without_rtx else []
+    picked = subprocess.run(["zenity", "--list", "--checklist", "--title=Start Windows", "--width=1100", "--height=460",
+                             "--text=These programs are using the RTX. Checked programs you own are closed "
+                             "(unsaved work in them is lost); Windows starts once the rest release it.",
+                             "--column=Close", "--column=PID", "--column=Program", "--column=Releases the RTX by",
+                             "--column=Command", "--print-column=2", "--separator= ",
+                             "--ok-label=Close and start Windows", *extra, *rows],
                             capture_output=True, text=True)
     if picked.returncode != 0:
+        if offer_without_rtx and picked.stdout.strip() == "Start without RTX":
+            return None
         run([*GUARD, "attach-desktop"])
         raise ValueError("Cancelled; the RTX stays with Linux")
-    chosen = [int(pid) for pid in picked.stdout.split()]
-    remaining = release_holders(chosen, force=False)
+    closable = {h["pid"] for h in held if h["closable"]}
+    chosen = [pid for pid in map(int, picked.stdout.split()) if pid in closable]
+    remaining = release_holders(chosen, force=False) if chosen else held
     if set(chosen) & {h["pid"] for h in remaining}:
-        names = ", ".join(sorted({h["name"] for h in remaining}))
+        names = ", ".join(sorted({h["name"] for h in remaining if h["pid"] in chosen}))
         if subprocess.run(["zenity", "--question", "--title=Start Windows", "--ok-label=Force-kill",
                            f"--text={names} did not exit. Force-kill?"]).returncode == 0:
             remaining = release_holders([h["pid"] for h in remaining if h["pid"] in chosen], force=True)
@@ -296,9 +311,21 @@ def start_windows(name, notify, gui):
     With gui, user-owned holders can be closed from a dialog first. Returns False when
     the start waits for the user to log out.
     """
+    if subprocess.run(["systemctl", "is-active", "--quiet", "spawnkit-windows-handoff.service"]).returncode == 0:
+        raise ValueError("Windows already starts once you log out; to cancel, run "
+                         "sudo systemctl stop spawnkit-windows-handoff, then host-config vm-view again")
     held = json.loads(subprocess.check_output([*GUARD, "detach-desktop"], text=True))
     if held and gui:
-        held = close_holders(guard_holders())
+        held = close_holders(guard_holders(), offer_without_rtx=True)
+        if held is None:
+            run([*GUARD, "attach-desktop"])
+            start_without_rtx(name)
+            return True
+    if stuck := sorted({h["name"] for h in held if not h["closable"] and h["name"] not in SESSION_HOLDERS}):
+        # A logout cannot release these, so waiting for one would only time out.
+        run([*GUARD, "attach-desktop"])
+        raise ValueError("A logout does not release the RTX from " + ", ".join(stuck) + "; stop it (a service: "
+                         "sudo systemctl stop <name>) or start Windows without the RTX")
     if not held:
         try:
             run(["/usr/bin/virsh", "-c", "qemu:///system", "start", name], capture_output=True, text=True)
