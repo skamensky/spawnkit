@@ -145,7 +145,8 @@
       param()
       $ErrorActionPreference = 'Stop'
       $WhatIfPreference = $false
-      $addresses = '100.64.0.0/10', 'fd7a:115c:a1e0::/48'
+      # Windows reports IPv4 prefixes as masks, so declare them that way to compare equal.
+      $addresses = '100.64.0.0/255.192.0.0', 'fd7a:115c:a1e0::/48'
       $rule = Get-NetFirewallRule -Name Spawnkit-SSH-Tailnet -ErrorAction SilentlyContinue
       $current = if ($rule) { @(($rule | Get-NetFirewallAddressFilter).RemoteAddress) } else { @() }
       $Ansible.Changed = -not $rule -or (Compare-Object $current $addresses)
@@ -289,5 +290,5 @@
   ansible.windows.win_regedit:
     path: HKCU:\Control Panel\Mouse
     name: MouseSensitivity
-    data: '{{ windows_guest_mouse_sensitivity }}'
+    data: "{{ windows_guest_mouse_sensitivity | string }}"
     type: string

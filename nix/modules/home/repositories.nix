@@ -22,7 +22,7 @@ let
     runtimeInputs = [
       pkgs.python3
       pkgs.git
-      pkgs.openssh
+      pkgs.opensshWithKerberos
     ];
     text = ''
       exec python3 ${../../../scripts/bootstrap-repos.py} ${manifest} --home "$HOME" --known-hosts ${githubKnownHosts} "$@"

@@ -34,7 +34,8 @@ in
       sqlite
       postgresql
       rtk
-      openssh
+      # Ubuntu's /etc/ssh/ssh_config sets GSSAPIAuthentication, which plain openssh rejects.
+      opensshWithKerberos
       mosh
       inputs.llm-agents.packages.${system}.claude-code
       inputs.llm-agents.packages.${system}.codex

@@ -557,23 +557,22 @@ What it does:
 5. Recreate tmux: `tmain` (→ `supa-crm/start-tmux-session.sh`). Restore the local Supabase for lead import from `~/tmp/ubuntu-migration/db/` if it was dumped.
 
 ### E2. Verification checklist
-- [ ] `nvidia-smi` works; PRIME on-demand; suspend/resume; Wi-Fi 6E; external monitor; webcam; audio
-- [ ] `tailscale status` shows `toplap123` at **100.86.106.55**; `ssh -p 2222` from the phone works (else update `docs/remote-access.md`)
+- [ ] `nvidia-smi` works; PRIME on-demand; suspend/resume; Wi-Fi 6E; external monitor as an extended display (no monitor audio needed); webcam; audio
+- [ ] `tailscale status` shows `toplap123` at **100.86.106.55** (verified 2026-11-04, listener on :2222); `ssh -p 2222` from the phone works (else update `docs/remote-access.md`)
 - [ ] Home Manager check/build passed; approved profile activated; Claude + Codex logged in; assistant links and skills resolve; `rtk --version`
-- [ ] mise Python/Node and uv work in noninteractive agents; no shadowing legacy tool copies
+- [x] mise Python/Node and uv work in noninteractive agents; no shadowing legacy tool copies (2026-11-04: Python 3.12.15, Node 24.22.0, uv 0.13.1 from mise)
 - [ ] Native graphics setup done; matching NVIDIA userspace version/hash declared and offloading verified
 - [ ] the agent-work snapshot matches; old Codex threads visible; `claude --resume` works; worktrees repaired
 - [ ] `repos-status` regenerated on native matches the pre-migration file (except for the deliberate pushes)
-- [ ] no `/mnt/c`, `.exe` or `wslg` references left in shell config (D4 grep is empty)
+- [x] no `/mnt/c`, `.exe` or `wslg` references left in shell config (D4 grep is empty)
 - [ ] no plaintext secrets in dotfiles
 - [ ] Family Desk, arnona-bot, bank-records automation, google-automation, personal-sms and clockify-sheets-sync each run end-to-end once
-- [ ] Required Ubuntu host packages/services configured; Tailscale daemon reachable through the managed CLI
+- [x] Required Ubuntu host packages/services configured; Tailscale daemon reachable through the managed CLI
 - [ ] Docker works; supa-crm local stack starts
 - [ ] Before adopting the Windows VM: busy-GPU start refusal, Windows GPU acceleration and repeated return to Linux verified
 - [x] Citrix access works (2026-11-04: Workspace app 24.11 from the `citrix` role)
-- [ ] Windows 365 access works
 - [ ] Windows Downloads/Documents/Desktop present in `~/windows-import`; unsaved Notepad++ tabs reviewed
-- [ ] CopyQ autostarts; the `Ditto/*` tabs exist; the import printed "verified per tab"; a Hebrew clip and an image paste correctly
+- [x] CopyQ autostarts; the `Ditto/*` tabs exist; the import printed "verified per tab"; a Hebrew clip and an image paste correctly (2026-11-04)
 - [ ] log complete; summary given to Shmuel
 
 ---

@@ -283,7 +283,9 @@ and recovery; routine automation can use SSH.
   Bug-check codes so far: 0x7E in `nvlddmkm.sys` when the driver was replaced while
   loaded, and 0x9F (DRIVER_POWER_STATE_FAILURE) when the idle guest went to sleep.
 - **Clipboard:** the SPICE agent from the VirtIO guest tools carries clipboard
-  through Looking Glass's SPICE connection.
+  through Looking Glass's SPICE connection while the viewer runs. Text and images
+  copied in Windows reach the Ubuntu clipboard, so CopyQ keeps them in its history;
+  images also go from Ubuntu to Windows.
 - **Audio:** the ICH9 HDA device uses the `micro` codec, so Windows sees Speakers
   and a Microphone (not line out/in). Looking Glass carries both over SPICE to
   PipeWire; `vm-view` passes `audio:micDefault=allow`, so calls open the microphone
