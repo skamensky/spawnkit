@@ -243,6 +243,12 @@
     - {name: DefaultUserName, data: '{{ cfg.user }}'}
     - {name: DefaultPassword, data: ''}
     - {name: DefaultDomainName, data: '{{ cfg.windows_computer_name | upper }}'}
+# Left by the unattend's AutoLogon; Windows turns automatic sign-in off when it counts down to zero.
+- name: Keep automatic sign-in from expiring
+  ansible.windows.win_regedit:
+    path: HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon
+    name: AutoLogonCount
+    state: absent
 - name: Hide the lock screen
   ansible.windows.win_regedit:
     path: HKLM:\SOFTWARE\Policies\Microsoft\Windows\Personalization
