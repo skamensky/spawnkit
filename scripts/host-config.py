@@ -23,7 +23,7 @@ GPU_RESERVATION = Path("/run/spawnkit/gpu-owner.json")
 # Passwordless through the gpu_handoff sudoers rule, which lists these exact command lines.
 GUARD = ["sudo", "/usr/bin/python3", "-I", "/usr/local/libexec/spawnkit/gpu-guard.py"]
 # Holders only a logout releases; the picker never offers to kill them.
-SESSION_HOLDERS = {"Xorg", "gnome-shell", "Xwayland"}
+SESSION_HOLDERS = {"Xorg", "gnome-shell", "Xwayland", "kwin_wayland"}
 
 
 def run(args, **kwargs):
@@ -226,13 +226,24 @@ def release_holders(pids, force):
     return remaining
 
 
-def release_hint(holder):
-    """How a holder lets go of the RTX, as the start dialog shows it."""
+def release(holder):
+    """How a holder lets go of the RTX: closed here, at logout, or by stopping its service."""
     if holder["closable"]:
-        return "Close it"
+        return "close"
     if holder["name"] in SESSION_HOLDERS:
-        return "Log out"
-    return f"Stop it as its owner (a service: sudo systemctl stop {holder['name']})"
+        return "logout"
+    return "service"
+
+
+def ui_dialog(name, data):
+    """Show a Spawnkit dialog (scripts/spawnkit-ui) and return its result, or None if dismissed."""
+    shown = subprocess.run(["/usr/bin/python3", "-I", str(Path(__file__).with_name("spawnkit-ui.py")), name],
+                           input=json.dumps(data), capture_output=True, text=True)
+    if shown.returncode == 1 and not shown.stdout:
+        return None
+    if shown.returncode != 0:
+        raise ValueError(f"The {name} dialog failed: {shown.stderr.strip()}")
+    return json.loads(shown.stdout)
 
 
 def close_holders(held, offer_without_rtx=False):
@@ -242,29 +253,24 @@ def close_holders(held, offer_without_rtx=False):
     can be closed here, and display-server holders are left to the logout handoff.
     With offer_without_rtx, returns None when the user picks starting without the RTX.
     """
-    rows = [field for h in held for field in ("TRUE" if h["closable"] else "FALSE", str(h["pid"]), h["name"],
-                                              release_hint(h), h["command"][:120])]
-    extra = ["--extra-button=Start without RTX"] if offer_without_rtx else []
-    picked = subprocess.run(["zenity", "--list", "--checklist", "--title=Start Windows", "--width=1100", "--height=460",
-                             "--text=These programs are using the RTX. Checked programs you own are closed "
-                             "(unsaved work in them is lost); Windows starts once the rest release it.",
-                             "--column=Close", "--column=PID", "--column=Program", "--column=Releases the RTX by",
-                             "--column=Command", "--print-column=2", "--separator= ",
-                             "--ok-label=Close and start Windows", *extra, *rows],
-                            capture_output=True, text=True)
-    if picked.returncode != 0:
-        if offer_without_rtx and picked.stdout.strip() == "Start without RTX":
-            return None
+    holders = [{"pid": h["pid"], "name": h["name"], "command": h["command"], "closable": h["closable"],
+                "release": release(h)} for h in held]
+    picked = ui_dialog("rtx-holders", {"holders": holders, "without_rtx": offer_without_rtx})
+    if picked is None:
         run([*GUARD, "attach-desktop"])
         raise ValueError("Cancelled; the RTX stays with Linux")
+    if picked["action"] == "without_rtx":
+        return None
     closable = {h["pid"] for h in held if h["closable"]}
-    chosen = [pid for pid in map(int, picked.stdout.split()) if pid in closable]
+    chosen = [pid for pid in picked["pids"] if pid in closable]
     remaining = release_holders(chosen, force=False) if chosen else held
-    if set(chosen) & {h["pid"] for h in remaining}:
-        names = ", ".join(sorted({h["name"] for h in remaining if h["pid"] in chosen}))
-        if subprocess.run(["zenity", "--question", "--title=Start Windows", "--ok-label=Force-kill",
-                           f"--text={names} did not exit. Force-kill?"]).returncode == 0:
-            remaining = release_holders([h["pid"] for h in remaining if h["pid"] in chosen], force=True)
+    if stubborn := [h for h in remaining if h["pid"] in chosen]:
+        names = " and ".join(sorted({h["name"] for h in stubborn}))
+        it = "it" if len(stubborn) == 1 else "them"
+        if ui_dialog("confirm", {"heading": f"{names} didn't close",
+                                 "text": f"Force-quit {it} so Windows can start? Anything unsaved in {it} is lost.",
+                                 "confirm": "Force quit", "cancel": "Keep waiting", "destructive": True}):
+            remaining = release_holders([h["pid"] for h in stubborn], force=True)
     return remaining
 
 

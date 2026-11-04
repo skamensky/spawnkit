@@ -1,0 +1,6 @@
+module Spawnkit
+singleton Theme 1.0 Theme.qml
+DialogWindow 1.0 DialogWindow.qml
+ActionButton 1.0 ActionButton.qml
+CheckMark 1.0 CheckMark.qml
+ListRow 1.0 ListRow.qml

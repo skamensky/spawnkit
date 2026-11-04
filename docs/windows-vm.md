@@ -189,6 +189,16 @@ lets the user run exactly the guard's `status`, `holders`, `detach-desktop`,
 `attach-desktop` and `schedule-start` (the logout-deferred start unit) without a
 password; `reclaim` and everything else still need sudo authentication.
 
+The checklist and its force-quit question are Spawnkit dialogs
+(`scripts/spawnkit-ui.py <dialog> < input.json`, printing the result as JSON). They
+are QML on Ubuntu's PySide6 and Kirigami, so they use Plasma's own Qt. The shared
+components in `scripts/spawnkit-ui/Spawnkit` (`Theme`, `DialogWindow`,
+`ActionButton`, `ListRow`) give every Spawnkit applet one look. That look is a single
+flat surface in Inter, with the Plasma colour scheme's background and text. The accent
+is Spawnkit's indigo, used for primary buttons and checkboxes. Hierarchy comes from text
+opacity, not from borders or panels. New applets add a file to `spawnkit-ui/dialogs`
+rather than using zenity or kdialog.
+
 The desktop entries are **Windows**, **Shut down Windows** and **Windows
 installation console**, installed in `~/.local/share/applications` because GNOME
 Shell does not notice launchers added to the replaced profile directory until the
@@ -223,7 +233,8 @@ may need shutdown from inside Windows.
    from the desktop seat (`gpu-guard.py detach-desktop`, a runtime udev rule under
    `/run`). If nothing still holds the RTX it asks libvirt to start the domain.
    With `--gui` (the desktop entry) and anything holding the RTX, a checklist
-   lists every holder (`gpu-guard.py holders`) with how it releases the RTX:
+   groups every holder into ones Spawnkit closes and ones it cannot (`gpu-guard.py holders`), with how each releases the RTX (**Show details** adds
+   PIDs and command lines):
    your own programs are checked and get SIGTERM, then a confirmed SIGKILL after
    10 s; the compositor and Xwayland need a logout; a service or another user's
    process must be stopped by its owner. **Start without RTX** starts Windows

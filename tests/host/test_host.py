@@ -404,16 +404,17 @@ class GPUHandoff(unittest.TestCase):
 
     def test_picker_lists_session_holders_and_leaves_them_to_logout(self):
         held = [holder(10, name='gnome-shell', closable=False), holder(11)]
-        chose = subprocess.CompletedProcess([], 0, '10 11\n', '')
+        chose = subprocess.CompletedProcess([], 0, '{"action": "close", "pids": [10, 11]}', '')
         with patch.object(cli.subprocess, 'run', return_value=chose) as dialog, patch.object(cli.os, 'kill') as kill, \
                 patch.object(cli, 'guard_holders', side_effect=[held, held[:1]]):
             self.assertEqual(cli.close_holders(held), held[:1])
-        self.assertIn('Log out', dialog.call_args.args[0])
+        shown = json.loads(dialog.call_args.kwargs['input'])['holders']
+        self.assertEqual([(h['pid'], h['release']) for h in shown], [(10, 'logout'), (11, 'close')])
         kill.assert_called_once_with(11, cli.signal.SIGTERM)
 
     def test_picker_can_start_without_the_rtx(self):
         held = [holder(10, name='gnome-shell', closable=False)]
-        chose = subprocess.CompletedProcess([], 1, 'Start without RTX\n', '')
+        chose = subprocess.CompletedProcess([], 0, '{"action": "without_rtx"}', '')
         with patch.object(cli.subprocess, 'run', return_value=chose), patch.object(cli, 'run') as attach:
             self.assertIsNone(cli.close_holders(held, offer_without_rtx=True))
         attach.assert_not_called()
@@ -429,11 +430,25 @@ class GPUHandoff(unittest.TestCase):
 
     def test_picker_closes_chosen_holders(self):
         held = [holder(10)]
-        chose = subprocess.CompletedProcess([], 0, '10\n', '')
+        chose = subprocess.CompletedProcess([], 0, '{"action": "close", "pids": [10]}', '')
         with patch.object(cli.subprocess, 'run', return_value=chose), patch.object(cli.os, 'kill') as kill, \
                 patch.object(cli, 'guard_holders', side_effect=[held, []]):
             self.assertEqual(cli.close_holders(held), [])
         kill.assert_called_once_with(10, cli.signal.SIGTERM)
+
+    def test_picker_force_kills_a_holder_that_ignores_close_once_confirmed(self):
+        held = [holder(10)]
+        chose = subprocess.CompletedProcess([], 0, '{"action": "close", "pids": [10]}', '')
+        confirmed = subprocess.CompletedProcess([], 0, '{"action": "confirm"}', '')
+        with patch.object(cli.subprocess, 'run', side_effect=[chose, confirmed]) as dialogs, \
+                patch.object(cli, 'release_holders', side_effect=[held, []]) as release:
+            self.assertEqual(cli.close_holders(held), [])
+        self.assertEqual(dialogs.call_args.args[0][-1], 'confirm')
+        self.assertEqual([c.kwargs for c in release.call_args_list], [{'force': False}, {'force': True}])
+
+    def test_picker_dialogs_exist(self):
+        dialogs = Path(cli.__file__).with_name('spawnkit-ui') / 'dialogs'
+        self.assertTrue((dialogs / 'rtx-holders.qml').is_file() and (dialogs / 'confirm.qml').is_file())
 
     def test_picker_cancel_returns_gpu_to_desktop(self):
         held = [holder(10)]
