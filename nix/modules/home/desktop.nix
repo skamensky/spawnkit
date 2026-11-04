@@ -100,7 +100,8 @@ in
     ];
     dconf.settings."org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/flameshot" = {
       name = "Flameshot";
-      command = "${pkgs.flameshot}/bin/flameshot gui";
+      # --clipboard: Enter copies the selection and closes; no save dialog.
+      command = "${pkgs.flameshot}/bin/flameshot gui --clipboard";
       binding = "Print";
     };
     xdg.mimeApps = {
