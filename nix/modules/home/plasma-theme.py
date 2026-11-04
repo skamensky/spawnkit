@@ -17,6 +17,10 @@ from pathlib import Path
 
 CATALOG = json.loads(Path(os.environ["SPAWNKIT_PLASMA_THEMES"]).read_text())
 STATE = Path(os.environ.get("XDG_STATE_HOME", Path.home() / ".local/state")) / "spawnkit/plasma-theme.json"
+# The panels, widgets and wallpaper of the session; saved before the first full apply.
+LAYOUT = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "plasma-org.kde.plasma.desktop-appletsrc"
+LAYOUT_BACKUP = STATE.with_name("plasma-layout-backup")
+PINS = os.environ["SPAWNKIT_PANEL_PINS"].split(",")
 # One fixed port, so launching the gallery again reopens the running one.
 PORT = 47613
 PREVIEWS = ("fullscreenpreview.jpg", "fullscreenpreview.png", "preview.png", "preview.jpg")
@@ -66,24 +70,79 @@ def themes():
     ]
 
 
-def apply_state(lookandfeel, kvantum):
+def wallpaper(name):
+    for d in data_dirs():
+        p = d / "wallpapers" / name
+        if p.is_dir():
+            return p
+    return None
+
+
+def apply_state(lookandfeel, kvantum, layout=False):
     if package_dir(lookandfeel) is None:
         raise SystemExit(f"look-and-feel {lookandfeel} is not installed")
     # Kvantum first, so the widget style the look-and-feel selects draws with the right theme.
     value = [kvantum] if kvantum else ["--delete"]
     subprocess.run(["kwriteconfig6", "--file", "Kvantum/kvantum.kvconfig", "--group", "General", "--key", "theme", *value], check=True)
     # Without --resetLayout the panels and widgets stay as they are.
-    subprocess.run(["plasma-apply-lookandfeel", "--apply", lookandfeel], check=True, capture_output=True)
+    reset = ["--resetLayout"] if layout else []
+    subprocess.run(["plasma-apply-lookandfeel", "--apply", lookandfeel, *reset], check=True, capture_output=True)
 
 
-def apply(theme_id):
+def shell_script(js):
+    subprocess.run(["qdbus6", "org.kde.plasmashell", "/PlasmaShell", "org.kde.PlasmaShell.evaluateScript", js], check=True, capture_output=True)
+
+
+def arrange(theme):
+    """Finish a theme's own panel layout the way its screenshots show it.
+
+    The layouts these themes ship set up a top bar only; their screenshots add a dock, and
+    their wallpaper paths point at the authors' home directories.
+    """
+    paper = theme.get("wallpaper") and wallpaper(theme["wallpaper"])
+    shell_script(f"""
+const pins = {json.dumps(PINS)};
+const docked = panels().some(p => p.widgets("org.kde.plasma.icontasks").length || p.widgets("org.kde.plasma.taskmanager").length);
+if (!docked) {{
+  const dock = new Panel;
+  dock.location = "bottom";
+  dock.alignment = "center";
+  dock.lengthMode = "fit";
+  dock.floating = true;
+  dock.height = Math.round(gridUnit * 3);
+  const tasks = dock.addWidget("org.kde.plasma.icontasks");
+  tasks.currentConfigGroup = ["General"];
+  tasks.writeConfig("launchers", ["preferred://filemanager", "preferred://browser"]);
+}}
+for (const panel of panels()) {{
+  for (const tasks of panel.widgets("org.kde.plasma.icontasks")) {{
+    tasks.currentConfigGroup = ["General"];
+    let have = tasks.readConfig("launchers", []);
+    if (typeof have === "string") have = have.split(",").filter(p => p);
+    tasks.writeConfig("launchers", have.concat(pins.filter(p => !have.includes(p))));
+  }}
+}}
+const paper = {json.dumps(f"file://{paper}" if paper else None)};
+if (paper) for (const d of desktops()) {{
+  d.wallpaperPlugin = "org.kde.image";
+  d.currentConfigGroup = ["Wallpaper", "org.kde.image", "General"];
+  d.writeConfig("Image", paper);
+}}
+""")
+
+
+def apply(theme_id, layout=False):
     theme = next((t for t in CATALOG if t["id"] == theme_id), None)
     if theme is None:
         raise SystemExit(f"unknown theme {theme_id}; see list")
     if not STATE.exists():
         STATE.parent.mkdir(parents=True, exist_ok=True)
         STATE.write_text(json.dumps(current()))
-    apply_state(theme["lookandfeel"], theme.get("kvantum"))
+    if layout and not LAYOUT_BACKUP.exists():
+        shutil.copy2(LAYOUT, LAYOUT_BACKUP)
+    apply_state(theme["lookandfeel"], theme.get("kvantum"), layout)
+    if layout:
+        arrange(theme)
     return theme
 
 
@@ -92,6 +151,12 @@ def revert():
         raise SystemExit("nothing to revert: no theme was applied through this tool")
     saved = json.loads(STATE.read_text())
     apply_state(saved["lookandfeel"], saved["kvantum"])
+    if LAYOUT_BACKUP.exists():
+        # Plasma rewrites its layout file on exit, so put the saved one back while it is stopped.
+        subprocess.run(["systemctl", "--user", "stop", "plasma-plasmashell.service"], check=True)
+        shutil.copy2(LAYOUT_BACKUP, LAYOUT)
+        subprocess.run(["systemctl", "--user", "start", "plasma-plasmashell.service"], check=True)
+        LAYOUT_BACKUP.unlink()
     STATE.unlink()
     return saved
 
@@ -112,7 +177,7 @@ main{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:
 .apply{background:var(--accent);color:#0b1020;border:0;font-weight:600}.card.active .apply{background:transparent;color:var(--accent);border:1px solid var(--accent)}
 dialog{border:0;padding:0;background:transparent;max-width:95vw}dialog img{max-width:95vw;max-height:90vh;border-radius:8px}dialog::backdrop{background:#000c}
 </style></head><body><header><h1>Plasma themes</h1><span class="chip on" data-f="all">All</span><span class="chip" data-f="dark">Dark</span><span class="chip" data-f="light">Light</span>
-<button id="revert">Revert to original</button><span id="status">Click Apply: your real desktop changes.</span></header><main id="grid"></main>
+<label class="chip"><input type="checkbox" id="layout" checked> Panels and wallpaper too</label><button id="revert">Revert to original</button><span id="status">Click Apply: your real desktop changes.</span></header><main id="grid"></main>
 <dialog id="zoom"><img alt=""></dialog><script>
 let themes=[],filter="all";const grid=document.getElementById("grid"),status=document.getElementById("status");
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
@@ -123,7 +188,7 @@ function render(){grid.innerHTML=themes.filter(t=>filter=="all"||t.tone==filter)
 <button class="apply" data-id="${t.id}" ${t.installed?"":"disabled"}>${t.active?"Active":"Apply"}</button></div></div></div>`).join("")}
 async function load(){themes=await (await fetch("/themes")).json();render()}
 async function post(url,label){status.textContent=label+"…";const r=await fetch(url,{method:"POST"});status.textContent=r.ok?(await r.text()):"Failed: "+await r.text();load()}
-grid.onclick=e=>{const b=e.target.closest(".apply");if(b){const t=themes.find(x=>x.id==b.dataset.id);post("/apply/"+t.id,"Applying "+t.name)}
+grid.onclick=e=>{const b=e.target.closest(".apply");if(b){const t=themes.find(x=>x.id==b.dataset.id);post("/apply/"+t.id+(document.getElementById("layout").checked?"?layout=1":""),"Applying "+t.name)}
 else if(e.target.tagName=="IMG"){const z=document.getElementById("zoom");z.querySelector("img").src=e.target.src;z.showModal()}};
 document.getElementById("zoom").onclick=e=>e.currentTarget.close();
 document.getElementById("revert").onclick=()=>post("/revert","Reverting");
@@ -161,7 +226,8 @@ class Gallery(BaseHTTPRequestHandler):
             return self.reply(403, "forbidden")
         try:
             if self.path.startswith("/apply/"):
-                theme = apply(self.path[7:])
+                theme_id, _, query = self.path[7:].partition("?")
+                theme = apply(theme_id, query == "layout=1")
                 return self.reply(200, f"Applied {theme['name']}. Already open Qt apps restyle when restarted.")
             if self.path == "/revert":
                 revert()
@@ -176,7 +242,9 @@ def main():
     sub = parser.add_subparsers(dest="cmd", required=True)
     sub.add_parser("list", help="list the curated themes").add_argument("--json", action="store_true")
     sub.add_parser("current", help="show the applied look-and-feel and Kvantum theme as JSON")
-    sub.add_parser("apply", help="apply a theme to the running desktop").add_argument("id")
+    a = sub.add_parser("apply", help="apply a theme to the running desktop")
+    a.add_argument("id")
+    a.add_argument("--layout", action="store_true", help="also replace the panels and wallpaper with the theme's (revert restores them)")
     sub.add_parser("revert", help="restore the theme from before the first apply")
     g = sub.add_parser("gallery", help="browse and apply themes from a local web page")
     g.add_argument("--no-browser", action="store_true", help="print the URL instead of opening it")
@@ -193,7 +261,7 @@ def main():
     elif args.cmd == "current":
         print(json.dumps(current()))
     elif args.cmd == "apply":
-        print(f"applied {apply(args.id)['id']}")
+        print(f"applied {apply(args.id, args.layout)['id']}")
     elif args.cmd == "revert":
         print(json.dumps(revert()))
     elif args.cmd == "gallery":

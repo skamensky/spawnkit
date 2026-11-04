@@ -608,7 +608,10 @@ GNOME stays installed, so the session is chosen at login and the trial is revers
 - **Theme trial:** a Plasma theme applies to the whole session; it cannot differ
   per virtual desktop. `spawnkit-plasma-theme` (`list --json`, `current`, `apply
   <id>`, `revert`) switches the live desktop between 20 of the most downloaded
-  Plasma 6 global themes, keeping the panel layout; `gallery` (the "Theme Gallery"
+  Plasma 6 global themes, keeping the panel layout. `apply <id> --layout` also
+  loads the theme's own panels, adds the floating bottom dock its screenshots show
+  (their layouts ship only the top bar), pins the Windows launchers and sets its
+  wallpaper; `revert` restores the saved panels. `gallery` (the "Theme Gallery"
   launcher) is a local page with each theme's preview and an Apply button over the
   same commands. Layan, Colloid, Orchis and Graphite are built from vinceliuice's
   repositories, because nixpkgs dropped them with Plasma 5. Sweet, Nordic, Arc and

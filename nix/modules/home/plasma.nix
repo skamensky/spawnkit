@@ -52,34 +52,40 @@ let
 
   # Twenty of the most downloaded global themes on store.kde.org that support Plasma 6.
   # kvantum names the Kvantum theme a look-and-feel's Kvantum widget style needs.
-  theme = id: name: tone: author: lookandfeel: kvantum: description: {
-    inherit id name tone author lookandfeel kvantum description;
+  # wallpaper names the theme's wallpaper package; full applies set it.
+  theme = id: name: tone: author: lookandfeel: kvantum: wallpaper: description: {
+    inherit id name tone author lookandfeel kvantum wallpaper description;
   };
+  # The Windows VM start and shut-down launchers, pinned to every task manager.
+  windowsPins = [ "applications:spawnkit-windows.desktop" "applications:spawnkit-windows-shutdown.desktop" ];
   catalog = [
-    (theme "breeze-dark" "Breeze Dark" "dark" "KDE" "org.kde.breezedark.desktop" null "Plasma's stock dark theme.")
-    (theme "breeze-twilight" "Breeze Twilight" "dark" "KDE" "org.kde.breezetwilight.desktop" null "Dark panels with light application windows.")
-    (theme "sweet" "Sweet" "dark" "EliverLara" "com.github.eliverlara.sweet" "Sweet" "Deep purple with pink and cyan accents; among the most downloaded.")
-    (theme "layan" "Layan" "dark" "vinceliuice" "com.github.vinceliuice.Layan" "LayanDark" "Flat dark theme with a soft blue-violet gradient accent.")
-    (theme "layan-light" "Layan Light" "light" "vinceliuice" "com.github.vinceliuice.Layan-light" "Layan" "Layan's light variant.")
-    (theme "whitesur-dark" "WhiteSur Dark" "dark" "vinceliuice" "com.github.vinceliuice.WhiteSur-dark" "WhiteSurDark" "macOS Big Sur style, dark.")
-    (theme "whitesur" "WhiteSur" "light" "vinceliuice" "com.github.vinceliuice.WhiteSur" "WhiteSur" "macOS Big Sur style, light.")
-    (theme "orchis-dark" "Orchis Dark" "dark" "vinceliuice" "com.github.vinceliuice.Orchis-dark" "OrchisDark" "Material-inspired with rounded surfaces.")
-    (theme "colloid-dark" "Colloid Dark" "dark" "vinceliuice" "com.github.vinceliuice.Colloid-dark" "ColloidDark" "Clean, low-contrast dark theme.")
-    (theme "colloid-nord" "Colloid Nord" "dark" "vinceliuice" "com.github.vinceliuice.Colloid-dark-nord" "ColloidNordDark" "Colloid with the Nord palette.")
-    (theme "graphite-dark" "Graphite Dark" "dark" "vinceliuice" "com.github.vinceliuice.Graphite-dark" "GraphiteDark" "Monochrome greys, almost no colour.")
-    (theme "nordic" "Nordic" "dark" "EliverLara" "Nordic" "Nordic" "Nord palette, dark blue-grey.")
-    (theme "nordic-darker" "Nordic Darker" "dark" "EliverLara" "Nordic-darker" "Nordic-Darker" "Nordic with near-black surfaces.")
-    (theme "utterly-nord" "Utterly Nord" "dark" "HimDek" "Utterly-Nord" "Utterly-Nord" "Nord palette with translucent, rounded panels.")
-    (theme "dracula" "Dracula" "dark" "Dracula" "Dracula" "Dracula" "The Dracula palette: purple, pink and green on charcoal.")
-    (theme "catppuccin-mocha" "Catppuccin Mocha" "dark" "Catppuccin" "Catppuccin-Mocha-Mauve" null "Pastel colours on a dark base.")
-    (theme "catppuccin-latte" "Catppuccin Latte" "light" "Catppuccin" "Catppuccin-Latte-Mauve" null "Catppuccin's light flavour.")
-    (theme "qogir-dark" "Qogir Dark" "dark" "vinceliuice" "com.github.vinceliuice.Qogir-dark" "Qogir-dark" "Flat theme with a blue accent.")
-    (theme "arc-dark" "Arc Dark" "dark" "varlesh" "com.github.varlesh.arc-dark" "ArcDark" "The classic Arc look with transparent elements.")
-    (theme "materia-dark" "Materia Dark" "dark" "varlesh" "com.github.varlesh.materia-dark" "MateriaDark" "Google Material Design, dark.")
+    (theme "breeze-dark" "Breeze Dark" "dark" "KDE" "org.kde.breezedark.desktop" null null "Plasma's stock dark theme.")
+    (theme "breeze-twilight" "Breeze Twilight" "dark" "KDE" "org.kde.breezetwilight.desktop" null null "Dark panels with light application windows.")
+    (theme "sweet" "Sweet" "dark" "EliverLara" "com.github.eliverlara.sweet" "Sweet" null "Deep purple with pink and cyan accents; among the most downloaded.")
+    (theme "layan" "Layan" "dark" "vinceliuice" "com.github.vinceliuice.Layan" "LayanDark" "Layan" "Flat dark theme with a soft blue-violet gradient accent.")
+    (theme "layan-light" "Layan Light" "light" "vinceliuice" "com.github.vinceliuice.Layan-light" "Layan" "Layan-light" "Layan's light variant.")
+    (theme "whitesur-dark" "WhiteSur Dark" "dark" "vinceliuice" "com.github.vinceliuice.WhiteSur-dark" "WhiteSurDark" "WhiteSur-dark" "macOS Big Sur style, dark.")
+    (theme "whitesur" "WhiteSur" "light" "vinceliuice" "com.github.vinceliuice.WhiteSur" "WhiteSur" "WhiteSur-light" "macOS Big Sur style, light.")
+    (theme "orchis-dark" "Orchis Dark" "dark" "vinceliuice" "com.github.vinceliuice.Orchis-dark" "OrchisDark" "Orchis" "Material-inspired with rounded surfaces.")
+    (theme "colloid-dark" "Colloid Dark" "dark" "vinceliuice" "com.github.vinceliuice.Colloid-dark" "ColloidDark" "Colloid-dark" "Clean, low-contrast dark theme.")
+    (theme "colloid-nord" "Colloid Nord" "dark" "vinceliuice" "com.github.vinceliuice.Colloid-dark-nord" "ColloidNordDark" "Colloid-dark-nord" "Colloid with the Nord palette.")
+    (theme "graphite-dark" "Graphite Dark" "dark" "vinceliuice" "com.github.vinceliuice.Graphite-dark" "GraphiteDark" "Graphite-dark" "Monochrome greys, almost no colour.")
+    (theme "nordic" "Nordic" "dark" "EliverLara" "Nordic" "Nordic" "Nordic" "Nord palette, dark blue-grey.")
+    (theme "nordic-darker" "Nordic Darker" "dark" "EliverLara" "Nordic-darker" "Nordic-Darker" "Nordic" "Nordic with near-black surfaces.")
+    (theme "utterly-nord" "Utterly Nord" "dark" "HimDek" "Utterly-Nord" "Utterly-Nord" "Utterly-Nord" "Nord palette with translucent, rounded panels.")
+    (theme "dracula" "Dracula" "dark" "Dracula" "Dracula" "Dracula" null "The Dracula palette: purple, pink and green on charcoal.")
+    (theme "catppuccin-mocha" "Catppuccin Mocha" "dark" "Catppuccin" "Catppuccin-Mocha-Mauve" null null "Pastel colours on a dark base.")
+    (theme "catppuccin-latte" "Catppuccin Latte" "light" "Catppuccin" "Catppuccin-Latte-Mauve" null null "Catppuccin's light flavour.")
+    (theme "qogir-dark" "Qogir Dark" "dark" "vinceliuice" "com.github.vinceliuice.Qogir-dark" "Qogir-dark" "Qogir-dark" "Flat theme with a blue accent.")
+    (theme "arc-dark" "Arc Dark" "dark" "varlesh" "com.github.varlesh.arc-dark" "ArcDark" "Arc-Dark" "The classic Arc look with transparent elements.")
+    (theme "materia-dark" "Materia Dark" "dark" "varlesh" "com.github.varlesh.materia-dark" "MateriaDark" "Materia-Dark" "Google Material Design, dark.")
   ];
   plasmaTheme = pkgs.writers.writePython3Bin "spawnkit-plasma-theme" {
     flakeIgnore = [ "E501" ];
-    makeWrapperArgs = [ "--set" "SPAWNKIT_PLASMA_THEMES" (pkgs.writeText "plasma-themes.json" (builtins.toJSON catalog)) ];
+    makeWrapperArgs = [
+      "--set" "SPAWNKIT_PLASMA_THEMES" (pkgs.writeText "plasma-themes.json" (builtins.toJSON catalog))
+      "--set" "SPAWNKIT_PANEL_PINS" (lib.concatStringsSep "," windowsPins)
+    ];
   } (builtins.readFile ./plasma-theme.py);
 in
 {
@@ -108,7 +114,7 @@ in
       # Pins the Windows VM start and shut-down launchers to the task manager of every panel,
       # keeping the user's own pins. Runs at the next login after this script changes.
       startup.desktopScript.pinWindowsLaunchers.text = ''
-        const wanted = ["applications:spawnkit-windows.desktop", "applications:spawnkit-windows-shutdown.desktop"];
+        const wanted = ${builtins.toJSON windowsPins};
         for (const panel of panels()) {
           for (const tasks of panel.widgets("org.kde.plasma.icontasks")) {
             tasks.currentConfigGroup = ["General"];
