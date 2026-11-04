@@ -52,7 +52,7 @@ in
         "x11"
       ];
       default = "wayland";
-      description = "Graphical session type; selects the clipboard tools.";
+      description = "Graphical session type; selects the clipboard tools and how CopyQ reaches the clipboard.";
     };
     nvidia = lib.mkOption {
       default = null;
@@ -146,11 +146,10 @@ in
         addDriverRunpath $out/bin/.obs-nvenc-test-wrapped
       '';
     });
-    # Flameshot replaces GNOME's screenshot tool on Print (X11 session).
-    services.flameshot.enable = true;
-    dconf.settings."org/gnome/shell/keybindings".show-screenshot-ui = [ ];
+    # Print opens GNOME's screenshot UI: drag a region, then Enter copies it to the clipboard
+    # (and keeps a copy in ~/Pictures/Screenshots); no save dialog.
+    dconf.settings."org/gnome/shell/keybindings".show-screenshot-ui = [ "Print" ];
     dconf.settings."org/gnome/settings-daemon/plugins/media-keys".custom-keybindings = [
-      "/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/flameshot/"
       "/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/copyq/"
     ];
     # Ditto's shortcut. While Looking Glass holds the keyboard, Windows' CopyQ gets it instead.
@@ -158,12 +157,6 @@ in
       name = "CopyQ";
       command = "${pkgs.copyq}/bin/copyq toggle";
       binding = "<Control>grave";
-    };
-    dconf.settings."org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/flameshot" = {
-      name = "Flameshot";
-      # --clipboard: Enter copies the selection and closes; no save dialog.
-      command = "${pkgs.flameshot}/bin/flameshot gui --clipboard";
-      binding = "Print";
     };
     xdg.mimeApps = {
       enable = true;
@@ -185,6 +178,9 @@ in
       };
       Service = {
         ExecStart = "${pkgs.copyq}/bin/copyq";
+        # GNOME's Wayland compositor lets no background app watch the clipboard; through
+        # XWayland, which GNOME keeps in sync with it, CopyQ can.
+        Environment = lib.optional (config.personal.desktop.session == "wayland") "QT_QPA_PLATFORM=xcb";
         Restart = "on-failure";
       }
       // lib.optionalAttrs (config.personal.desktop.copyqShare != null) {

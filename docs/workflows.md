@@ -430,10 +430,17 @@ and pinned NVIDIA driver packages. For the 24.04 → 26.04 (`resolute`) upgrade 
 24.04, so the laptop pin and Home Manager's driver hash stay valid. Tailscale
 publishes `resolute` with the same signing key.
 
+26.04 ships GNOME 50, which has no Xorg session, so the laptop profile moved
+from `desktop_session: x11` to `wayland`. Keep your `/etc/gdm3/custom.conf` when
+the upgrade asks (it holds the autologin), then delete its
+`WaylandEnable=false` line before rebooting; otherwise GDM has no GNOME session
+it may start. The host apply below keeps the line removed.
+
 The upgrade disables third-party APT sources. Afterwards:
 
 ```bash
 sudo do-release-upgrade
+sudo sed -i '/^WaylandEnable=false/d' /etc/gdm3/custom.conf
 # reboot, then from the checkout:
 rtk home-config switch
 nix --extra-experimental-features 'nix-command flakes' run .#host-config -- apply --host laptop-ubuntu --ask-become-pass
@@ -442,6 +449,10 @@ nix --extra-experimental-features 'nix-command flakes' run .#host-config -- appl
 The host apply rewrites Spawnkit's own sources (Tailscale, NVIDIA Container
 Toolkit) for the new codename. Re-enable sources Spawnkit does not own (Chrome,
 VS Code, Claude desktop, PPAs) in Software & Updates, or remove the ones whose
-PPA has no build for the new release. Then confirm `nvidia-smi`, the GDM session
-pin, `virsh net-list --all` and a Windows VM start with GPU handoff and Looking
+PPA has no build for the new release. Then confirm `nvidia-smi`, a Wayland session
+(`echo $XDG_SESSION_TYPE`), `virsh net-list --all` and a Windows VM start with GPU handoff and Looking
 Glass, Citrix and Webex; the vendor `.deb` packages are the most likely to break.
+On Wayland, also check that `vm-start` does not name `gnome-shell` as an RTX
+holder, that Looking Glass still releases input on ungrab (its patch and
+`lg-watchdog` are X11 code, so the client must run on XWayland) and that CopyQ
+records copies.

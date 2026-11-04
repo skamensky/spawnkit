@@ -6,9 +6,8 @@ nvidia_prime: on-demand
 # 550 is retired (Ubuntu's 550 package now depends on 580). Pin the 580 long-term branch
 # instead of following ubuntu-drivers' "recommended" newer branch.
 nvidia_driver_package: nvidia-driver-580
-# Shmuel prefers Xorg for stability. GDM otherwise flips to Wayland whenever the
-# NVIDIA module is missing, e.g. after a kernel update without matching modules.
-desktop_session: x11
+# GNOME 50 (Ubuntu 26.04) has no Xorg session, so GDM must offer Wayland.
+desktop_session: wayland
 virtualization: true
 iommu: true
 # Solaar needs Ubuntu's udev rules for Logitech receiver access; cmake and ninja join the
@@ -22,7 +21,7 @@ nix_chrome: true
 ssh: true
 ssh_listen_addresses: [100.86.106.55]
 # Native facts 2026-11-03: the RTX and its audio function are alone in IOMMU group 13;
-# the internal panel is on the Intel iGPU. With the X11 pin, Xorg is kept off the RTX.
+# the internal panel is on the Intel iGPU.
 gpu_handoff: true
 # Installed 2026-11-03; the RTX virtual display replaced the VGA console 2026-11-04.
 windows_vm: true

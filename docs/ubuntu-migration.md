@@ -303,9 +303,9 @@ sudo umount /mnt/wsl-old && sudo qemu-nbd -d /dev/nbd0 && sudo umount /mnt/win
 No manual driver or package installs here: the NVIDIA driver, PRIME on-demand
 mode and Solaar (with its udev rules) come from the Ansible run in D2.
 The laptop profile pins `nvidia-driver-580` (550 is retired and Ubuntu's 550
-package now pulls in 580) and `desktop_session: x11`. Without the pin, GDM
-silently switches to Wayland whenever the NVIDIA module is missing, as happened
-after the first kernel 7.0 update. The pin takes effect at the next login.
+package now pulls in 580) and `desktop_session: wayland`. It pinned `x11` until
+the 26.04 upgrade, whose GNOME 50 has no Xorg session; the setting now only
+removes `WaylandEnable=false` from GDM. It takes effect at the next login.
 ```bash
 mokutil --sb-state        # Secure Boot state decides whether D2 asks for MOK enrollment
 lspci -nnk | grep -A3 -Ei 'vga|3d|audio'
@@ -479,7 +479,7 @@ table to audit old files and migration conflicts; make persistent changes in
 `spawnkit`, rather than editing the generated home files.
 | File | Now | Change to |
 |---|---|---|
-| `~/.tmux.conf` | `copy-pipe-and-cancel "clip.exe"` | `"wl-copy"` on Wayland, `"xclip -selection clipboard"` on the X11 laptop profile |
+| `~/.tmux.conf` | `copy-pipe-and-cancel "clip.exe"` | `"wl-copy"` on the laptop (Wayland), `"xclip -selection clipboard"` on an X11 profile |
 | `~/.bashrc` ~L148–155 | `alias powershell='powershell.exe'`; ChatGPT launcher with `WAYLAND_DISPLAY=/mnt/wslg/...` | delete |
 | `~/.mybashrc` | Claude desktop launcher with `/mnt/wslg` | delete |
 | `~/.mybashrc.sh` | `alias wslpath=...`; commented `/mnt/c` PATH/WINHOME lines | delete |
@@ -576,11 +576,9 @@ GNOME stays installed, so the session is chosen at login and the trial is revers
 - **Packages (Ansible, laptop profile):** `kde-plasma-desktop` and `kde-spectacle`,
   not `kubuntu-desktop`, which swaps the display manager to SDDM and pulls in the
   whole Kubuntu app set. Keep GDM.
-- **Session pin:** `desktop_session: x11` writes `WaylandEnable=false`, which
-  hides every Wayland session from GDM. Switch the laptop to `wayland` and check
-  that GDM's NVIDIA udev rules do not force X11 (580 enables `nvidia-drm`
-  modeset by default). The pin existed because GDM silently fell back between
-  session types when the NVIDIA module was missing; GNOME on Xorg stays selectable.
+- **Session:** the laptop already runs `desktop_session: wayland` (GNOME 50 has
+  no Xorg session), so Plasma's Wayland session appears in GDM as soon as it is
+  installed.
 - **GPU handoff:** the panel (eDP) and the HDMI/DP connectors seen so far are on
   the Intel iGPU, `card1` at `pci-0000:00:02.0`; that was checked while vfio held
   the RTX, so first confirm no external port is wired to the RTX. KWin opens every DRM device it finds, which would
@@ -588,9 +586,9 @@ GNOME stays installed, so the session is chosen at login and the trial is revers
   `KWIN_DRM_DEVICES` from a Plasma env script (`~/.config/plasma-workspace/env/`).
   The variable is colon-separated, so resolve the by-path link to `/dev/dri/cardN`
   in the script instead of writing the path (it contains colons).
-- **Screenshots:** Spectacle on Print replaces Flameshot in Plasma with the same
+- **Screenshots:** Spectacle on Print in Plasma, with the same
   workflow: drag a region, nothing happens until Enter, then copy to the clipboard
-  and close; no save dialog. Flameshot stays for the GNOME/X11 session.
+  and close; no save dialog. GNOME keeps its own screenshot UI on Print.
 - **Declarative config:** add the `plasma-manager` flake input (nix-community,
   branch `trunk`, Plasma 6) and a Home Manager `plasma.nix` module: one bottom
   panel, no top panel, display scale (start at 150%), Spectacle shortcut and
