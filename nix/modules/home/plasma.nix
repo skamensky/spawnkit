@@ -91,6 +91,14 @@ in
   config = lib.mkIf (config.personal.desktop.enable && config.personal.desktop.plasma) {
     programs.plasma = {
       enable = true;
+      # English and Hebrew keyboard layouts; Super+Space switches, as on GNOME.
+      input.keyboard = {
+        layouts = [
+          { layout = "us"; }
+          { layout = "il"; }
+        ];
+        options = [ "grp:win_space_toggle" ];
+      };
       # Print selects a region; nothing is taken until Enter, which copies it to the
       # clipboard and closes Spectacle without saving a file.
       spectacle.shortcuts = {

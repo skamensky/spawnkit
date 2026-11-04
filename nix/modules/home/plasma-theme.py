@@ -9,13 +9,16 @@ import json
 import os
 import subprocess
 import sys
-import threading
+import errno
+import shutil
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 CATALOG = json.loads(Path(os.environ["SPAWNKIT_PLASMA_THEMES"]).read_text())
 STATE = Path(os.environ.get("XDG_STATE_HOME", Path.home() / ".local/state")) / "spawnkit/plasma-theme.json"
+# One fixed port, so launching the gallery again reopens the running one.
+PORT = 47613
 PREVIEWS = ("fullscreenpreview.jpg", "fullscreenpreview.png", "preview.png", "preview.jpg")
 
 
@@ -194,15 +197,31 @@ def main():
     elif args.cmd == "revert":
         print(json.dumps(revert()))
     elif args.cmd == "gallery":
-        server = ThreadingHTTPServer(("127.0.0.1", 0), Gallery)
-        url = f"http://127.0.0.1:{server.server_port}/"
+        url = f"http://127.0.0.1:{PORT}/"
+        try:
+            server = ThreadingHTTPServer(("127.0.0.1", PORT), Gallery)
+        except OSError as e:
+            if e.errno != errno.EADDRINUSE:
+                raise
+            server = None
         print(url, flush=True)
         if not args.no_browser:
-            threading.Thread(target=webbrowser.open, args=(url,), daemon=True).start()
-        try:
-            server.serve_forever()
-        except KeyboardInterrupt:
-            sys.exit(0)
+            open_window(url)
+        if server:
+            try:
+                server.serve_forever()
+            except KeyboardInterrupt:
+                sys.exit(0)
+
+
+def open_window(url):
+    # A tab handed to an already running Chrome lands behind its existing window; an app
+    # window is a new window, which KWin raises.
+    chrome = shutil.which("google-chrome")
+    if chrome:
+        subprocess.Popen([chrome, f"--app={url}"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    else:
+        webbrowser.open(url)
 
 
 main()
