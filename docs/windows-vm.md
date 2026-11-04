@@ -304,12 +304,11 @@ and recovery; routine automation can use SSH.
   any channel streaming while the user is idle (the microphone) do not count. After a
   return to the viewer (a click or Alt+Tab), the B7 client sometimes stops forwarding
   input while it holds the pointer in place (reproduced with and without the keyboard
-  grab; Windows' cursor stays visible and receives nothing). Toggling capture mode
-  twice clears it; moving the pointer out and back does not after Alt+Tab. After 2 s
-  without traffic the watchdog taps Insert twice through XTest (it must match
-  `input:escapeKey`); a second stall within 30 s shows a notification and restarts the viewer. Each
-  event is appended to `~/.local/state/spawnkit/looking-glass-stalls.jsonl` with its
-  `action`; more than five restarts in ten minutes stops `vm-view`. The
+  grab; Windows' cursor stays visible and receives nothing). Neither moving the pointer
+  out and back nor toggling capture mode reliably clears it. After 1.5 s without
+  traffic the watchdog shows a notification and restarts the viewer, appending the
+  event to `~/.local/state/spawnkit/looking-glass-stalls.jsonl`; more than five
+  restarts in a minute stops `vm-view`. The
   viewer's own log is `~/.local/state/spawnkit/looking-glass.log`.
 - **Clipboard history:** CopyQ runs on both systems and Ctrl+` opens it on whichever
   one has the keyboard. Ubuntu's CopyQ saves new items within 10 s, and a user path
