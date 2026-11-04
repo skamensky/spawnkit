@@ -565,7 +565,7 @@ What it does:
 - [ ] the agent-work snapshot matches; old Codex threads visible; `claude --resume` works; worktrees repaired
 - [ ] `repos-status` regenerated on native matches the pre-migration file (except for the deliberate pushes)
 - [x] no `/mnt/c`, `.exe` or `wslg` references left in shell config (D4 grep is empty)
-- [ ] no plaintext secrets in dotfiles (2026-11-04: active dotfiles clean, every old export matches the store; awaiting Shmuel's OK to delete `~/.mybashrc`, `~/.mybashrc.sh`, `~/.bashrc.pre-spawnkit` and stray credential lines in shell history)
+- [x] no plaintext secrets in dotfiles (2026-11-04: active dotfiles clean; the unused `~/.mybashrc`, `~/.mybashrc.sh`, `~/.bashrc.pre-spawnkit` match the store and are kept by Shmuel's choice, as is `~/.bash_history`)
 - [ ] Family Desk, arnona-bot, bank-records automation, google-automation, personal-sms and clockify-sheets-sync each run end-to-end once
 - [x] Required Ubuntu host packages/services configured; Tailscale daemon reachable through the managed CLI
 - [x] Docker works (2026-11-04: Engine 29.1.3 reachable without sudo); the supa-crm local stack is not part of the migration
