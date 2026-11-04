@@ -38,11 +38,13 @@
         };
     xdg.desktopEntries = {
       spawnkit-windows = {
-        name = "Windows (Looking Glass)";
+        name = "Windows";
         exec = "host-config vm-view --notify --gui";
-        icon = "computer";
+        icon = "${./spawnkit-windows.svg}";
         terminal = false;
         categories = [ "System" ];
+        # Groups the viewer's window under this launcher in the dock.
+        settings.StartupWMClass = "looking-glass-client";
       };
       spawnkit-windows-console = {
         name = "Windows installation console";
@@ -52,5 +54,18 @@
         categories = [ "System" ];
       };
     };
+    # Pin the Windows launcher to the dock without replacing the user's own pins.
+    home.activation.pinWindowsLauncher = lib.hm.dag.entryAfter [ "dconfSettings" ] ''
+      # gsettings, unlike dconf, also reports GNOME's default pins.
+      gsettings=${pkgs.glib}/bin/gsettings
+      if [ -n "''${DBUS_SESSION_BUS_ADDRESS:-}" ] &&
+          favorites=$($gsettings get org.gnome.shell favorite-apps 2>/dev/null); then
+        case "$favorites" in
+          *"'spawnkit-windows.desktop'"*) ;;
+          "@as []") run $gsettings set org.gnome.shell favorite-apps "['spawnkit-windows.desktop']" ;;
+          *) run $gsettings set org.gnome.shell favorite-apps "''${favorites%]}, 'spawnkit-windows.desktop']" ;;
+        esac
+      fi
+    '';
   };
 }

@@ -187,8 +187,10 @@ lets the user run exactly the guard's `status`, `holders`, `detach-desktop`,
 `attach-desktop` and `schedule-start` (the logout-deferred start unit) without a
 password; `reclaim` and everything else still need sudo authentication.
 
-The desktop entries are **Windows (Looking Glass)** and **Windows installation
-console**. Launch failures also produce a desktop notification. The latter opens the console; start first if the VM is off. Closing
+The desktop entries are **Windows** and **Windows installation console**.
+Activation pins **Windows** to the dock (appended to the user's own pins) with a
+four-pane icon, and the viewer's window groups under it. The viewer opens
+fullscreen. Launch failures also produce a desktop notification. The latter opens the console; start first if the VM is off. Closing
 Looking Glass leaves Windows running. `vm-stop` requests an ACPI shutdown and waits
 (default 300 s, `--timeout`) until the domain is `shut off` **and** the release
 hook has cleared the reservation, which it only does after verifying the Linux
@@ -293,7 +295,7 @@ and recovery; routine automation can use SSH.
   launcher picks up launcher changes only after a Home Manager switch.
 - **Keyboard and mouse:** while focused, Looking Glass grabs the keyboard
   (`input:grabKeyboardOnFocus`), so Alt+Tab and Super go to Windows. Insert is
-  the escape key: tap it to toggle input capture, hold it with F for fullscreen or Q
+  the escape key: tap it to toggle input capture, hold it with F to leave or re-enter fullscreen or Q
   to close the viewer (Windows keeps running). The guest role sets the pointer
   speed to `windows_guest_mouse_sensitivity` (6 of 20).
   The VM has virtio mouse and keyboard devices and no USB tablet, as Looking Glass
