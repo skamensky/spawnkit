@@ -103,7 +103,12 @@ host-config vm-install --host laptop-ubuntu --ask-become-pass --gui \
    sudo): `autounattend.xml` wipes disk 0, installs `windows_edition` with the
    generic install key, loads the VirtIO storage/network drivers, skips the online
    account requirement, names the computer `windows_computer_name`, sets
-   `windows_timezone`, keeps Windows Update from delivering drivers, and creates the
+   `windows_timezone`, keeps Windows Update from delivering drivers (both the quality
+   update policy and device installation's own driver search), pauses Windows Update
+   for a week (Settings' "Pause updates", which then expires on its own) so the first
+   cumulative update does not compete with setup, turns off AC sleep, hibernation and
+   display blanking (an idle fresh guest slept after 15 minutes and the passed-through
+   RTX bug-checked with DRIVER_POWER_STATE_FAILURE), and creates the
    local administrator `user` with **no password**, signed in automatically. The
    VM sits behind the Linux session lock, so Windows has no password and never locks.
 2. The VM is defined with that third CD and started; Enter answers the CD loader's
@@ -133,8 +138,11 @@ WinFsp and the virtiofs service (when `windows_share` is set), Tailscale, the
 Virtual Display Driver, the Looking Glass host and NVIDIA's display driver 621.01
 (driver package only, from `nvlti.inf`; when the RTX already runs another version
 it stops and points to the procedure below). It sets `windows_timezone`, keeps
-Windows Update from replacing drivers (`ExcludeWUDriversInQualityUpdate`), because
-the driver it delivered (616.56) bug-checks the passed-through RTX, configures automatic sign-in,
+Windows Update from replacing drivers (`ExcludeWUDriversInQualityUpdate` and
+`DriverSearching\SearchOrderConfig=0`; device installation ignores the policy),
+because the driver it delivered (616.56) bug-checks the passed-through RTX, and
+replacing it while loaded crashed a fresh install, removes any other NVIDIA display
+package from the driver store, configures automatic sign-in,
 hides the lock screen and disables console lock, display blanking and AC sleep:
 the Linux session lock protects the VM. Every task is idempotent; a converged guest
 reports `changed=0`. Tailscale login and the Windows license remain manual.
@@ -261,6 +269,13 @@ and recovery; routine automation can use SSH.
   to 4, start the guest again, then `pnputil /add-driver ... /install`; the INF
   restores `Start` to 3. 621.01 (32.0.16.2101) shut down cleanly. Afterwards
   restart the virtual display device and the Looking Glass host service.
+- **Crash dumps:** the domain enables the host's Hyper-V enlightenments except
+  crash notification. With it, Windows reported each bug check before writing its
+  dump and libvirt destroyed the domain, leaving no evidence. Now Windows writes a
+  small dump to `C:\Windows\Minidump`, logs event 1001 (BugCheck) and restarts
+  itself; a driver that crashes at every boot therefore loops until `vm-stop`.
+  Bug-check codes so far: 0x7E in `nvlddmkm.sys` when the driver was replaced while
+  loaded, and 0x9F (DRIVER_POWER_STATE_FAILURE) when the idle guest went to sleep.
 - **Clipboard:** the SPICE agent from the VirtIO guest tools carries clipboard
   through Looking Glass's SPICE connection.
 

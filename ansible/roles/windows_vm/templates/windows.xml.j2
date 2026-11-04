@@ -13,7 +13,17 @@
     <boot dev='hd'/><boot dev='cdrom'/>
     <bootmenu enable='yes'/>
   </os>
-  <features><acpi/><apic/><hyperv mode='passthrough'/><smm state='on'/></features>
+  <!-- The host's Hyper-V enlightenments except crash notification: with it, Windows reports a bug check
+       before writing its minidump and libvirt destroys the domain; without it, the dump is written
+       and Windows restarts itself. evmcs serves only nested virtualization; avic is AMD-only. -->
+  <features><acpi/><apic/>
+    <hyperv mode='custom'>
+      <relaxed state='on'/><vapic state='on'/><spinlocks state='on' retries='8191'/><vpindex state='on'/>
+      <runtime state='on'/><synic state='on'/><stimer state='on'><direct state='on'/></stimer><reset state='on'/>
+      <frequencies state='on'/><reenlightenment state='on'/><tlbflush state='on'/><ipi state='on'/>
+    </hyperv>
+    <smm state='on'/>
+  </features>
   <cpu mode='host-passthrough' check='none' migratable='off'><topology sockets='1' dies='1' cores='{{ cfg.windows_vcpus // 2 }}' threads='2'/></cpu>
   <clock offset='localtime'><timer name='hypervclock' present='yes'/></clock>
   <on_poweroff>destroy</on_poweroff><on_reboot>restart</on_reboot><on_crash>destroy</on_crash>

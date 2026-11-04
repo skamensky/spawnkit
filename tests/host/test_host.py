@@ -64,6 +64,7 @@ class Guest(unittest.TestCase):
         host_vars = guest_inventory(cfg, '/run/known_hosts', (1000, 1000))['all']['hosts']['windows']
         self.assertEqual((host_vars['ansible_host'], host_vars['ansible_user'], host_vars['ansible_shell_type']), ('192.168.123.10', 'shmuel', 'powershell'))
         self.assertIn('UserKnownHostsFile=/run/known_hosts -o StrictHostKeyChecking=yes', host_vars['ansible_ssh_common_args'])
+        self.assertEqual(host_vars['ansible_control_path_dir'], '/run')
 
     def test_known_host_comes_from_the_guest_agent(self):
         cfg = gpu_config()

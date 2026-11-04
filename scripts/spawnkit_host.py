@@ -151,12 +151,17 @@ def inventory(repo, profile, cfg, revision):
 
 
 def guest_inventory(cfg, known_hosts, share_owner):
-    """Ansible inventory reaching the Windows guest over SSH, its host key pinned in known_hosts."""
+    """Ansible inventory reaching the Windows guest over SSH, its host key pinned in known_hosts.
+
+    SSH connections are multiplexed beside known_hosts, so a run never reuses a master
+    connected to an earlier boot of the guest, which hangs.
+    """
     return {
         "all": {"hosts": {"windows": {
             "ansible_host": cfg["windows_address"], "ansible_user": cfg["user"],
             "ansible_connection": "ssh", "ansible_shell_type": "powershell",
             "ansible_ssh_common_args": f"-o UserKnownHostsFile={known_hosts} -o StrictHostKeyChecking=yes",
+            "ansible_control_path_dir": str(Path(known_hosts).parent),
             "windows_share_uid": share_owner[0], "windows_share_gid": share_owner[1], "cfg": cfg,
         }}}
     }

@@ -42,12 +42,33 @@
   ansible.windows.win_package:
     path: '{{ windows_guest_cache }}\{{ windows_guest_pins.winfsp.file }}'
     arguments: /norestart
+# Before any GPU driver work: the passed-through RTX does not survive sleep.
+- name: Never lock, blank the display or sleep on AC power
+  ansible.windows.win_powershell:
+    script: |
+      [CmdletBinding(SupportsShouldProcess)]
+      param()
+      $ErrorActionPreference = 'Stop'
+      $WhatIfPreference = $false
+      $Ansible.Changed = $false
+      foreach ($setting in ('SUB_NONE', 'CONSOLELOCK'), ('SUB_VIDEO', 'VIDEOIDLE'), ('SUB_SLEEP', 'STANDBYIDLE'), ('SUB_SLEEP', 'HIBERNATEIDLE')) {
+          $query = powercfg /qh SCHEME_CURRENT $setting[0] $setting[1] | Select-String 'Current AC Power Setting Index: (0x[0-9a-f]+)'
+          if ([Convert]::ToInt32($query.Matches[0].Groups[1].Value, 16) -ne 0) {
+              $Ansible.Changed = $true
+              if (-not $Ansible.CheckMode) { powercfg /setacvalueindex SCHEME_CURRENT $setting[0] $setting[1] 0 }
+          }
+      }
+      if ($Ansible.Changed -and -not $Ansible.CheckMode) { powercfg /setactive SCHEME_CURRENT }
 - name: Keep Windows Update from replacing pinned drivers
   ansible.windows.win_regedit:
-    path: HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate
-    name: ExcludeWUDriversInQualityUpdate
-    data: 1
+    path: '{{ item.path }}'
+    name: '{{ item.name }}'
+    data: '{{ item.data }}'
     type: dword
+  loop:
+    - {path: 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate', name: ExcludeWUDriversInQualityUpdate, data: 1}
+    # Device installation searches Windows Update regardless of the policy above.
+    - {path: 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\DriverSearching', name: SearchOrderConfig, data: 0}
 - name: Install the pinned NVIDIA driver on the passed-through GPU
   ansible.windows.win_powershell:
     parameters:
@@ -62,10 +83,11 @@
       $Ansible.Changed = $false
       $gpu = Get-PnpDevice -Class Display -PresentOnly | Where-Object InstanceId -like 'PCI\VEN_10DE*'
       if (-not $gpu) { return }
-      $installed = (Get-CimInstance Win32_PnPSignedDriver | Where-Object DeviceID -eq $gpu.InstanceId).DriverVersion
-      if ($installed -eq $Version) { return }
-      # A loaded older driver must not unload in place; see docs/windows-vm.md "NVIDIA driver updates".
-      if ($installed) { throw "RTX runs NVIDIA $installed; replace it with $Version by the staged-INF procedure" }
+      $driver = Get-CimInstance Win32_PnPSignedDriver | Where-Object DeviceID -eq $gpu.InstanceId
+      if ($driver.DriverVersion -eq $Version) { return }
+      # Microsoft's Basic Display driver yields safely; an older NVIDIA driver must not unload in
+      # place (docs/windows-vm.md, "NVIDIA driver updates").
+      if ($driver.DriverProviderName -eq 'NVIDIA') { throw "RTX runs NVIDIA $($driver.DriverVersion); replace it with $Version by the staged-INF procedure" }
       $Ansible.Changed = $true
       if ($Ansible.CheckMode) { return }
       $unpacked = $Package -replace '\.exe$', ''
@@ -73,6 +95,24 @@
       pnputil /add-driver "$unpacked\$Inf" /install | Out-Null
       if ($LASTEXITCODE -notin 0, 3010) { throw "pnputil exited $LASTEXITCODE" }
   notify: Restart Looking Glass
+- name: Remove NVIDIA display drivers other than the pinned one from the driver store
+  ansible.windows.win_powershell:
+    parameters:
+      Version: '{{ windows_guest_pins.nvidia.version }}'
+    script: |
+      [CmdletBinding(SupportsShouldProcess)]
+      param([string]$Version)
+      $ErrorActionPreference = 'Stop'
+      $WhatIfPreference = $false
+      $Ansible.Changed = $false
+      # Windows Update's 616.56 bug-checks the RTX; a staged copy could be selected again.
+      $stale = Get-WindowsDriver -Online | Where-Object { $_.ProviderName -eq 'NVIDIA' -and $_.ClassName -eq 'Display' -and $_.Version -ne $Version }
+      foreach ($package in $stale) {
+        $Ansible.Changed = $true
+        if ($Ansible.CheckMode) { continue }
+        pnputil /delete-driver $package.Driver | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw "pnputil /delete-driver $($package.Driver) exited $LASTEXITCODE" }
+      }
 - name: Mount the host share with the host user's ownership
   ansible.windows.win_regedit:
     path: HKLM:\SOFTWARE\VirtIO-FS
@@ -209,19 +249,3 @@
     name: NoLockScreen
     data: 1
     type: dword
-- name: Never lock, blank the display or sleep on AC power
-  ansible.windows.win_powershell:
-    script: |
-      [CmdletBinding(SupportsShouldProcess)]
-      param()
-      $ErrorActionPreference = 'Stop'
-      $WhatIfPreference = $false
-      $Ansible.Changed = $false
-      foreach ($setting in ('SUB_NONE', 'CONSOLELOCK'), ('SUB_VIDEO', 'VIDEOIDLE'), ('SUB_SLEEP', 'STANDBYIDLE')) {
-          $query = powercfg /qh SCHEME_CURRENT $setting[0] $setting[1] | Select-String 'Current AC Power Setting Index: (0x[0-9a-f]+)'
-          if ([Convert]::ToInt32($query.Matches[0].Groups[1].Value, 16) -ne 0) {
-              $Ansible.Changed = $true
-              if (-not $Ansible.CheckMode) { powercfg /setacvalueindex SCHEME_CURRENT $setting[0] $setting[1] 0 }
-          }
-      }
-      if ($Ansible.Changed -and -not $Ansible.CheckMode) { powercfg /setactive SCHEME_CURRENT }

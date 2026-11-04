@@ -56,6 +56,16 @@
         <RunSynchronousCommand wcm:action="add"><Order>1</Order><Path>reg add HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\OOBE /v BypassNRO /t REG_DWORD /d 1 /f</Path></RunSynchronousCommand>
         <!-- Windows Update's NVIDIA driver crashes the passed-through GPU; guest-apply installs the pinned one. -->
         <RunSynchronousCommand wcm:action="add"><Order>2</Order><Path>reg add HKLM\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate /v ExcludeWUDriversInQualityUpdate /t REG_DWORD /d 1 /f</Path></RunSynchronousCommand>
+        <!-- Device installation fetches Windows Update drivers on its own, regardless of the policy above. -->
+        <RunSynchronousCommand wcm:action="add"><Order>3</Order><Path>reg add HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\DriverSearching /v SearchOrderConfig /t REG_DWORD /d 0 /f</Path></RunSynchronousCommand>
+        <!-- Settings' "Pause updates" for a week, so the first cumulative update does not compete with
+             setup; it expires on its own and Windows Update resumes. -->
+        <RunSynchronousCommand wcm:action="add"><Order>4</Order><Path>powershell -NoProfile -Command "$k = 'HKLM:\SOFTWARE\Microsoft\WindowsUpdate\UX\Settings'; if (-not (Test-Path $k)) { New-Item $k | Out-Null }; $now = (Get-Date).ToUniversalTime(); $start = $now.ToString('yyyy-MM-ddTHH:mm:ssZ'); $end = $now.AddDays(7).ToString('yyyy-MM-ddTHH:mm:ssZ'); foreach ($kind in 'Feature', 'Quality') { Set-ItemProperty $k \"Pause${kind}UpdatesStartTime\" $start; Set-ItemProperty $k \"Pause${kind}UpdatesEndTime\" $end }; Set-ItemProperty $k PauseUpdatesStartTime $start; Set-ItemProperty $k PauseUpdatesExpiryTime $end"</Path></RunSynchronousCommand>
+        <!-- An idle guest otherwise sleeps after 15 minutes, which the passed-through RTX cannot survive
+             (DRIVER_POWER_STATE_FAILURE), long before guest-apply configures power. -->
+        <RunSynchronousCommand wcm:action="add"><Order>5</Order><Path>powercfg /change standby-timeout-ac 0</Path></RunSynchronousCommand>
+        <RunSynchronousCommand wcm:action="add"><Order>6</Order><Path>powercfg /change hibernate-timeout-ac 0</Path></RunSynchronousCommand>
+        <RunSynchronousCommand wcm:action="add"><Order>7</Order><Path>powercfg /change monitor-timeout-ac 0</Path></RunSynchronousCommand>
       </RunSynchronous>
     </component>
   </settings>
