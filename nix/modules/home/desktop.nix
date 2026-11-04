@@ -124,6 +124,12 @@ in
       color-scheme = "prefer-dark";
       gtk-theme = "Yaru-dark";
     };
+    # GNOME likewise never locks or blanks the screen on its own.
+    dconf.settings."org/gnome/desktop/screensaver" = {
+      lock-enabled = false;
+      ubuntu-lock-on-suspend = false;
+    };
+    dconf.settings."org/gnome/desktop/session".idle-delay = lib.hm.gvariant.mkUint32 0;
     # English and Hebrew keyboard layouts; GNOME switches with Super+Space.
     dconf.settings."org/gnome/desktop/input-sources".sources = [
       (lib.hm.gvariant.mkTuple [ "xkb" "us" ])

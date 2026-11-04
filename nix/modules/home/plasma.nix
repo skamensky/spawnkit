@@ -80,6 +80,38 @@ let
     (theme "arc-dark" "Arc Dark" "dark" "varlesh" "com.github.varlesh.arc-dark" "ArcDark" "Arc-Dark" "The classic Arc look with transparent elements.")
     (theme "materia-dark" "Materia Dark" "dark" "varlesh" "com.github.varlesh.materia-dark" "MateriaDark" "Materia-Dark" "Google Material Design, dark.")
   ];
+  # Layan Dark with see-through Qt windows and menus; KWin's blur shows the wallpaper through.
+  layanGlass = pkgs.runCommand "kvantum-layan-glass" { } ''
+    mkdir -p $out/share/Kvantum/LayanGlass
+    cp ${layan}/share/Kvantum/Layan/LayanDark.svg $out/share/Kvantum/LayanGlass/LayanGlass.svg
+    sed -e 's/^reduce_window_opacity=.*/reduce_window_opacity=15/' -e 's/^reduce_menu_opacity=.*/reduce_menu_opacity=10/' \
+      ${layan}/share/Kvantum/Layan/LayanDark.kvconfig > $out/share/Kvantum/LayanGlass/LayanGlass.kvconfig
+  '';
+  # Windows 11 style cursors, which the Fluent icon theme's source ships prebuilt but nixpkgs
+  # does not install.
+  fluentCursors = pkgs.runCommand "fluent-cursors" { } ''
+    mkdir -p $out/share/icons
+    cp -r ${pkgs.fluent-icon-theme.src}/cursors/dist $out/share/icons/Fluent-cursors
+    chmod -R u+w $out
+    sed -i 's/^Name=.*/Name=Fluent Cursors/' $out/share/icons/Fluent-cursors/index.theme
+  '';
+  # Reads the Google calendars into a local copy for the panel clock (tech.shmuel.clock).
+  calendarSync = pkgs.writers.writePython3Bin "spawnkit-calendar" {
+    flakeIgnore = [ "E501" ];
+    makeWrapperArgs = [ "--set" "SPAWNKIT_CALENDAR_ACCOUNT" "shmuelkamensky@gmail.com" ];
+  } (builtins.readFile ./plasma-calendar.py);
+  # Panel widgets: KPackage reads them from share/plasma/plasmoids in the profile.
+  plasmoid =
+    id: src: substitutions:
+    pkgs.runCommand id { } ''
+      mkdir -p $out/share/plasma/plasmoids
+      cp -r --no-preserve=mode ${src} $out/share/plasma/plasmoids/${id}
+      ${lib.concatMapStrings (
+        name: "substituteInPlace $out/share/plasma/plasmoids/${id}/contents/ui/main.qml --replace-fail @${name}@ ${substitutions.${name}}\n"
+      ) (builtins.attrNames substitutions)}
+    '';
+  batteryWidget = plasmoid "tech.shmuel.battery" ./plasma-battery { };
+  clockWidget = plasmoid "tech.shmuel.clock" ./plasma-clock { calendar = "${calendarSync}/bin/spawnkit-calendar"; };
   plasmaTheme = pkgs.writers.writePython3Bin "spawnkit-plasma-theme" {
     flakeIgnore = [ "E501" ];
     makeWrapperArgs = [
@@ -91,8 +123,7 @@ in
 {
   imports = [ inputs.plasma-manager.homeModules.plasma-manager ];
   # Plasma itself comes from Ubuntu (plasma in hosts/<profile>/system.yml); this declares
-  # its settings and the theme candidates. Plasma's default layout is already one bottom
-  # panel and no top panel.
+  # its look, panel and settings, and the theme gallery's candidates.
   options.personal.desktop.plasma = lib.mkEnableOption "KDE Plasma 6 settings and themes";
   config = lib.mkIf (config.personal.desktop.enable && config.personal.desktop.plasma) {
     programs.plasma = {
@@ -111,19 +142,73 @@ in
         captureRectangularRegion = "Print";
         launch = [ ];
       };
-      # Pins the Windows VM start and shut-down launchers to the task manager of every panel,
-      # keeping the user's own pins. Runs at the next login after this script changes.
-      startup.desktopScript.pinWindowsLaunchers.text = ''
-        const wanted = ${builtins.toJSON windowsPins};
-        for (const panel of panels()) {
-          for (const tasks of panel.widgets("org.kde.plasma.icontasks")) {
-            tasks.currentConfigGroup = ["General"];
-            let pins = tasks.readConfig("launchers", []);
-            if (typeof pins === "string") pins = pins.split(",").filter(p => p);
-            tasks.writeConfig("launchers", pins.concat(wanted.filter(w => !pins.includes(w))));
-          }
+      # Layan's soft dark palette with see-through windows, and Windows 11's icons and cursors.
+      workspace = {
+        colorScheme = "Layan";
+        theme = "Layan";
+        widgetStyle = "kvantum";
+        iconTheme = "Fluent-dark";
+        cursor = {
+          theme = "Fluent-cursors";
+          size = 24;
+        };
+        windowDecorations = {
+          library = "org.kde.kwin.aurorae";
+          theme = "__aurorae__svg__Layan";
+        };
+        wallpaper = "${layan}/share/wallpapers/Layan/contents/images/2560x1440.png";
+      };
+      # The session stays unlocked until an explicit lock or log out: no idle lock and no lock on
+      # waking from sleep. Without PowerDevil, Plasma never suspends or ends the session itself.
+      kscreenlocker = {
+        autoLock = false;
+        lockOnResume = false;
+        timeout = 0;
+      };
+      configFile."Kvantum/kvantum.kvconfig".General.theme = "LayanGlass";
+      kwin.effects = {
+        blur.enable = true;
+        translucency.enable = true;
+      };
+      # One bottom panel, as on Windows. Its right side holds only the battery (while on
+      # battery), the clock with Google Calendar, and notifications; without a system tray,
+      # applications' tray icons (CopyQ, Claude) have nowhere to appear.
+      panels = [
+        {
+          location = "bottom";
+          height = 44;
+          opacity = "translucent";
+          widgets = [
+            "org.kde.plasma.kickoff"
+            {
+              iconTasks.launchers = [
+                "preferred://filemanager"
+                "preferred://browser"
+              ]
+              ++ windowsPins;
+            }
+            "org.kde.plasma.marginsseparator"
+            "tech.shmuel.battery"
+            "tech.shmuel.clock"
+            "org.kde.plasma.notifications"
+          ];
         }
-      '';
+      ];
+      # Windows-style snapping: KWin's drag-to-edge halves and corner quarters, KZones' snap
+      # layouts while dragging a window to the top, and Windows' Meta+arrow keys.
+      configFile.kwinrc = {
+        Plugins.kzonesEnabled = true;
+        Effect-translucency = {
+          Inactive = 92;
+          MoveResize = 80;
+        };
+      };
+      shortcuts.kwin = {
+        "Window Maximize" = "Meta+Up";
+        "Window Minimize" = "Meta+Down";
+        "Window Quick Tile Top" = [ ];
+        "Window Quick Tile Bottom" = [ ];
+      };
       configFile.spectaclerc = {
         General = {
           clipboardGroup = "PostScreenshotCopyImage";
@@ -165,7 +250,34 @@ in
       qogir-icon-theme
       whitesur-icon-theme
       bibata-cursors
+      # plasma-manager's layout scripts call qdbus, which Ubuntu's Qt 6 names qdbus6.
+      (writeShellScriptBin "qdbus" ''exec /usr/bin/qdbus6 "$@"'')
+      # The pinned look and panel.
+      layanGlass
+      fluent-icon-theme
+      fluentCursors
+      kdePackages.kzones
+      batteryWidget
+      clockWidget
+      calendarSync
     ];
+    systemd.user.services.spawnkit-calendar = {
+      Unit.Description = "Copy Google Calendar events for the panel clock";
+      Service = {
+        Type = "oneshot";
+        # The credential wrapper runs gcloud and google-automation from the profile.
+        Environment = "PATH=${config.home.profileDirectory}/bin:/usr/bin:/bin";
+        ExecStart = "${calendarSync}/bin/spawnkit-calendar sync";
+      };
+    };
+    systemd.user.timers.spawnkit-calendar = {
+      Unit.Description = "Copy Google Calendar events for the panel clock every 15 minutes";
+      Timer = {
+        OnStartupSec = "1min";
+        OnUnitActiveSec = "15min";
+      };
+      Install.WantedBy = [ "timers.target" ];
+    };
     # Claude's own launcher (from its Ubuntu package) lists New Chat and new-session actions,
     # which Plasma's search shows as separate results. This user copy has none; Claude leaves a
     # user entry without its X-Claude-Generated marker alone.

@@ -595,16 +595,36 @@ GNOME stays installed, so the session is chosen at login and the trial is revers
   and close; no save dialog. GNOME keeps its own screenshot UI on Print.
 - **Declarative config (done 2026-11-04):** the `plasma-manager` flake input and
   `nix/modules/home/plasma.nix` (`personal.desktop.plasma`) declare the Spectacle
-  shortcut and settings and install the theme candidates. Plasma's default
-  layout is already one bottom panel and no top panel, so no panel is declared;
-  a login desktop script adds the Windows start and shut-down launchers to each
-  panel's task manager pins, keeping the user's own pins. A user copy of Claude's
+  shortcut and settings and install the theme candidates. A user copy of Claude's
   launcher without its desktop actions keeps search to one Claude result (Claude
   rewrites only an entry that carries its `X-Claude-Generated` marker);
   set the display scale (start at 150%) in System Settings → Display, since KWin
   keeps it per output. `overrideConfig` stays off during the trial so changes
   made in System Settings survive activation. Pin the final panel, scale and
   theme in `plasma.nix` afterwards.
+- **Pinned look and panel (done 2026-11-04):** `plasma.nix` declares Layan's
+  colours, Plasma style and window decoration with a `LayanGlass` Kvantum theme
+  (Layan Dark with 15% see-through windows and 10% menus, blurred by KWin), the
+  Layan wallpaper, Fluent-dark icons and the Fluent (Windows 11) cursors packaged
+  from the Fluent icon theme's source. Inactive windows show at 92% opacity. One
+  translucent bottom panel holds the launcher, the task manager (file manager,
+  browser and the Windows launchers pinned) and, on the right, only three widgets:
+  `tech.shmuel.battery` (visible only while on battery), `tech.shmuel.clock` and
+  notifications. There is no system tray, so applications' tray icons (CopyQ,
+  Claude) do not appear; volume, network and the keyboard layout have no
+  indicator. The clock's popup is a month view with event dots and the selected
+  day's Google Calendar events (click opens the event, a camera button joins its
+  Meet). `spawnkit-calendar sync` copies the calendars Google Calendar shows,
+  from a month back to three months ahead, through the personal-secrets Google
+  wrapper into `~/.local/share/spawnkit/calendar/events.json`; a user timer runs
+  it every 15 minutes, and `events --from --to` and `status` print JSON from that
+  copy, which the clock reads. KZones adds Windows-style snap layouts while
+  dragging a window to the top; Meta+Up maximizes, Meta+Down minimizes and
+  Meta+Left/Right keep KWin's half tiling. The screen never locks on idle or on
+  waking from sleep, in Plasma and GNOME; PowerDevil is not installed, so Plasma
+  never suspends or ends the session either. plasma-manager's layout scripts call
+  `qdbus`, so the profile provides one that runs Ubuntu's `qdbus6`; the panel
+  script runs again at the next login only when the declared panel changes.
 - **Theme trial:** a Plasma theme applies to the whole session; it cannot differ
   per virtual desktop. `spawnkit-plasma-theme` (`list --json`, `current`, `apply
   <id>`, `revert`) switches the live desktop between 20 of the most downloaded

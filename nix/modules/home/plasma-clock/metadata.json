@@ -1,0 +1,12 @@
+{
+  "KPackageStructure": "Plasma/Applet",
+  "X-Plasma-API-Minimum-Version": "6.0",
+  "KPlugin": {
+    "Id": "tech.shmuel.clock",
+    "Name": "Clock with Google Calendar",
+    "Description": "Time and date; click for a month view with the day's Google Calendar events",
+    "Icon": "view-calendar",
+    "Category": "Date and Time",
+    "License": "MIT"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "KPackageStructure": "Plasma/Applet",
+  "X-Plasma-API-Minimum-Version": "6.0",
+  "KPlugin": {
+    "Id": "tech.shmuel.battery",
+    "Name": "Battery when unplugged",
+    "Description": "Battery level, shown only while running on battery",
+    "Icon": "battery-070",
+    "Category": "System Information",
+    "License": "MIT"
+  }
+}
