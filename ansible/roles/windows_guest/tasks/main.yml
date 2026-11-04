@@ -134,6 +134,11 @@
     path: '{{ windows_guest_cache }}\{{ windows_guest_pins.tailscale.file }}'
     creates_service: Tailscale
     arguments: /norestart
+- name: Install Chrome
+  ansible.windows.win_package:
+    path: '{{ windows_guest_cache }}\{{ windows_guest_pins.chrome.file }}'
+    creates_path: C:\Program Files\Google\Chrome\Application\chrome.exe
+    arguments: /norestart
 
 - name: Install the Virtual Display Driver files
   ansible.windows.win_powershell:

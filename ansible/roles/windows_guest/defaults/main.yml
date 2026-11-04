@@ -33,3 +33,9 @@ windows_guest_pins:
     url: https://pkgs.tailscale.com/stable/tailscale-setup-1.104.5-amd64.msi
     file: tailscale-setup-1.104.5-amd64.msi
     sha256: 3c41318c83c5d95d0b017b1baa08ba7c99fd5334166122bbb1931e55af99839c
+  # Chrome updates itself; Google replaces this unversioned MSI on each release, so a fresh
+  # install fails the hash check until url's current sha256 is pinned here.
+  chrome:
+    url: https://dl.google.com/dl/chrome/install/googlechromestandaloneenterprise64.msi
+    file: googlechromestandaloneenterprise64.msi
+    sha256: 55edacd348b4c1c9b291dab19e4665929c7a127c013d9625970be924f893273f

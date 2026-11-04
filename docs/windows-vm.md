@@ -134,7 +134,7 @@ bootstrap through the guest agent; `guest-media --output <iso>` renders the CD a
 `windows_guest` Ansible role over SSH, pinning the guest's ed25519 host key (read
 through the guest agent) for that run. The role downloads pinned, SHA-256-verified
 installers to `C:\ProgramData\spawnkit\cache` and installs the VirtIO guest tools,
-WinFsp and the virtiofs service (when `windows_share` is set), Tailscale, the
+WinFsp and the virtiofs service (when `windows_share` is set), Tailscale, Chrome, the
 Virtual Display Driver, the Looking Glass host and NVIDIA's display driver 621.01
 (driver package only, from `nvlti.inf`; when the RTX already runs another version
 it stops and points to the procedure below). It sets `windows_timezone`, keeps
@@ -146,6 +146,8 @@ package from the driver store, configures automatic sign-in,
 hides the lock screen and disables console lock, display blanking and AC sleep:
 the Linux session lock protects the VM. Every task is idempotent; a converged guest
 reports `changed=0`. Tailscale login and the Windows license remain manual.
+Chrome and Tailscale update themselves; Google replaces Chrome's unversioned MSI on
+each release, so a fresh install fails its hash check until the pin is refreshed.
 
 Looking Glass host and Nix client versions must match (currently **B7**). Windows
 needs an active display on the RTX; the laptop's panel is wired only to Intel, so
