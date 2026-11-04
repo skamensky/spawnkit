@@ -33,7 +33,7 @@
   when: cfg.desktop_session != ''
 - name: Install KDE Plasma as an extra GDM session
   ansible.builtin.apt:
-    # PySide6 drives Spawnkit's own Kirigami dialogs (scripts/spawnkit_ui) with Plasma's Qt.
+    # PySide6 drives Spawnkit's own Kirigami dialogs (scripts/spawnkit-ui) with Plasma's Qt.
     name: [kde-plasma-desktop, kde-spectacle, qt-style-kvantum, python3-pyside6.qtquick, python3-pyside6.qtqml, python3-pyside6.qtgui]
     # Recommends would pull in SDDM, which takes over from GDM.
     install_recommends: false
