@@ -197,7 +197,15 @@ under it) and **Shut down Windows** (`vm-stop --notify`, with notifications when
 shutdown starts and when the RTX is back) to the dock, appended to the user's own
 pins. The viewer opens fullscreen. Launch failures also produce a desktop
 notification. The console entry opens the console; start first if the VM is off.
-Closing Looking Glass leaves Windows running. `vm-stop` requests an ACPI shutdown and waits
+Closing Looking Glass leaves Windows running.
+
+**Windows (no RTX)** (`vm-view --without-rtx`, also accepted by `vm-start`) starts
+Windows once from its definition minus the RTX functions and Looking Glass memory,
+with a virtio display instead; the stored definition is unchanged. The RTX stays on
+Ubuntu, the guard reserves nothing, and the view opens the SPICE console in
+virt-manager because Looking Glass has nothing to capture. Expect basic graphics
+only; shut down and start normally to get the RTX back. While Windows runs, either
+launcher opens the viewer that matches how it was started. `vm-stop` requests an ACPI shutdown and waits
 (default 300 s, `--timeout`) until the domain is `shut off` **and** the release
 hook has cleared the reservation, which it only does after verifying the Linux
 drivers and `nvidia-smi -L`. It never forces power-off; on timeout it reports

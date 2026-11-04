@@ -271,6 +271,24 @@ def view_looking_glass(command, port):
             raise RuntimeError(f"Looking Glass stalled {len(restarts)} times in a minute; see {state / 'looking-glass-stalls.jsonl'}")
 
 
+def start_without_rtx(name):
+    """Start the persistent domain once from its definition minus the RTX, leaving the definition intact.
+
+    A virtio display replaces the RTX; with nothing for Looking Glass to capture, its shared memory goes too.
+    """
+    tree = ET.fromstring(subprocess.check_output(["/usr/bin/virsh", "-c", "qemu:///system", "dumpxml", "--inactive", name], text=True))
+    devices = tree.find("devices")
+    for device in devices.findall("hostdev[@type='pci']") + devices.findall("shmem"):
+        devices.remove(device)
+    for video in devices.findall("video"):
+        devices.remove(video)
+    ET.SubElement(ET.SubElement(devices, "video"), "model", type="virtio")
+    with tempfile.NamedTemporaryFile("w", suffix=".xml") as definition:
+        definition.write(ET.tostring(tree, encoding="unicode"))
+        definition.flush()
+        run(["/usr/bin/virsh", "-c", "qemu:///system", "create", definition.name], capture_output=True, text=True)
+
+
 def start_windows(name, notify, gui):
     """Detach the RTX from the desktop, then start Windows now or once its holders exit.
 
@@ -310,6 +328,7 @@ def main():
     parser.add_argument("--ask-become-pass", action="store_true")
     parser.add_argument("--notify", action="store_true", help="Also display desktop notifications for command failures and vm-stop progress")
     parser.add_argument("--gui", action="store_true", help="vm-start/vm-view/vm-install: offer to close programs holding the RTX")
+    parser.add_argument("--without-rtx", action="store_true", help="vm-start/vm-view: start Windows with a virtio display and leave the RTX on Ubuntu")
     parser.add_argument("--pid", type=int, action="append", default=[], help="gpu-release: holder to close (repeatable)")
     parser.add_argument("--force", action="store_true", help="gpu-release: SIGKILL holders still running after SIGTERM")
     parser.add_argument("--timeout", type=int, default=300, help="vm-stop: seconds to wait for guest shutdown and GPU return")
@@ -400,12 +419,17 @@ def main():
                 info = subprocess.check_output(['/usr/bin/virsh', '-c', 'qemu:///system', 'net-info', network], text=True, env=os.environ | {'LC_ALL': 'C'})
                 if not any(line.split(':', 1)[0].strip() == 'Active' and line.split(':', 1)[1].strip() == 'yes' for line in info.splitlines()):
                     run(['/usr/bin/virsh', '-c', 'qemu:///system', 'net-start', network])
-                if not start_windows(name, args.notify, args.gui):
+                if args.without_rtx:
+                    start_without_rtx(name)
+                elif not start_windows(name, args.notify, args.gui):
                     return
             elif state != "running":
                 raise ValueError(f"VM is {state}; inspect it explicitly rather than forcing a reset")
             if args.action == "vm-view":
                 live = ET.fromstring(subprocess.check_output(['/usr/bin/virsh', '-c', 'qemu:///system', 'dumpxml', name], text=True))
+                if live.find('./devices/shmem') is None:
+                    # Started without the RTX: Looking Glass has no frames to show, so use the SPICE display.
+                    os.execvp("virt-manager", ["virt-manager", "--connect", "qemu:///system", "--show-domain-console", name])
                 spice = live.find('./devices/graphics[@type="spice"]')
                 if spice is None or int(spice.get('port', '-1')) < 1:
                     raise ValueError('The running VM has no active local SPICE port')

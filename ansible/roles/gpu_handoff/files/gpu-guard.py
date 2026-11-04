@@ -46,6 +46,9 @@ def validate_domain(cfg, xml):
         return False
     if tree.findtext('uuid') != cfg['windows_uuid']:
         raise RuntimeError('Windows UUID differs from the installed host configuration')
+    if not selected.intersection(supplied):
+        # Started without the RTX (host-config --without-rtx): nothing to reserve.
+        return False
     if set(supplied) != selected or any(v != 'yes' for v in supplied.values()):
         raise RuntimeError('Windows must use exactly the declared PCI functions with managed=yes')
     shmem = tree.find('./devices/shmem')

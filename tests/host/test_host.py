@@ -150,6 +150,18 @@ class Configuration(unittest.TestCase):
         with self.assertRaises(ValueError):
             load_config(ROOT, 'default', {'windows_usb_devices': [{'vendor': '30c9', 'product': '0x00ac'}]})
 
+    def test_windows_without_rtx_reserves_nothing(self):
+        cfg = gpu_config()
+        tree = ET.fromstring(render_windows(ROOT, cfg))
+        devices = tree.find('devices')
+        for device in devices.findall("hostdev[@type='pci']") + devices.findall('shmem'):
+            devices.remove(device)
+        self.assertFalse(guard.validate_domain(cfg, ET.tostring(tree)))
+        devices.append(ET.fromstring("<hostdev mode='subsystem' type='pci' managed='yes'><source>"
+                                     "<address domain='0x0000' bus='0x01' slot='0x00' function='0x0'/></source></hostdev>"))
+        with self.assertRaises(RuntimeError):
+            guard.validate_domain(cfg, ET.tostring(tree))
+
     def test_other_domain_cannot_take_reserved_gpu(self):
         cfg = gpu_config()
         tree = ET.fromstring(render_windows(ROOT, cfg))

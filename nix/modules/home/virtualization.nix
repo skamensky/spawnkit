@@ -64,6 +64,11 @@
             # Groups the viewer's window under this launcher in the dock.
             startupWMClass = "looking-glass-client";
           };
+          spawnkit-windows-without-rtx = {
+            desktopName = "Windows (no RTX)";
+            exec = "host-config vm-view --notify --without-rtx";
+            icon = "${./spawnkit-windows.svg}";
+          };
           spawnkit-windows-shutdown = {
             desktopName = "Shut down Windows";
             exec = "host-config vm-stop --notify";
