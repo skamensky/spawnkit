@@ -530,8 +530,8 @@ its log shows FFmpeg VAAPI H.264/HEVC and QuickSync on the Intel iGPU. Remaining
 - [ ] Confirm NVENC with the Windows VM shut down (the RTX is on `vfio-pci` while
   it runs, so OBS logs `NVENC not supported`).
 - [ ] After `do-release-upgrade`: `sudo apt purge obs-studio` and delete the
-  obsproject PPA source, so `/usr/bin/obs` stops shadowing nothing and the next
-  upgrade has no foreign package.
+  obsproject PPA source, so only the Nix OBS remains (the app menu shows both
+  until then) and the next upgrade has no foreign package.
 - [ ] The scene's "Audio Capture Device (ALSA)" source fails to open `default`
   under Nix's ALSA, which cannot load Ubuntu's PipeWire ALSA plugin. Desktop
   Audio and Mic/Aux (PulseAudio capture) work; drop the ALSA source unless it
