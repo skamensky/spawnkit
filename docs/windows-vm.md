@@ -255,7 +255,10 @@ and recovery; routine automation can use SSH.
   `/etc/ssh/ssh_config.d/`, so `ssh windows` reaches the guest's OpenSSH server
   (Win32-OpenSSH from the bootstrap, PowerShell default shell, the Linux
   public key in `C:\ProgramData\ssh\administrators_authorized_keys`). From
-  Windows, reach Linux through its declared SSH listener.
+  Windows, reach Linux through its declared SSH listener. Windows cannot run
+  Tailscale SSH, so the firewall rule `Spawnkit-SSH-Tailnet` also admits the
+  key-only OpenSSH server from the tailnet ranges for machines such as the
+  personal agent VM.
 - **Shared folder:** `windows_share` exports a host directory over virtiofs
   (shared memfd memory backing, tag `spawnkit-share`); Ansible creates it for the
   user. `guest-apply` sets `OverrideUid`/`OverrideGid` under

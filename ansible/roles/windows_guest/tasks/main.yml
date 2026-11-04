@@ -11,6 +11,8 @@
     dest: '{{ windows_guest_cache }}\{{ item.value.file }}'
     checksum: '{{ item.value.sha256 }}'
     checksum_algorithm: sha256
+    # A cached file matching its pin is reused; refetching contacts every server on every run.
+    force: false
   loop: '{{ windows_guest_pins | dict2items }}'
   loop_control:
     label: '{{ item.value.file }}'
@@ -134,6 +136,24 @@
     path: '{{ windows_guest_cache }}\{{ windows_guest_pins.tailscale.file }}'
     creates_service: Tailscale
     arguments: /norestart
+# Windows cannot run Tailscale SSH, so tailnet machines such as the personal agent VM reach the
+# key-only OpenSSH server directly.
+- name: Admit OpenSSH from the tailnet
+  ansible.windows.win_powershell:
+    script: |
+      [CmdletBinding(SupportsShouldProcess)]
+      param()
+      $ErrorActionPreference = 'Stop'
+      $WhatIfPreference = $false
+      $addresses = '100.64.0.0/10', 'fd7a:115c:a1e0::/48'
+      $rule = Get-NetFirewallRule -Name Spawnkit-SSH-Tailnet -ErrorAction SilentlyContinue
+      $current = if ($rule) { @(($rule | Get-NetFirewallAddressFilter).RemoteAddress) } else { @() }
+      $Ansible.Changed = -not $rule -or (Compare-Object $current $addresses)
+      if ($Ansible.Changed -and -not $Ansible.CheckMode) {
+          $settings = @{Direction = 'Inbound'; Protocol = 'TCP'; LocalPort = 22; RemoteAddress = $addresses; Action = 'Allow'; Profile = 'Any'}
+          if ($rule) { Set-NetFirewallRule -Name Spawnkit-SSH-Tailnet @settings }
+          else { New-NetFirewallRule -Name Spawnkit-SSH-Tailnet -DisplayName 'OpenSSH from the tailnet' @settings | Out-Null }
+      }
 - name: Install Chrome
   ansible.windows.win_package:
     path: '{{ windows_guest_cache }}\{{ windows_guest_pins.chrome.file }}'
