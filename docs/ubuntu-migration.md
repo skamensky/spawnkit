@@ -574,12 +574,15 @@ rejected in favor of upgrading Ubuntu: 26.04 (`resolute`) ships Plasma 6.6.6.
 GNOME stays installed, so the session is chosen at login and the trial is reversible.
 
 - **Packages (done 2026-11-04):** `plasma: true` in the laptop profile installs
-  `kde-plasma-desktop`, `kde-spectacle` and `qt6-style-kvantum` without Recommends,
+  `kde-plasma-desktop`, `kde-spectacle` and `qt-style-kvantum` without Recommends,
   which would pull in SDDM and take over from GDM. `kubuntu-desktop` is avoided for
   the same reason and for its whole Kubuntu app set. GDM stays the display manager.
-- **Session:** the laptop already runs `desktop_session: wayland` (GNOME 50 has
+- **Session (default since 2026-11-04):** the laptop already runs `desktop_session: wayland` (GNOME 50 has
   no Xorg session), so Plasma's Wayland session appears in GDM as soon as it is
-  installed.
+  installed. `default_session: plasma` makes it the session GDM preselects (and
+  autologin starts) through AccountsService; GNOME stays one click away under the
+  gear after choosing the user. Set live with `busctl`; the next `host-config apply`
+  enforces it.
 - **GPU handoff:** measured 2026-11-04 with the NVIDIA driver bound: the RTX has
   its own connectors (`card2`: DP-3, DP-4, HDMI-A-5, eDP-2), so some external
   port may be wired to it. Restricting KWin with `KWIN_DRM_DEVICES` would leave
@@ -594,20 +597,25 @@ GNOME stays installed, so the session is chosen at login and the trial is revers
   `nix/modules/home/plasma.nix` (`personal.desktop.plasma`) declare the Spectacle
   shortcut and settings and install the theme candidates. Plasma's default
   layout is already one bottom panel and no top panel, so no panel is declared;
+  a login desktop script adds the Windows start and shut-down launchers to each
+  panel's task manager pins, keeping the user's own pins. A user copy of Claude's
+  launcher without its desktop actions keeps search to one Claude result (Claude
+  rewrites only an entry that carries its `X-Claude-Generated` marker);
   set the display scale (start at 150%) in System Settings → Display, since KWin
   keeps it per output. `overrideConfig` stays off during the trial so changes
   made in System Settings survive activation. Pin the final panel, scale and
   theme in `plasma.nix` afterwards.
 - **Theme trial:** a Plasma theme applies to the whole session; it cannot differ
-  per virtual desktop. Installed candidates (nixpkgs): `whitesur-kde`,
-  `catppuccin-kde`, `nordic`, `sweet-nova`, `utterly-nord-plasma`,
-  `papirus-icon-theme`, `tela-icon-theme` and `bibata-cursors`. Their Kvantum
-  themes use Ubuntu's `qt6-style-kvantum`; a Nix Qt plugin would not load into
-  Ubuntu's Qt. More come from System Settings → Global Theme → Get New. Preview in
-  System Settings, or cycle quickly with a small script around
-  `plasma-apply-lookandfeel -a <id>`. True side-by-side would need a nested
-  windowed Plasma session with a separate config home; set it up only if quick
-  switching is not enough. Pin the winner in `plasma.nix`.
+  per virtual desktop. `spawnkit-plasma-theme` (`list --json`, `current`, `apply
+  <id>`, `revert`) switches the live desktop between 20 of the most downloaded
+  Plasma 6 global themes, keeping the panel layout; `gallery` (the "Theme Gallery"
+  launcher) is a local page with each theme's preview and an Apply button over the
+  same commands. Layan, Colloid, Orchis and Graphite are built from vinceliuice's
+  repositories, because nixpkgs dropped them with Plasma 5. Sweet, Nordic, Arc and
+  Materia ship only Plasma 5's `metadata.desktop`, so the build adds the
+  `metadata.json` Plasma 6 requires. Their Kvantum themes use Ubuntu's Kvantum;
+  a Nix Qt plugin would not load into Ubuntu's Qt. Already open Qt apps restyle
+  when restarted. Pin the winner in `plasma.nix`.
 - **Verify on Wayland:** fractional scaling is sharp in Chrome, VS Code and
   Electron apps; CopyQ still records history (Klipper is the fallback); Looking
   Glass captures and releases input; Citrix and Webex run under XWayland; the

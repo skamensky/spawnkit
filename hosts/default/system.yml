@@ -27,6 +27,8 @@ nvidia_prime: ""
 desktop_session: ""
 # KDE Plasma 6 as a second session in GDM, without SDDM or the Kubuntu app set.
 plasma: false
+# Session GDM preselects for the user, such as "plasma" or "ubuntu"; empty leaves it alone.
+default_session: ""
 ssh_port: 2222
 ssh_listen_addresses: []
 docker_daemon: {}

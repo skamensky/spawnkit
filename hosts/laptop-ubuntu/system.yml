@@ -8,8 +8,9 @@ nvidia_prime: on-demand
 nvidia_driver_package: nvidia-driver-580
 # GNOME 50 (Ubuntu 26.04) has no Xorg session, so GDM must offer Wayland.
 desktop_session: wayland
-# Trial (migration D7); GNOME stays the default session.
+# Trial (migration D7); GNOME stays installed as the fallback session.
 plasma: true
+default_session: plasma
 virtualization: true
 iommu: true
 # Solaar needs Ubuntu's udev rules for Logitech receiver access; cmake and ninja join the

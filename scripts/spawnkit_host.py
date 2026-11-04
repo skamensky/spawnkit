@@ -39,7 +39,7 @@ def load_config(repo, profile, overrides=None):
     for key in ('gpu_devices', 'windows_usb_devices', 'ssh_listen_addresses', 'base_packages', 'host_packages'):
         if not isinstance(cfg[key], list):
             raise ValueError(f'{key} must be a list')
-    for key in ('windows_name', 'looking_glass_name', 'network_name', 'network_bridge', 'windows_disk', 'windows_iso', 'virtio_iso', 'nvidia_driver_package', 'nvidia_prime', 'desktop_session', 'windows_uuid', 'network_uuid', 'windows_mac', 'windows_address', 'windows_share', 'windows_unattend_iso', 'windows_edition', 'windows_computer_name', 'windows_timezone', 'windows_authorized_key', 'windows_display_gpu', 'windows_display_mode'):
+    for key in ('windows_name', 'looking_glass_name', 'network_name', 'network_bridge', 'windows_disk', 'windows_iso', 'virtio_iso', 'nvidia_driver_package', 'nvidia_prime', 'desktop_session', 'default_session', 'windows_uuid', 'network_uuid', 'windows_mac', 'windows_address', 'windows_share', 'windows_unattend_iso', 'windows_edition', 'windows_computer_name', 'windows_timezone', 'windows_authorized_key', 'windows_display_gpu', 'windows_display_mode'):
         if not isinstance(cfg[key], str):
             raise ValueError(f'{key} must be a string')
     for key in ('base_packages', 'host_packages'):
@@ -51,6 +51,8 @@ def load_config(repo, profile, overrides=None):
         raise ValueError('nvidia_prime requires nvidia')
     if cfg['desktop_session'] not in ('', 'x11', 'wayland'):
         raise ValueError('desktop_session must be empty, x11 or wayland')
+    if not re.fullmatch(r'[a-z0-9-]*', cfg['default_session']):
+        raise ValueError('default_session must name a session file such as plasma or ubuntu')
     for key in ("docker", "tailscale", "ssh", "nvidia", "virtualization", "iommu", "gpu_handoff", "windows_vm", "webex", "citrix", "nix_chrome", "plasma"):
         if not isinstance(cfg[key], bool):
             raise ValueError(f"{key} must be a boolean")
