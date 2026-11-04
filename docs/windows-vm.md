@@ -302,11 +302,12 @@ and recovery; routine automation can use SSH.
   viewer. While the viewer is focused, the pointer is over it and X sees input, its
   SPICE input channels must send; the main channel (the client's first socket) and
   any channel streaming while the user is idle (the microphone) do not count. After a
-  click that refocuses the viewer, the B7 client sometimes stops forwarding input
-  until the pointer leaves and re-enters its window (reproduced with and without
-  the keyboard grab; Windows' cursor stays visible and receives nothing). After 2 s
-  without traffic the watchdog moves the pointer just outside the window and back;
-  a second stall within 30 s shows a notification and restarts the viewer. Each
+  return to the viewer (a click or Alt+Tab), the B7 client sometimes stops forwarding
+  input while it holds the pointer in place (reproduced with and without the keyboard
+  grab; Windows' cursor stays visible and receives nothing). Toggling capture mode
+  twice clears it; moving the pointer out and back does not after Alt+Tab. After 2 s
+  without traffic the watchdog taps Insert twice through XTest (it must match
+  `input:escapeKey`); a second stall within 30 s shows a notification and restarts the viewer. Each
   event is appended to `~/.local/state/spawnkit/looking-glass-stalls.jsonl` with its
   `action`; more than five restarts in ten minutes stops `vm-view`. The
   viewer's own log is `~/.local/state/spawnkit/looking-glass.log`.

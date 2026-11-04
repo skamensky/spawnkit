@@ -2,9 +2,9 @@
 """Detect a Looking Glass client that stops forwarding input, record the evidence, then end it.
 
 Runs under Ubuntu's Python so ctypes loads Ubuntu's Xlib. While the pointer is over the focused
-client and the X server sees input, the client's SPICE inputs channel must send. After a focus
-click the client can stop forwarding until the pointer leaves and re-enters its window, so the
-first stall moves the pointer out and back. Exit status 75 means that did not help and the client
+client and the X server sees input, the client's SPICE inputs channel must send. After focus
+returns (by click or Alt+Tab) the client can stop forwarding while it keeps warping the pointer in
+place; entering and leaving capture mode clears that, so the first stall taps the escape key twice. Exit status 75 means that did not help and the client
 was terminated so the launcher can restart it.
 """
 
@@ -26,8 +26,10 @@ STALL_SECONDS = 2
 # excluded for IDLE_MEMORY seconds after the last such streak of STREAM_TICKS ticks.
 IDLE_MEMORY = 120
 STREAM_TICKS = 4
-# A stall within this many seconds of a pointer nudge restarts the client instead.
-NUDGE_SECONDS = 30
+# A stall within this many seconds of a capture toggle restarts the client instead.
+RECOVER_SECONDS = 30
+# The client's input:escapeKey, set by host-config.
+ESCAPE_KEYSYM = b"Insert"
 
 
 class XScreenSaverInfo(ctypes.Structure):
@@ -39,6 +41,8 @@ class X:
     def __init__(self):
         self.x = ctypes.CDLL("libX11.so.6")
         self.xss = ctypes.CDLL("libXss.so.1")
+        self.xtst = ctypes.CDLL("libXtst.so.6")
+        self.xtst.XTestFakeKeyEvent.argtypes = [ctypes.c_void_p, ctypes.c_uint, ctypes.c_int, ctypes.c_ulong]
         self.x.XOpenDisplay.restype = ctypes.c_void_p
         self.x.XDefaultRootWindow.restype = ctypes.c_ulong
         self.x.XDefaultRootWindow.argtypes = [ctypes.c_void_p]
@@ -50,10 +54,10 @@ class X:
         self.x.XFree.argtypes = [ctypes.c_void_p]
         self.x.XGetGeometry.argtypes = [ctypes.c_void_p, ctypes.c_ulong, ctypes.POINTER(ctypes.c_ulong)] + [ctypes.POINTER(ctypes.c_int)] * 2 + [ctypes.POINTER(ctypes.c_uint)] * 4
         self.x.XQueryPointer.argtypes = [ctypes.c_void_p, ctypes.c_ulong] + [ctypes.POINTER(ctypes.c_ulong)] * 2 + [ctypes.POINTER(ctypes.c_int)] * 4 + [ctypes.POINTER(ctypes.c_uint)]
-        self.x.XTranslateCoordinates.argtypes = [ctypes.c_void_p, ctypes.c_ulong, ctypes.c_ulong, ctypes.c_int, ctypes.c_int,
-                                                 ctypes.POINTER(ctypes.c_int), ctypes.POINTER(ctypes.c_int), ctypes.POINTER(ctypes.c_ulong)]
-        self.x.XWarpPointer.argtypes = [ctypes.c_void_p, ctypes.c_ulong, ctypes.c_ulong] + [ctypes.c_int] * 2 + [ctypes.c_uint] * 2 + [ctypes.c_int] * 2
-        self.x.XDisplayWidth.argtypes = self.x.XDisplayHeight.argtypes = [ctypes.c_void_p, ctypes.c_int]
+        self.x.XStringToKeysym.restype = ctypes.c_ulong
+        self.x.XStringToKeysym.argtypes = [ctypes.c_char_p]
+        self.x.XKeysymToKeycode.restype = ctypes.c_ubyte
+        self.x.XKeysymToKeycode.argtypes = [ctypes.c_void_p, ctypes.c_ulong]
         self.x.XFlush.argtypes = [ctypes.c_void_p]
         self.xss.XScreenSaverAllocInfo.restype = ctypes.POINTER(XScreenSaverInfo)
         self.xss.XScreenSaverQueryInfo.argtypes = [ctypes.c_void_p, ctypes.c_ulong, ctypes.POINTER(XScreenSaverInfo)]
@@ -95,32 +99,15 @@ class X:
         self.x.XGetGeometry(self.display, window, groot, gx, gy, width, height, border, depth)
         return 0 <= wx.value < width.value and 0 <= wy.value < height.value
 
-    def nudge(self, window):
-        """Move the pointer just outside the window and back, so the client sees a fresh Leave and Enter.
-
-        Returns False when the window covers the screen and there is nowhere outside it to go.
-        """
-        root, child = ctypes.c_ulong(), ctypes.c_ulong()
-        rx, ry, wx, wy = (ctypes.c_int() for _ in range(4))
-        mask = ctypes.c_uint()
-        self.x.XQueryPointer(self.display, window, root, child, rx, ry, wx, wy, mask)
-        groot, gx, gy = ctypes.c_ulong(), ctypes.c_int(), ctypes.c_int()
-        width, height, border, depth = (ctypes.c_uint() for _ in range(4))
-        self.x.XGetGeometry(self.display, window, groot, gx, gy, width, height, border, depth)
-        left, top = ctypes.c_int(), ctypes.c_int()
-        self.x.XTranslateCoordinates(self.display, window, self.root, 0, 0, left, top, child)
-        right, bottom = left.value + width.value, top.value + height.value
-        screen_w, screen_h = self.x.XDisplayWidth(self.display, 0), self.x.XDisplayHeight(self.display, 0)
-        outside = next(((x, y) for x, y in ((left.value - 2, ry.value), (right + 1, ry.value), (rx.value, top.value - 2), (rx.value, bottom + 1))
-                        if 0 <= x < screen_w and 0 <= y < screen_h), None)
-        if outside is None:
-            return False
-        self.x.XWarpPointer(self.display, 0, self.root, 0, 0, 0, 0, *outside)
-        self.x.XFlush(self.display)
-        time.sleep(0.15)
-        self.x.XWarpPointer(self.display, 0, self.root, 0, 0, 0, 0, rx.value, ry.value)
-        self.x.XFlush(self.display)
-        return True
+    def toggle_capture(self):
+        """Tap the client's escape key twice, entering and leaving capture mode to reset its input state."""
+        code = self.x.XKeysymToKeycode(self.display, self.x.XStringToKeysym(ESCAPE_KEYSYM))
+        for _ in range(2):
+            for down in (True, False):
+                self.xtst.XTestFakeKeyEvent(self.display, code, down, 0)
+                self.x.XFlush(self.display)
+                time.sleep(0.05)
+            time.sleep(0.2)
 
 def spice_sent(pid, port):
     """Bytes each of the client's SPICE channels has sent, keyed by local port, without the main channel.
@@ -150,7 +137,7 @@ def main():
     streaks = collections.Counter()
     background = {}
     stalled_since = None
-    nudged = None
+    recovered = None
     while os.path.exists(f"/proc/{args.pid}"):
         time.sleep(TICK)
         now = time.monotonic()
@@ -176,16 +163,15 @@ def main():
         stalled_since = stalled_since or now
         if now - stalled_since < STALL_SECONDS:
             continue
-        action = "restart" if nudged and now - nudged < NUDGE_SECONDS else "nudge"
+        action = "restart" if recovered and now - recovered < RECOVER_SECONDS else "toggle-capture"
         record = {"time": time.strftime("%Y-%m-%dT%H:%M:%S%z"), "pid": args.pid, "action": action, "spice_bytes_sent": current,
                   "background_channels": sorted(background), "x_idle_ms": idle}
-        if action == "nudge" and not x.nudge(window):
-            record["action"] = action = "restart"
         args.log.parent.mkdir(parents=True, exist_ok=True)
         with args.log.open("a") as f:
             f.write(json.dumps(record) + "\n")
-        if action == "nudge":
-            nudged, stalled_since = now, None
+        if action == "toggle-capture":
+            x.toggle_capture()
+            recovered, stalled_since = now, None
             continue
         subprocess.run(["notify-send", "Looking Glass", "Input stopped reaching Windows; restarting the viewer."], check=False)
         os.kill(args.pid, signal.SIGTERM)
