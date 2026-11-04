@@ -23,6 +23,7 @@ def module(name, path):
 
 host = module('host_state', 'ansible/roles/base/files/host-state.py')
 guard = module('gpu_guard', 'ansible/roles/gpu_handoff/files/gpu-guard.py')
+cli = module('host_config', 'scripts/host-config.py')
 
 
 def gpu_config():
@@ -285,6 +286,29 @@ class GPUHandoff(unittest.TestCase):
                 patch.object(guard.Path, 'read_text', return_value='nvidia-persistenced\n'):
             with self.assertRaisesRegex(RuntimeError, 'systemctl stop nvidia-persistenced'):
                 guard.require_idle(['/dev/nvidia0'])
+
+    def test_picker_leaves_session_holders_to_logout(self):
+        held = [{'pid': 10, 'name': 'Xorg', 'command': 'Xorg', 'uid': os.getuid()}]
+        with patch.object(cli.subprocess, 'run') as run:
+            self.assertEqual(cli.close_holders(held), held)
+        run.assert_not_called()
+
+    def test_picker_closes_chosen_holders(self):
+        held = [{'pid': 10, 'name': 'python3', 'command': 'python3 train.py', 'uid': os.getuid()}]
+        chose = subprocess.CompletedProcess([], 0, '10\n', '')
+        with patch.object(cli.subprocess, 'run', return_value=chose), patch.object(cli.os, 'kill') as kill, \
+                patch.object(cli, 'guard_holders', return_value=[]):
+            self.assertEqual(cli.close_holders(held), [])
+        kill.assert_called_once_with(10, cli.signal.SIGTERM)
+
+    def test_picker_cancel_returns_gpu_to_desktop(self):
+        held = [{'pid': 10, 'name': 'python3', 'command': 'python3 train.py', 'uid': os.getuid()}]
+        with patch.object(cli.subprocess, 'run', return_value=subprocess.CompletedProcess([], 1, '', '')), \
+                patch.object(cli, 'run') as attach, patch.object(cli.os, 'kill') as kill:
+            with self.assertRaisesRegex(ValueError, 'Cancelled'):
+                cli.close_holders(held)
+        kill.assert_not_called()
+        self.assertIn('attach-desktop', attach.call_args.args[0])
 
     def test_iommu_group_must_be_complete(self):
         cfg = gpu_config()

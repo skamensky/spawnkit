@@ -9,6 +9,7 @@ from pathlib import Path
 import socket
 import sys
 import shutil
+import signal
 import subprocess
 import tempfile
 import time
@@ -21,6 +22,8 @@ GPU_RESERVATION = Path("/run/spawnkit/gpu-owner.json")
 GUARD = "/usr/local/libexec/spawnkit/gpu-guard.py"
 # Seconds a deferred start waits for the desktop session to release the RTX.
 LOGOUT_TIMEOUT = 900
+# Holders only a logout releases; the picker never offers to kill them.
+SESSION_HOLDERS = {"Xorg", "gnome-shell", "Xwayland"}
 
 
 def run(args, **kwargs):
@@ -64,12 +67,55 @@ def wait_for_gpu_return(name, timeout):
     raise ValueError("Windows is off but the GPU return was not verified; run host-config gpu-status, then gpu-guard.py reclaim once the Linux drivers are bound")
 
 
-def start_windows(name, notify):
+def guard_holders():
+    return json.loads(subprocess.check_output(["sudo", "/usr/bin/python3", GUARD, "holders"], text=True))
+
+
+def close_holders(held):
+    """Let the user pick the user-owned RTX holders to close; returns the holders that remain.
+
+    Display-server and other users' holders are left to the logout handoff.
+    """
+    if any(h["name"] in SESSION_HOLDERS or h["uid"] != os.getuid() for h in held):
+        return held
+    rows = [field for h in held for field in ("TRUE", str(h["pid"]), h["name"], h["command"][:150])]
+    picked = subprocess.run(["zenity", "--list", "--checklist", "--title=Start Windows", "--width=1000", "--height=420",
+                             "--text=These programs are using the RTX. Close the checked ones to hand it to Windows "
+                             "(unsaved work in them is lost):",
+                             "--column=Close", "--column=PID", "--column=Program", "--column=Command",
+                             "--print-column=2", "--separator= ", "--ok-label=Close and start Windows", *rows],
+                            capture_output=True, text=True)
+    if picked.returncode != 0:
+        run(["sudo", "/usr/bin/python3", GUARD, "attach-desktop"])
+        raise ValueError("Cancelled; the RTX stays with Linux")
+    chosen = [int(pid) for pid in picked.stdout.split()]
+    for sig in (signal.SIGTERM, signal.SIGKILL):
+        for pid in chosen:
+            try:
+                os.kill(pid, sig)
+            except ProcessLookupError:
+                pass
+        deadline = time.monotonic() + 10
+        while (remaining := guard_holders()) and time.monotonic() < deadline:
+            time.sleep(1)
+        if not remaining or sig == signal.SIGKILL:
+            break
+        names = ", ".join(sorted({h["name"] for h in remaining}))
+        if subprocess.run(["zenity", "--question", "--title=Start Windows", "--ok-label=Force-kill",
+                           f"--text={names} did not exit. Force-kill?"]).returncode != 0:
+            break
+    return remaining
+
+
+def start_windows(name, notify, gui):
     """Detach the RTX from the desktop, then start Windows now or once its holders exit.
 
-    Returns False when the start waits for the user to log out.
+    With gui, user-owned holders can be closed from a dialog first. Returns False when
+    the start waits for the user to log out.
     """
     held = json.loads(subprocess.check_output(["sudo", "/usr/bin/python3", GUARD, "detach-desktop"], text=True))
+    if held and gui:
+        held = close_holders(held)
     if not held:
         try:
             run(["/usr/bin/virsh", "-c", "qemu:///system", "start", name], capture_output=True, text=True)
@@ -104,6 +150,7 @@ def main():
     parser.add_argument("--output", type=Path, help="Output directory for render")
     parser.add_argument("--ask-become-pass", action="store_true")
     parser.add_argument("--notify", action="store_true", help="Also display desktop notifications for command failures")
+    parser.add_argument("--gui", action="store_true", help="vm-start/vm-view: offer to close programs holding the RTX")
     parser.add_argument("--timeout", type=int, default=300, help="vm-stop: seconds to wait for guest shutdown and GPU return")
     parser.add_argument("--command", help="vm-exec: PowerShell to run as SYSTEM; read from stdin when omitted")
     parser.add_argument("--windows-iso", type=Path)
@@ -164,7 +211,7 @@ def main():
                 info = subprocess.check_output(['/usr/bin/virsh', '-c', 'qemu:///system', 'net-info', network], text=True, env=os.environ | {'LC_ALL': 'C'})
                 if not any(line.split(':', 1)[0].strip() == 'Active' and line.split(':', 1)[1].strip() == 'yes' for line in info.splitlines()):
                     run(['/usr/bin/virsh', '-c', 'qemu:///system', 'net-start', network])
-                if not start_windows(name, args.notify):
+                if not start_windows(name, args.notify, args.gui):
                     return
             elif state != "running":
                 raise ValueError(f"VM is {state}; inspect it explicitly rather than forcing a reset")

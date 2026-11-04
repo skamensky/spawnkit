@@ -106,11 +106,14 @@ def desktop_seat(cfg, attached, sysfs=SYSFS, rule=SEAT_RULE):
 def holders(nodes):
     descriptions = []
     for pid in users(nodes):
+        proc = Path(f'/proc/{pid}')
         try:
-            name = Path(f'/proc/{pid}/comm').read_text().strip()
+            name = (proc / 'comm').read_text().strip()
+            command = (proc / 'cmdline').read_bytes().replace(b'\0', b' ').decode(errors='replace').strip()
+            uid = proc.stat().st_uid
         except OSError:
-            name = 'exited'
-        descriptions.append({'pid': pid, 'name': name})
+            name, command, uid = 'exited', '', -1
+        descriptions.append({'pid': pid, 'name': name, 'command': command, 'uid': uid})
     return descriptions
 
 
@@ -206,6 +209,9 @@ def main():
         return
     if sys.argv[1:] == ['detach-desktop']:
         desktop_seat(cfg, False)
+        print(json.dumps(holders(inspect_devices(cfg))))
+        return
+    if sys.argv[1:] == ['holders']:
         print(json.dumps(holders(inspect_devices(cfg))))
         return
     if sys.argv[1:] == ['attach-desktop']:

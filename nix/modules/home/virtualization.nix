@@ -36,7 +36,7 @@
     xdg.desktopEntries = {
       spawnkit-windows = {
         name = "Windows (Looking Glass)";
-        exec = "host-config vm-view --notify";
+        exec = "host-config vm-view --notify --gui";
         icon = "computer";
         terminal = false;
         categories = [ "System" ];

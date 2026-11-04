@@ -141,7 +141,11 @@ may need shutdown from inside Windows.
 1. The launcher starts the dedicated NAT network if needed and detaches the RTX
    from the desktop seat (`gpu-guard.py detach-desktop`, a runtime udev rule under
    `/run`). If nothing still holds the RTX it asks libvirt to start the domain.
-   Otherwise it schedules the root unit `spawnkit-windows-handoff`, which waits up
+   With `--gui` (the desktop entry) and only ordinary programs of yours holding
+   the RTX, a checklist names them (`gpu-guard.py holders`); the chosen ones get
+   SIGTERM, then a confirmed SIGKILL after 10 s, so no logout is needed. Cancel
+   returns the RTX to the desktop. If the desktop itself or another user's
+   process holds it, the logout path below applies. Otherwise it schedules the root unit `spawnkit-windows-handoff`, which waits up
    to 15 minutes for the holders to exit (normally: you log out, which ends Xorg
    and the session's apps), then starts Windows; log back in and open Looking
    Glass. A timeout or failed start returns the RTX to the desktop seat. It never
