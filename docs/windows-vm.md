@@ -89,29 +89,68 @@ Definition never enables autostart. A failed first definition may leave a new
 empty disk; inspect it and the libvirt error before deliberately removing that
 empty artifact and retrying. Never delete an existing Windows disk to resolve it.
 
-Use virt-manager's SPICE VGA console for installation. If Windows cannot see its
-VirtIO disk/network, load the matching Windows driver from the VirtIO ISO. Install
-guest tools, NVIDIA's Windows driver and the Looking Glass Windows host component.
-Use the release matching the Nix client's startup/help banner (currently **B7**);
-host and client versions must match. The guest component captures Windows, while
-the Linux client displays it. Windows must have an active display on the RTX: an
-attached display/dummy adapter on an RTX-wired output, or a tested virtual display
-driver, is necessary when the physical laptop panel is wired only to Intel. Looking
-Glass's own indirect display driver removes the dummy plug but ships in builds
-newer than stable B7, so adopting it also means packaging a matching Linux client;
-treat that as a separate, measured change. The SPICE VGA console alone does not
-establish a captured NVIDIA desktop.
+### Unattended installation
 
-The laptop uses the signed Virtual Display Driver
-(`VirtualDrivers/Virtual-Display-Driver`, tested 25.7.23, hardware ID `Root\MttVDD`).
-Its `C:\VirtualDisplayDriver\vdd_settings.xml` sets `<gpu><friendlyname>` to the
-RTX adapter name and lists only the panel mode (2560x1600@60), so that mode is used.
-Create the root device node, trust the catalog signer in the machine
-TrustedPublisher store and run `pnputil /add-driver MttVDD.inf /install`; trusting
-a publisher is a security change the owner performs. After the PCI layout
-changes (for example removing VGA), Windows re-enumerates the RTX and needs a
+`vm-install` creates and configures a new VM with no input in Windows:
+
+```bash
+host-config vm-install --host laptop-ubuntu --ask-become-pass --gui \
+  --windows-iso /var/lib/libvirt/images/windows.iso \
+  --virtio-iso /var/lib/libvirt/images/virtio-win.iso
+```
+
+1. `guest-media` renders an installation CD (placed beside the Windows ISO with
+   sudo): `autounattend.xml` wipes disk 0, installs `windows_edition` with the
+   generic install key, loads the VirtIO storage/network drivers, skips the online
+   account requirement, names the computer `windows_computer_name`, sets
+   `windows_timezone`, keeps Windows Update from delivering drivers, and creates the
+   local administrator `user` with **no password**, signed in automatically. The
+   VM sits behind the Linux session lock, so Windows has no password and never locks.
+2. The VM is defined with that third CD and started; Enter answers the CD loader's
+   key prompt.
+3. At first sign-in the VirtIO guest tools (QEMU guest agent, SPICE agent) install
+   and `spawnkit\bootstrap.ps1` installs Microsoft's pinned Win32-OpenSSH server
+   (10.4.0.0, SHA-256-checked; Windows Update's OpenSSH capability took hours on a
+   fresh install busy with its first cumulative update) with PowerShell as its shell,
+   the `windows_authorized_key` in `administrators_authorized_keys`, and firewall
+   rule `Spawnkit-SSH` limited to the libvirt network in place of the installer's
+   own rule.
+4. Once SSH answers, `guest-apply` runs (below), then the unattended CD is ejected
+   and deleted so it can never wipe the disk again.
+
+It refuses an existing domain and starts only when nothing holds the RTX (`--gui`
+offers to close holders). Activation follows the machine's license, not the install
+key. For a Windows installed by other means, `guest-bootstrap` runs the same
+bootstrap through the guest agent; `guest-media --output <iso>` renders the CD alone.
+
+### Guest software
+
+`guest-plan` (check mode with diff) and `guest-apply` configure Windows with the
+`windows_guest` Ansible role over SSH, pinning the guest's ed25519 host key (read
+through the guest agent) for that run. The role downloads pinned, SHA-256-verified
+installers to `C:\ProgramData\spawnkit\cache` and installs the VirtIO guest tools,
+WinFsp and the virtiofs service (when `windows_share` is set), Tailscale, the
+Virtual Display Driver, the Looking Glass host and NVIDIA's display driver 621.01
+(driver package only, from `nvlti.inf`; when the RTX already runs another version
+it stops and points to the procedure below). It sets `windows_timezone`, keeps
+Windows Update from replacing drivers (`ExcludeWUDriversInQualityUpdate`), because
+the driver it delivered (616.56) bug-checks the passed-through RTX, configures automatic sign-in,
+hides the lock screen and disables console lock, display blanking and AC sleep:
+the Linux session lock protects the VM. Every task is idempotent; a converged guest
+reports `changed=0`. Tailscale login and the Windows license remain manual.
+
+Looking Glass host and Nix client versions must match (currently **B7**). Windows
+needs an active display on the RTX; the laptop's panel is wired only to Intel, so
+the role installs the signed Virtual Display Driver
+(`VirtualDrivers/Virtual-Display-Driver` 25.7.23, hardware ID `Root\MttVDD`):
+`windows_display_gpu` selects the adapter by name and `windows_display_mode` is the
+only listed mode. Driver installation trusts the catalog signer in the machine
+TrustedPublisher store. Looking Glass's own indirect display driver ships only in
+builds newer than B7 and would also need a matching Linux client. After the PCI
+layout changes (for example removing VGA), Windows re-enumerates the RTX and needs a
 minute to reinstall it; restart the virtual display device and the Looking Glass
-service if capture then reports no output device.
+service if capture then reports no output device. The SPICE VGA console alone does
+not establish a captured NVIDIA desktop.
 
 The domain presents one socket of two-thread cores (`windows_vcpus` must be
 even) because Windows Home uses only one CPU socket.
@@ -204,14 +243,14 @@ and recovery; routine automation can use SSH.
   reserves it outside the dynamic DHCP range. Changing an existing reservation is
   applied live with `virsh net-update`. Ansible adds `Host <windows_name>` under
   `/etc/ssh/ssh_config.d/`, so `ssh windows` reaches the guest's OpenSSH server
-  (Windows optional feature `OpenSSH.Server`, PowerShell default shell, the Linux
+  (Win32-OpenSSH from the bootstrap, PowerShell default shell, the Linux
   public key in `C:\ProgramData\ssh\administrators_authorized_keys`). From
   Windows, reach Linux through its declared SSH listener.
 - **Shared folder:** `windows_share` exports a host directory over virtiofs
   (shared memfd memory backing, tag `spawnkit-share`); Ansible creates it for the
-  user. In Windows, install WinFsp, set DWORDs `OverrideUid`/`OverrideGid` under
+  user. `guest-apply` sets `OverrideUid`/`OverrideGid` under
   `HKLM\SOFTWARE\VirtIO-FS` to the Linux user's IDs so created files belong to that
-  user, and set the `VirtioFsSvc` service to automatic. It appears as drive `Z:`.
+  user. It appears as drive `Z:`.
 - **NVIDIA driver updates:** with 616.56 the passed-through RTX bug-checked
   (0x7E in `nvlddmkm.sys`) whenever the driver unloaded: on device disable, guest
   reboot, and inside NVIDIA's installer (exit 9). Each crash destroyed the domain
@@ -222,8 +261,8 @@ and recovery; routine automation can use SSH.
   to 4, start the guest again, then `pnputil /add-driver ... /install`; the INF
   restores `Start` to 3. 621.01 (32.0.16.2101) shut down cleanly. Afterwards
   restart the virtual display device and the Looking Glass host service.
-- **Clipboard:** the SPICE agent (`spice-vdagent-x64` MSI from spice-space.org)
-  carries clipboard through Looking Glass's SPICE connection.
+- **Clipboard:** the SPICE agent from the VirtIO guest tools carries clipboard
+  through Looking Glass's SPICE connection.
 
 ## Laptop-specific risks (unverified on the Legion 5 16IRX9)
 

@@ -20,6 +20,14 @@ windows_guest_pins:
     url: https://github.com/VirtualDrivers/Virtual-Display-Driver/releases/download/25.7.23/VirtualDisplayDriver-x86.Driver.Only.zip
     file: VirtualDisplayDriver-25.7.23.zip
     sha256: e24210692b442b39af763536330ce78b423f19342b7a7792c26de3944e418b3a
+  # Driver only (no NVIDIA app). 616.56 bug-checks the passed-through RTX on unload, so Windows
+  # Update may not deliver display drivers; inf names the package's INF for the GPU's SUBSYS.
+  nvidia:
+    url: https://us.download.nvidia.com/Windows/621.01/621.01-notebook-win10-win11-64bit-international-dch-whql.exe
+    file: nvidia-621.01.exe
+    sha256: 9624c64705d8c6b0fb034c69faf176f2c85c804c434e478b15e6ca4e00965211
+    version: 32.0.16.2101
+    inf: Display.Driver\nvlti.inf
   # Tailscale updates itself after the first installation.
   tailscale:
     url: https://pkgs.tailscale.com/stable/tailscale-setup-1.104.5-amd64.msi

@@ -36,11 +36,13 @@ windows_disk: /var/lib/libvirt/images/spawnkit-windows.qcow2
 windows_iso: ""
 virtio_iso: ""
 windows_video: vga
-# Unattended installation medium from `host-config guest-media`, attached as a third CD.
+# Unattended installation CD (third drive). vm-install sets it for the installation only.
 windows_unattend_iso: ""
 # Guest identity for guest-media and guest-apply. The local account is cfg.user.
 windows_edition: Windows 11 Home
 windows_computer_name: spawnkit-win
+# Windows time zone ID (tzutil /l).
+windows_timezone: UTC
 # Public key Linux uses for SSH (and Ansible) into the guest's administrator account.
 windows_authorized_key: ""
 # Virtual Display Driver monitor: the GPU it renders on (empty: the driver's default) and mode.

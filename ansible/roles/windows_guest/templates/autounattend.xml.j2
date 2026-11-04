@@ -54,6 +54,8 @@
       <RunSynchronous>
         <!-- Lets the out-of-box experience finish without a network or Microsoft account. -->
         <RunSynchronousCommand wcm:action="add"><Order>1</Order><Path>reg add HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\OOBE /v BypassNRO /t REG_DWORD /d 1 /f</Path></RunSynchronousCommand>
+        <!-- Windows Update's NVIDIA driver crashes the passed-through GPU; guest-apply installs the pinned one. -->
+        <RunSynchronousCommand wcm:action="add"><Order>2</Order><Path>reg add HKLM\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate /v ExcludeWUDriversInQualityUpdate /t REG_DWORD /d 1 /f</Path></RunSynchronousCommand>
       </RunSynchronous>
     </component>
   </settings>
@@ -62,6 +64,7 @@
       <InputLocale>en-US</InputLocale><SystemLocale>en-US</SystemLocale><UILanguage>en-US</UILanguage><UserLocale>en-US</UserLocale>
     </component>
     <component name="Microsoft-Windows-Shell-Setup" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
+      <TimeZone>{{ cfg.windows_timezone }}</TimeZone>
       <OOBE>
         <HideEULAPage>true</HideEULAPage>
         <HideOEMRegistrationScreen>true</HideOEMRegistrationScreen>

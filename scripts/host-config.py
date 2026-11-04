@@ -85,6 +85,96 @@ def guest_known_hosts(cfg):
     return f"{cfg['windows_address']} {fields[0]} {fields[1]}\n"
 
 
+def define_vm(repo, data, ask_become_pass):
+    command = ["ansible-playbook", "-i", "INVENTORY", str(repo / "ansible/vm.yml")]
+    if ask_become_pass:
+        command.append("--ask-become-pass")
+    playbook(repo, data, command)
+
+
+def playbook(repo, inventory_data, command):
+    """Run ansible-playbook with the inventory written to the INVENTORY placeholder."""
+    with tempfile.TemporaryDirectory(prefix="spawnkit-inventory-") as temp:
+        path = Path(temp) / "inventory.json"
+        path.write_text(json.dumps(inventory_data))
+        run([str(path) if part == "INVENTORY" else part for part in command],
+            env=os.environ | {"ANSIBLE_CONFIG": str(repo / "ansible/ansible.cfg")}, cwd=repo / "ansible")
+
+
+def configure_guest(repo, cfg, check):
+    if not cfg["windows_address"]:
+        raise ValueError("Set windows_mac and windows_address so Ansible can reach the guest")
+    owner = pwd.getpwnam(cfg["user"])
+    with tempfile.TemporaryDirectory(prefix="spawnkit-guest-") as temp:
+        known_hosts = Path(temp) / "known_hosts"
+        known_hosts.write_text(guest_known_hosts(cfg))
+        command = ["ansible-playbook", "-i", "INVENTORY", str(repo / "ansible/windows-guest.yml")]
+        if check:
+            command += ["--check", "--diff"]
+        playbook(repo, guest_inventory(cfg, known_hosts, (owner.pw_uid, owner.pw_gid)), command)
+
+
+def virsh(*args, **kwargs):
+    return subprocess.run(["/usr/bin/virsh", "-c", "qemu:///system", *args], check=True, text=True,
+                          capture_output=True, env=os.environ | {"LC_ALL": "C"}, **kwargs).stdout.strip()
+
+
+def install_windows(repo, profile, cfg, revision, args):
+    """Install Windows unattended into a new VM and configure it, with no input on the guest side.
+
+    The installation CD's loader waits for a key press, so Enter is sent once the VM runs.
+    The unattended medium is ejected afterwards; the next vm-define no longer attaches it.
+    """
+    name = cfg["windows_name"]
+    if not cfg["windows_vm"]:
+        raise ValueError("Enable the Windows VM and record native GPU facts in the host configuration first")
+    if not cfg["windows_iso"] or not cfg["virtio_iso"]:
+        raise ValueError("vm-install requires --windows-iso and --virtio-iso")
+    if subprocess.run(["/usr/bin/virsh", "-c", "qemu:///system", "dominfo", name], capture_output=True).returncode == 0:
+        raise ValueError(f"Domain {name} already exists; vm-install only creates a new VM")
+    # Keys go to the CD prompt from this process, so it cannot wait out a logout-scheduled start.
+    held = guard_holders()
+    if held and args.gui:
+        held = close_holders(held)
+    if held:
+        raise ValueError("The RTX is open by " + ", ".join(sorted({h["name"] for h in held})) + "; close them (gpu-release) and rerun vm-install")
+    authorized_key(cfg)
+    media = Path(cfg["windows_iso"]).parent / f"{name}-unattend.iso"
+    cfg = cfg | {"windows_unattend_iso": str(media)}
+    with tempfile.TemporaryDirectory(prefix="spawnkit-unattend-iso-") as temp:
+        built = Path(temp) / "unattend.iso"
+        guest_media(repo, cfg, built)
+        run(["sudo", "install", "-m", "0644", str(built), str(media)])
+    define_vm(repo, inventory(repo, profile, cfg, revision), args.ask_become_pass)
+    if not start_windows(name, args.notify, gui=False):
+        raise ValueError("A program opened the RTX during definition; close it and run vm-start, then press Enter in vm-console")
+    for _ in range(30):
+        virsh("send-key", name, "KEY_ENTER")
+        time.sleep(1)
+    print("Installing Windows; waiting for its SSH server (usually 15-30 minutes)")
+    wait_until(lambda: ssh_open(cfg["windows_address"]), 5400, "the guest's SSH server")
+    configure_guest(repo, cfg, check=False)
+    virsh("change-media", name, "sdc", "--eject", "--live", "--config")
+    run(["sudo", "rm", "-f", str(media)])
+    print("Windows is installed and configured. Clear windows_iso/virtio_iso and rerun vm-define when finished.")
+
+
+def wait_until(ready, timeout, what):
+    deadline = time.monotonic() + timeout
+    while not ready():
+        if time.monotonic() > deadline:
+            raise ValueError(f"Timed out waiting for {what}")
+        time.sleep(10)
+
+
+def ssh_open(address):
+    try:
+        with socket.create_connection((address, 22), timeout=3):
+            return True
+    except OSError:
+        return False
+
+
 def native_only():
     if "microsoft" in Path("/proc/sys/kernel/osrelease").read_text().lower():
         raise ValueError("Native host/VM operations are unavailable under WSL; use check/render for offline validation")
@@ -192,7 +282,7 @@ def start_windows(name, notify, gui):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=["select", "inventory", "check", "render", "plan", "apply", "facts", "vm-define", "vm-start", "vm-stop", "vm-view", "vm-console", "vm-exec", "gpu-status", "gpu-holders", "gpu-release", "guest-media", "guest-bootstrap", "guest-plan", "guest-apply"])
+    parser.add_argument("action", choices=["select", "inventory", "check", "render", "plan", "apply", "facts", "vm-define", "vm-start", "vm-stop", "vm-view", "vm-console", "vm-exec", "gpu-status", "gpu-holders", "gpu-release", "vm-install", "guest-media", "guest-bootstrap", "guest-plan", "guest-apply"])
     parser.add_argument("--repo", type=Path, default=selector().default_repo(), help="Defaults to the enclosing checkout")
     parser.add_argument("--host", help="Explicit profile; normal selection shares the Home Manager registry")
     parser.add_argument("--hostname", default=socket.gethostname())
@@ -201,7 +291,7 @@ def main():
     parser.add_argument("--output", type=Path, help="Output directory for render; ISO file for guest-media")
     parser.add_argument("--ask-become-pass", action="store_true")
     parser.add_argument("--notify", action="store_true", help="Also display desktop notifications for command failures")
-    parser.add_argument("--gui", action="store_true", help="vm-start/vm-view: offer to close programs holding the RTX")
+    parser.add_argument("--gui", action="store_true", help="vm-start/vm-view/vm-install: offer to close programs holding the RTX")
     parser.add_argument("--pid", type=int, action="append", default=[], help="gpu-release: holder to close (repeatable)")
     parser.add_argument("--force", action="store_true", help="gpu-release: SIGKILL holders still running after SIGTERM")
     parser.add_argument("--timeout", type=int, default=300, help="vm-stop: seconds to wait for guest shutdown and GPU return")
@@ -250,18 +340,10 @@ def main():
             raise SystemExit(guest_bootstrap(repo, cfg))
         elif args.action in ("guest-plan", "guest-apply"):
             native_only()
-            if not cfg["windows_address"]:
-                raise ValueError("Set windows_mac and windows_address so Ansible can reach the guest")
-            owner = pwd.getpwnam(cfg["user"])
-            with tempfile.TemporaryDirectory(prefix="spawnkit-guest-") as temp:
-                known_hosts = Path(temp) / "known_hosts"
-                known_hosts.write_text(guest_known_hosts(cfg))
-                path = Path(temp) / "inventory.json"
-                path.write_text(json.dumps(guest_inventory(cfg, known_hosts, (owner.pw_uid, owner.pw_gid))))
-                command = ["ansible-playbook", "-i", str(path), str(repo / "ansible/windows-guest.yml")]
-                if args.action == "guest-plan":
-                    command += ["--check", "--diff"]
-                run(command, env=os.environ | {"ANSIBLE_CONFIG": str(repo / "ansible/ansible.cfg")}, cwd=repo / "ansible")
+            configure_guest(repo, cfg, check=args.action == "guest-plan")
+        elif args.action == "vm-install":
+            native_only()
+            install_windows(repo, profile, cfg, revision, args)
         elif args.action == "gpu-holders":
             print(json.dumps(guard_holders(), indent=2))
         elif args.action == "gpu-release":
@@ -311,19 +393,15 @@ def main():
             if args.action == "vm-define" and not cfg["windows_vm"]:
                 raise ValueError("Enable the Windows VM and record native GPU facts in the host configuration first")
             playbooks = ["site.yml", "vm.yml", "windows-guest.yml"] if args.action == "check" else ["vm.yml" if args.action == "vm-define" else "site.yml"]
-            env = os.environ | {"ANSIBLE_CONFIG": str(repo / "ansible/ansible.cfg")}
-            with tempfile.TemporaryDirectory(prefix="spawnkit-inventory-") as temp:
-                path = Path(temp) / "inventory.json"
-                path.write_text(json.dumps(data))
-                for playbook in playbooks:
-                    command = ["ansible-playbook", "-i", str(path), str(repo / "ansible" / playbook)]
-                    if args.action == "check":
-                        command.append("--syntax-check")
-                    elif args.action == "plan":
-                        command += ["--check", "--diff"]
-                    if args.ask_become_pass:
-                        command.append("--ask-become-pass")
-                    run(command, env=env, cwd=repo / "ansible")
+            for name in playbooks:
+                command = ["ansible-playbook", "-i", "INVENTORY", str(repo / "ansible" / name)]
+                if args.action == "check":
+                    command.append("--syntax-check")
+                elif args.action == "plan":
+                    command += ["--check", "--diff"]
+                if args.ask_become_pass:
+                    command.append("--ask-become-pass")
+                playbook(repo, data, command)
     except (ValueError, OSError, subprocess.CalledProcessError) as error:
         details = error.stderr.strip() if isinstance(error, subprocess.CalledProcessError) and error.stderr else str(error)
         if args.notify and shutil.which('notify-send'):

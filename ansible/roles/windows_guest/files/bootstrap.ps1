@@ -12,8 +12,16 @@ if (-not $AuthorizedKey) {
 New-Item -ItemType Directory "$env:ProgramData\spawnkit" -Force | Out-Null
 Start-Transcript -Append "$env:ProgramData\spawnkit\bootstrap.log" | Out-Null
 try {
+    # Microsoft's Win32-OpenSSH release: Windows Update's OpenSSH capability can take hours on a
+    # fresh installation that is downloading its first cumulative update.
     if (-not (Get-Service sshd -ErrorAction SilentlyContinue)) {
-        Get-WindowsCapability -Online -Name 'OpenSSH.Server*' | Where-Object State -ne Installed | Add-WindowsCapability -Online | Out-Null
+        $installer = "$env:ProgramData\spawnkit\OpenSSH-Win64-v10.4.0.0.msi"
+        curl.exe -sSfL -o $installer https://github.com/PowerShell/Win32-OpenSSH/releases/download/10.4.0.0p1-Preview/OpenSSH-Win64-v10.4.0.0.msi
+        if ((Get-FileHash $installer).Hash -ne '788D8643464A01EB63640A2FD746F9ED23D106B5A901A35F88DC8CD40E446AC9') { throw "$installer does not match its pinned hash" }
+        $install = Start-Process msiexec.exe -ArgumentList '/i', $installer, '/quiet', '/norestart', 'ADDLOCAL=Server' -Wait -PassThru
+        if ($install.ExitCode -notin 0, 3010) { throw "OpenSSH installation exited $($install.ExitCode)" }
+        # The installer admits any Private-network address; Spawnkit-SSH below admits only the VM network.
+        Get-NetFirewallRule -DisplayName 'OpenSSH SSH Server Preview (sshd)' -ErrorAction SilentlyContinue | Remove-NetFirewallRule
     }
     New-ItemProperty HKLM:\SOFTWARE\OpenSSH DefaultShell -PropertyType String -Force `
         -Value "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" | Out-Null

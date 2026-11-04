@@ -42,6 +42,37 @@
   ansible.windows.win_package:
     path: '{{ windows_guest_cache }}\{{ windows_guest_pins.winfsp.file }}'
     arguments: /norestart
+- name: Keep Windows Update from replacing pinned drivers
+  ansible.windows.win_regedit:
+    path: HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate
+    name: ExcludeWUDriversInQualityUpdate
+    data: 1
+    type: dword
+- name: Install the pinned NVIDIA driver on the passed-through GPU
+  ansible.windows.win_powershell:
+    parameters:
+      Package: '{{ windows_guest_cache }}\{{ windows_guest_pins.nvidia.file }}'
+      Inf: '{{ windows_guest_pins.nvidia.inf }}'
+      Version: '{{ windows_guest_pins.nvidia.version }}'
+    script: |
+      [CmdletBinding(SupportsShouldProcess)]
+      param([string]$Package, [string]$Inf, [string]$Version)
+      $ErrorActionPreference = 'Stop'
+      $WhatIfPreference = $false
+      $Ansible.Changed = $false
+      $gpu = Get-PnpDevice -Class Display -PresentOnly | Where-Object InstanceId -like 'PCI\VEN_10DE*'
+      if (-not $gpu) { return }
+      $installed = (Get-CimInstance Win32_PnPSignedDriver | Where-Object DeviceID -eq $gpu.InstanceId).DriverVersion
+      if ($installed -eq $Version) { return }
+      # A loaded older driver must not unload in place; see docs/windows-vm.md "NVIDIA driver updates".
+      if ($installed) { throw "RTX runs NVIDIA $installed; replace it with $Version by the staged-INF procedure" }
+      $Ansible.Changed = $true
+      if ($Ansible.CheckMode) { return }
+      $unpacked = $Package -replace '\.exe$', ''
+      if (-not (Test-Path "$unpacked\$Inf")) { tar.exe -xf $Package -C (New-Item -ItemType Directory -Force $unpacked).FullName }
+      pnputil /add-driver "$unpacked\$Inf" /install | Out-Null
+      if ($LASTEXITCODE -notin 0, 3010) { throw "pnputil exited $LASTEXITCODE" }
+  notify: Restart Looking Glass
 - name: Mount the host share with the host user's ownership
   ansible.windows.win_regedit:
     path: HKLM:\SOFTWARE\VirtIO-FS
@@ -147,6 +178,18 @@
     start_mode: auto
     state: started
   loop: [sshd, QEMU-GA, spice-agent, Looking Glass (host)]
+
+- name: Set the time zone
+  ansible.windows.win_powershell:
+    parameters:
+      Zone: '{{ cfg.windows_timezone }}'
+    script: |
+      [CmdletBinding(SupportsShouldProcess)]
+      param([string]$Zone)
+      $ErrorActionPreference = 'Stop'
+      $WhatIfPreference = $false
+      $Ansible.Changed = (Get-TimeZone).Id -ne (Get-TimeZone -Id $Zone).Id
+      if ($Ansible.Changed -and -not $Ansible.CheckMode) { Set-TimeZone -Id $Zone }
 
 # The Linux session lock protects the VM, so Windows signs in by itself and never locks.
 - name: Sign in automatically
