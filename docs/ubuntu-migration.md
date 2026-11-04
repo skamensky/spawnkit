@@ -527,8 +527,10 @@ table to audit old files and migration conflicts; make persistent changes in
 `~/.config/obs-studio` are untouched. It encodes through `/run/opengl-driver`:
 its log shows FFmpeg VAAPI H.264/HEVC and QuickSync on the Intel iGPU. Remaining:
 
-- [ ] Confirm NVENC with the Windows VM shut down (the RTX is on `vfio-pci` while
-  it runs, so OBS logs `NVENC not supported`).
+- [x] NVENC with the Windows VM shut down: `obs-nvenc-test` reports NVENC 13.0 on the
+  Ada RTX (2026-11-04). nixpkgs leaves the driver path off that probe, so
+  `desktop.nix` adds it, and OBS builds from source. While the VM runs, the RTX is
+  on `vfio-pci` and OBS logs `NVENC not supported`.
 - [ ] After `do-release-upgrade`: `sudo apt purge obs-studio` and delete the
   obsproject PPA source, so only the Nix OBS remains (the app menu shows both
   until then) and the next upgrade has no foreign package.

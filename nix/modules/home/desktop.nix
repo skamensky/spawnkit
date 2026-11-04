@@ -129,6 +129,13 @@ in
     # Encodes through /run/opengl-driver: VA-API on the Intel iGPU, NVENC on the RTX
     # whenever the Windows VM is not holding it.
     programs.obs-studio.enable = true;
+    # nixpkgs adds the driver path only to OBS's libraries; its NVENC probe in bin/ (behind the
+    # Qt wrapper) needs it too.
+    programs.obs-studio.package = pkgs.obs-studio.overrideAttrs (old: {
+      postFixup = old.postFixup + ''
+        addDriverRunpath $out/bin/.obs-nvenc-test-wrapped
+      '';
+    });
     # Flameshot replaces GNOME's screenshot tool on Print (X11 session).
     services.flameshot.enable = true;
     dconf.settings."org/gnome/shell/keybindings".show-screenshot-ui = [ ];
