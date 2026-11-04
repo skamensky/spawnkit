@@ -337,3 +337,30 @@
     name: MouseSensitivity
     data: "{{ windows_guest_mouse_sensitivity | string }}"
     type: string
+# Applies to the signed-in user's profile; Win+Space or Alt+Shift switches the keyboard.
+- name: Set the input languages
+  ansible.windows.win_powershell:
+    parameters:
+      Languages: "{{ windows_guest_input_languages | map(attribute='tag') }}"
+      Keyboards: "{{ windows_guest_input_languages | map(attribute='keyboard') }}"
+    script: |
+      [CmdletBinding(SupportsShouldProcess)]
+      param([string[]]$Languages, [string[]]$Keyboards)
+      $ErrorActionPreference = 'Stop'
+      $WhatIfPreference = $false
+      # The cmdlet emits the list as one object; a variable holding it enumerates its languages.
+      $installed = Get-WinUserLanguageList
+      $current = @(foreach ($language in $installed) { "$($language.LanguageTag)=$($language.InputMethodTips -join ',')" })
+      $wanted = @(for ($i = 0; $i -lt $Languages.Count; $i++) { "$($Languages[$i])=$($Keyboards[$i])" })
+      $Ansible.Changed = [bool](Compare-Object $current $wanted -SyncWindow 0)
+      if ($Ansible.Changed -and -not $Ansible.CheckMode) {
+          $list = New-WinUserLanguageList $Languages[0]
+          $list.Clear()
+          for ($i = 0; $i -lt $Languages.Count; $i++) {
+              $language = (New-WinUserLanguageList $Languages[$i])[0]
+              $language.InputMethodTips.Clear()
+              $language.InputMethodTips.Add($Keyboards[$i])
+              $list.Add($language)
+          }
+          Set-WinUserLanguageList $list -Force
+      }

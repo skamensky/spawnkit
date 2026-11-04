@@ -143,6 +143,8 @@ Windows Update from replacing drivers (`ExcludeWUDriversInQualityUpdate` and
 because the driver it delivered (616.56) bug-checks the passed-through RTX, and
 replacing it while loaded crashed a fresh install, removes any other NVIDIA display
 package from the driver store, configures automatic sign-in,
+sets the input languages to `windows_guest_input_languages` (English US
+then Hebrew, switched by Win+Space or Alt+Shift; display language and format unchanged),
 hides the lock screen and disables console lock, display blanking and AC sleep:
 the Linux session lock protects the VM. Every task is idempotent; a converged guest
 reports `changed=0`. Tailscale login and the Windows license remain manual.

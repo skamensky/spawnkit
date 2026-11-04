@@ -4,6 +4,13 @@
 windows_guest_cache: C:\ProgramData\spawnkit\cache
 # Windows pointer speed, 1-20 (Windows' default is 10); takes effect at the next sign-in.
 windows_guest_mouse_sensitivity: 6
+# Input languages in order (the first is the default) with one keyboard each, like Ubuntu's
+# us+il; the display language and regional format are unaffected. Tags are in the form
+# Windows stores (it shortens he-IL to he); keyboards are LANGID:KLID input method tips,
+# 0000040D being the Hebrew layout that matches xkb's il.
+windows_guest_input_languages:
+  - {tag: en-US, keyboard: '0409:00000409'}
+  - {tag: he, keyboard: '040D:0000040D'}
 # Where Ubuntu's CopyQ publishes its tabs (personal.desktop.copyqShare, under the share's Z:).
 windows_guest_copyq_share: Z:\.copyq
 windows_guest_pins:
