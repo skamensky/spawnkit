@@ -17,6 +17,7 @@
     ./repositories.nix
     ./assistants.nix
     ./desktop.nix
+    ./plasma.nix
   ];
   options.personal = {
     profile = lib.mkOption { type = lib.types.str; };

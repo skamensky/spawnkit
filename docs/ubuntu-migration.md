@@ -561,7 +561,7 @@ What it does:
 
 ---
 
-### D7. TODO: KDE Plasma 6 trial (after the 26.04 upgrade)
+### D7. IN PROGRESS: KDE Plasma 6 trial (after the 26.04 upgrade)
 
 Decided 2026-11-04. GNOME looks wrong to Shmuel; he wants a modern, sleek, fast
 desktop with one taskbar at the bottom and nothing at the top, good fractional
@@ -573,32 +573,37 @@ there is a workaround on every desktop. Plasma 5.27 (all that 24.04 ships) was
 rejected in favor of upgrading Ubuntu: 26.04 (`resolute`) ships Plasma 6.6.6.
 GNOME stays installed, so the session is chosen at login and the trial is reversible.
 
-- **Packages (Ansible, laptop profile):** `kde-plasma-desktop` and `kde-spectacle`,
-  not `kubuntu-desktop`, which swaps the display manager to SDDM and pulls in the
-  whole Kubuntu app set. Keep GDM.
+- **Packages (done 2026-11-04):** `plasma: true` in the laptop profile installs
+  `kde-plasma-desktop`, `kde-spectacle` and `qt6-style-kvantum` without Recommends,
+  which would pull in SDDM and take over from GDM. `kubuntu-desktop` is avoided for
+  the same reason and for its whole Kubuntu app set. GDM stays the display manager.
 - **Session:** the laptop already runs `desktop_session: wayland` (GNOME 50 has
   no Xorg session), so Plasma's Wayland session appears in GDM as soon as it is
   installed.
-- **GPU handoff:** the panel (eDP) and the HDMI/DP connectors seen so far are on
-  the Intel iGPU, `card1` at `pci-0000:00:02.0`; that was checked while vfio held
-  the RTX, so first confirm no external port is wired to the RTX. KWin opens every DRM device it finds, which would
-  keep the RTX busy and break the VM's GPU handoff, so restrict it with
-  `KWIN_DRM_DEVICES` from a Plasma env script (`~/.config/plasma-workspace/env/`).
-  The variable is colon-separated, so resolve the by-path link to `/dev/dri/cardN`
-  in the script instead of writing the path (it contains colons).
+- **GPU handoff:** measured 2026-11-04 with the NVIDIA driver bound: the RTX has
+  its own connectors (`card2`: DP-3, DP-4, HDMI-A-5, eDP-2), so some external
+  port may be wired to it. Restricting KWin with `KWIN_DRM_DEVICES` would leave
+  such a port dark, so Plasma is not restricted. Like GNOME on Wayland (where
+  `gnome-shell` and `Xwayland` hold the RTX), it releases the RTX through the
+  launcher's logout handoff: the RTX leaves the desktop seat and Windows starts
+  once you log out. Revisit `KWIN_DRM_DEVICES` only if no external port uses the RTX.
 - **Screenshots:** Spectacle on Print in Plasma, with the same
   workflow: drag a region, nothing happens until Enter, then copy to the clipboard
   and close; no save dialog. GNOME keeps its own screenshot UI on Print.
-- **Declarative config:** add the `plasma-manager` flake input (nix-community,
-  branch `trunk`, Plasma 6) and a Home Manager `plasma.nix` module: one bottom
-  panel, no top panel, display scale (start at 150%), Spectacle shortcut and
-  settings, and the chosen theme. Leave `overrideConfig` off during the trial so
-  changes made in System Settings survive activation.
+- **Declarative config (done 2026-11-04):** the `plasma-manager` flake input and
+  `nix/modules/home/plasma.nix` (`personal.desktop.plasma`) declare the Spectacle
+  shortcut and settings and install the theme candidates. Plasma's default
+  layout is already one bottom panel and no top panel, so no panel is declared;
+  set the display scale (start at 150%) in System Settings → Display, since KWin
+  keeps it per output. `overrideConfig` stays off during the trial so changes
+  made in System Settings survive activation. Pin the final panel, scale and
+  theme in `plasma.nix` afterwards.
 - **Theme trial:** a Plasma theme applies to the whole session; it cannot differ
-  per virtual desktop. Install candidates (nixpkgs: `whitesur-kde`,
-  `catppuccin-kde`, `nordic`, `sweet-nova`, `utterly-nord-plasma`, plus Kvantum
-  `kdePackages.qtstyleplugin-kvantum`, `papirus-icon-theme`, `tela-icon-theme`,
-  `bibata-cursors`) or use System Settings → Global Theme → Get New. Preview in
+  per virtual desktop. Installed candidates (nixpkgs): `whitesur-kde`,
+  `catppuccin-kde`, `nordic`, `sweet-nova`, `utterly-nord-plasma`,
+  `papirus-icon-theme`, `tela-icon-theme` and `bibata-cursors`. Their Kvantum
+  themes use Ubuntu's `qt6-style-kvantum`; a Nix Qt plugin would not load into
+  Ubuntu's Qt. More come from System Settings → Global Theme → Get New. Preview in
   System Settings, or cycle quickly with a small script around
   `plasma-apply-lookandfeel -a <id>`. True side-by-side would need a nested
   windowed Plasma session with a separate config home; set it up only if quick

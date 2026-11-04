@@ -65,7 +65,7 @@ Existing cloud access is not replaced by an assumed configuration.
 
 | Role | Managed state |
 | --- | --- |
-| `base` | Ubuntu build prerequisites plus profile `host_packages`, optional GDM `desktop_session` pin, `/etc/spawnkit`, installed root helper |
+| `base` | Ubuntu build prerequisites plus profile `host_packages`, optional GDM `desktop_session` pin and Plasma session, `/etc/spawnkit`, installed root helper |
 | `docker` | Ubuntu Engine, Compose/Buildx, membership, declared daemon settings |
 | `tailscale` | Signed repository/key, package, `tailscaled` service, Tailscale SSH after login |
 | `ssh` | Key-only explicit listener drop-in, full listener verification, boot-safe tailnet bind, Ubuntu unit |

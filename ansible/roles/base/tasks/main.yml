@@ -31,6 +31,13 @@
     state: "{{ 'present' if cfg.desktop_session == 'x11' else 'absent' }}"
     backup: true
   when: cfg.desktop_session != ''
+- name: Install KDE Plasma as an extra GDM session
+  ansible.builtin.apt:
+    name: [kde-plasma-desktop, kde-spectacle, qt6-style-kvantum]
+    # Recommends would pull in SDDM, which takes over from GDM.
+    install_recommends: false
+    state: present
+  when: cfg.plasma and not ansible_check_mode
 - name: Create root-owned Spawnkit configuration directory
   ansible.builtin.file:
     path: /etc/spawnkit

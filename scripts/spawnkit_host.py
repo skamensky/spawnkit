@@ -51,7 +51,7 @@ def load_config(repo, profile, overrides=None):
         raise ValueError('nvidia_prime requires nvidia')
     if cfg['desktop_session'] not in ('', 'x11', 'wayland'):
         raise ValueError('desktop_session must be empty, x11 or wayland')
-    for key in ("docker", "tailscale", "ssh", "nvidia", "virtualization", "iommu", "gpu_handoff", "windows_vm", "webex", "citrix", "nix_chrome"):
+    for key in ("docker", "tailscale", "ssh", "nvidia", "virtualization", "iommu", "gpu_handoff", "windows_vm", "webex", "citrix", "nix_chrome", "plasma"):
         if not isinstance(cfg[key], bool):
             raise ValueError(f"{key} must be a boolean")
     if cfg["user"] != "shmuel":

@@ -25,6 +25,8 @@ nvidia_driver_package: ""
 nvidia_prime: ""
 # GDM session type: "x11" pins Xorg, "wayland" removes that pin, empty leaves GDM alone.
 desktop_session: ""
+# KDE Plasma 6 as a second session in GDM, without SDDM or the Kubuntu app set.
+plasma: false
 ssh_port: 2222
 ssh_listen_addresses: []
 docker_daemon: {}
