@@ -4,6 +4,8 @@
 windows_guest_cache: C:\ProgramData\spawnkit\cache
 # Windows pointer speed, 1-20 (Windows' default is 10); takes effect at the next sign-in.
 windows_guest_mouse_sensitivity: 6
+# Where Ubuntu's CopyQ publishes its tabs (personal.desktop.copyqShare, under the share's Z:).
+windows_guest_copyq_share: Z:\.copyq
 windows_guest_pins:
   virtio_tools:
     url: https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/archive-virtio/virtio-win-0.1.302-1/virtio-win-guest-tools.exe
@@ -47,3 +49,8 @@ windows_guest_pins:
     url: https://binaries.webex.com/Webex-Desktop-Windows-x64-Combined-Gold/WebexBundle_en.msi
     file: WebexBundle_en.msi
     sha256: 2d63f5da05b8f23b39ce012f4804f08647830210eb72ac4d8e98ac24e768ce8e
+  # Same release as Ubuntu's CopyQ, so both read the shared tab files.
+  copyq:
+    url: https://github.com/hluk/CopyQ/releases/download/v16.0.0/copyq-16.0.0-setup.exe
+    file: copyq-16.0.0-setup.exe
+    sha256: f271a1467589ca55cd56d1faf727a4bc34e686b4965ac742854a93be4b186f82

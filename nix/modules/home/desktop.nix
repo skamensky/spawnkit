@@ -66,6 +66,11 @@ in
       );
       description = "Exact Ubuntu NVIDIA driver version and upstream installer hash; fill on native Ubuntu.";
     };
+    copyqShare = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      description = "Directory that receives CopyQ's tabs whenever CopyQ saves them, for the Windows VM's CopyQ to load at sign-in.";
+    };
   };
   config = lib.mkIf config.personal.desktop.enable {
     home.packages =
@@ -97,7 +102,14 @@ in
     dconf.settings."org/gnome/shell/keybindings".show-screenshot-ui = [ ];
     dconf.settings."org/gnome/settings-daemon/plugins/media-keys".custom-keybindings = [
       "/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/flameshot/"
+      "/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/copyq/"
     ];
+    # Ditto's shortcut. While Looking Glass holds the keyboard, Windows' CopyQ gets it instead.
+    dconf.settings."org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/copyq" = {
+      name = "CopyQ";
+      command = "${pkgs.copyq}/bin/copyq toggle";
+      binding = "<Control>grave";
+    };
     dconf.settings."org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/flameshot" = {
       name = "Flameshot";
       # --clipboard: Enter copies the selection and closes; no save dialog.
@@ -125,8 +137,46 @@ in
       Service = {
         ExecStart = "${pkgs.copyq}/bin/copyq";
         Restart = "on-failure";
+      }
+      // lib.optionalAttrs (config.personal.desktop.copyqShare != null) {
+        # CopyQ saves new items after five minutes by default; save them within seconds so a
+        # Windows sign-in soon after a copy still loads it.
+        ExecStartPost = toString (
+          pkgs.writeShellScript "copyq-save-delay" ''
+            for _ in $(${pkgs.coreutils}/bin/seq 30); do
+              ${pkgs.copyq}/bin/copyq config save_delay_ms_on_item_added 10000 >/dev/null 2>&1 && exit 0
+              ${pkgs.coreutils}/bin/sleep 1
+            done
+            exit 1
+          ''
+        );
       };
       Install.WantedBy = [ "graphical-session.target" ];
+    };
+    # CopyQ replaces a tab file by renaming a new one over it, so watching the directory sees every save.
+    systemd.user.paths.copyq-share = lib.mkIf (config.personal.desktop.copyqShare != null) {
+      Unit.Description = "Publish CopyQ history to the Windows VM share";
+      Path.PathChanged = "%h/.config/copyq";
+      Install.WantedBy = [ "default.target" ];
+    };
+    systemd.user.services.copyq-share = lib.mkIf (config.personal.desktop.copyqShare != null) {
+      Unit.Description = "Publish CopyQ history to the Windows VM share";
+      Service = {
+        Type = "oneshot";
+        Environment = "PATH=${lib.makeBinPath [ pkgs.coreutils pkgs.diffutils pkgs.gnugrep ]}";
+        # Each file lands under a temporary name and is renamed, so Windows never reads half a tab.
+        ExecStart = toString (
+          pkgs.writeShellScript "copyq-share" ''
+            set -eu
+            src="$HOME/.config/copyq" dest=${lib.escapeShellArg config.personal.desktop.copyqShare}
+            mkdir -p "$dest"
+            for f in "$src"/copyq_tab_*.dat; do
+              cmp -s "$f" "$dest/''${f##*/}" || { cp "$f" "$dest/.tmp"; mv "$dest/.tmp" "$dest/''${f##*/}"; }
+            done
+            grep -E '^(tabs|maxitems)=' "$src/copyq.conf" > "$dest/.tmp"; mv "$dest/.tmp" "$dest/options.ini"
+          ''
+        );
+      };
     };
     targets.genericLinux.gpu.nvidia = lib.mkIf (!isNixOS && config.personal.desktop.nvidia != null) {
       enable = true;

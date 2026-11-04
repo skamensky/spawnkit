@@ -166,6 +166,46 @@
     creates_path: C:\Program Files\Cisco Spark\CiscoCollabHost.exe
     arguments: ALLUSERS=1 ACCEPT_EULA=TRUE AUTOSTART_WITH_WINDOWS=false /norestart
 
+- name: Install CopyQ
+  ansible.windows.win_package:
+    path: '{{ windows_guest_cache }}\{{ windows_guest_pins.copyq.file }}'
+    creates_path: C:\Program Files\CopyQ\copyq.exe
+    arguments: /VERYSILENT /SUPPRESSMSGBOXES /NORESTART
+# The guest's OpenSSH has no file transfer, so the script travels as a parameter.
+- name: Install the CopyQ sign-in script
+  ansible.windows.win_powershell:
+    parameters:
+      Content: "{{ lookup('ansible.builtin.file', 'copyq-start.ps1') }}"
+    script: |
+      [CmdletBinding(SupportsShouldProcess)]
+      param([string]$Content)
+      $ErrorActionPreference = 'Stop'
+      $WhatIfPreference = $false
+      $path = 'C:\ProgramData\spawnkit\copyq-start.ps1'
+      $Ansible.Changed = -not (Test-Path $path) -or [IO.File]::ReadAllText($path) -ne $Content
+      if ($Ansible.Changed -and -not $Ansible.CheckMode) { [IO.File]::WriteAllText($path, $Content) }
+  when: cfg.windows_share | length > 0
+- name: Start CopyQ with Ubuntu's history at sign-in
+  ansible.windows.win_powershell:
+    parameters:
+      User: '{{ cfg.windows_computer_name | upper }}\{{ cfg.user }}'
+      Arguments: -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File C:\ProgramData\spawnkit\copyq-start.ps1 -Share "{{ windows_guest_copyq_share }}"
+    script: |
+      [CmdletBinding(SupportsShouldProcess)]
+      param([string]$User, [string]$Arguments)
+      $ErrorActionPreference = 'Stop'
+      $WhatIfPreference = $false
+      $task = Get-ScheduledTask -TaskName 'Spawnkit CopyQ' -ErrorAction SilentlyContinue
+      $Ansible.Changed = -not $task -or $task.Actions[0].Arguments -ne $Arguments -or $task.Principal.UserId -notlike "*$($User.Split('\')[1])"
+      if ($Ansible.Changed -and -not $Ansible.CheckMode) {
+          $action = New-ScheduledTaskAction -Execute powershell.exe -Argument $Arguments
+          $trigger = New-ScheduledTaskTrigger -AtLogOn -User $User
+          $principal = New-ScheduledTaskPrincipal -UserId $User -LogonType Interactive -RunLevel Limited
+          $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Minutes 5)
+          Register-ScheduledTask -TaskName 'Spawnkit CopyQ' -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Force | Out-Null
+      }
+  when: cfg.windows_share | length > 0
+
 - name: Install the Virtual Display Driver files
   ansible.windows.win_powershell:
     parameters:

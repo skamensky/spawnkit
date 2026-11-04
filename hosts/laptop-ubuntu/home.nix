@@ -1,9 +1,11 @@
-{ pkgs, ... }: {
+{ config, pkgs, ... }: {
   imports = [ ../../nix/modules/home/laptop.nix ];
   personal.environment = "linux";
   personal.desktop.enable = true;
   # GDM is pinned to Xorg (desktop_session: x11 in system.yml).
   personal.desktop.session = "x11";
+  # Z: in the Windows VM (windows_share in system.yml).
+  personal.desktop.copyqShare = "${config.home.homeDirectory}/Shared/.copyq";
   # Must match the running Ubuntu driver (/proc/driver/nvidia/version, nvidia_driver_package
   # in system.yml); update both after an Ubuntu driver upgrade.
   personal.desktop.nvidia = {

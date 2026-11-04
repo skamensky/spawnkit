@@ -306,6 +306,12 @@ and recovery; routine automation can use SSH.
   `~/.local/state/spawnkit/looking-glass-stalls.jsonl`, shows a notification and
   restarts the viewer; more than five restarts in ten minutes stops `vm-view`. The
   viewer's own log is `~/.local/state/spawnkit/looking-glass.log`.
+- **Clipboard history:** CopyQ runs on both systems and Ctrl+` opens it on whichever
+  one has the keyboard. Ubuntu's CopyQ saves new items within 10 s, and a user path
+  unit copies its tabs to `~/Shared/.copyq` (`personal.desktop.copyqShare`). At each
+  Windows sign-in the `Spawnkit CopyQ` scheduled task loads that copy from
+  `Z:\.copyq` into Windows' CopyQ. Clips copied in Windows reach Ubuntu's CopyQ
+  through the SPICE clipboard; Windows' own history is replaced at the next sign-in.
 - **USB devices:** `windows_usb_devices` lists `{vendor, product}` IDs (0x-prefixed
   hex) libvirt hands to Windows at start (`startupPolicy='optional'`, so an absent
   device does not block boot). Linux loses them until the VM stops. The laptop
