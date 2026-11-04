@@ -514,12 +514,23 @@ table to audit old files and migration conflicts; make persistent changes in
 | AutoHotkey (`mine.ahk` = 2004Scape mining macro) | 🔁 xdotool/ydotool; only if Shmuel wants it |
 | Wispr Flow | ❓ likely no Linux client → whisper-based dictation (nerd-dictation, Speech Note) |
 | Logi Options+ | 🔁 Solaar |
-| OBS, Shotcut, Krita, VLC, qBittorrent, LibreOffice, Wireshark, balenaEtcher, 7-Zip (p7zip) | ✅ |
+| OBS | ⏳ **TODO:** move from the obsproject PPA into Spawnkit (below) |
+| Shotcut, Krita, VLC, qBittorrent, LibreOffice, Wireshark, balenaEtcher, 7-Zip (p7zip) | ✅ |
 | K-Lite | 🔁 `ubuntu-restricted-extras` |
 | Tor Browser | ✅ `torbrowser-launcher` |
 | Visual Studio 2022, Windows SDK, MSYS2, scoop, gsudo, .NET/VC++ runtimes | ❌ (`dotnet-sdk` only if needed) |
 | NVIDIA App, Dolby, Intel XTU, Lenovo Vantage/Now/AvatarMaster, Legion Arena, Nahimic, Copilot, Npcap, USBPcap, WinFsp, TMOG | ❌ |
 | `dd.accdb` | 🔁 `mdbtools` / LibreOffice Base, or the CSV export from A5 |
+
+**TODO: OBS in Spawnkit.** OBS is installed by hand from the obsproject PPA,
+the only GUI app outside Spawnkit; `do-release-upgrade` flags it as a foreign
+package. Move it to Home Manager's `programs.obs-studio` (plugins declared
+there; scenes and settings in `~/.config/obs-studio` stay untouched), then
+`sudo apt purge obs-studio` and delete the PPA source. GPU support is part of
+the task, not a follow-up: confirm OBS gets Ubuntu's drivers through
+`targets.genericLinux.gpu`, VA-API/QSV encoding works on the Intel iGPU, and NVENC works on
+the RTX while it is not handed to the Windows VM. If the virtual camera is
+wanted, add `v4l2loopback-dkms` through Ansible.
 
 ### D6. Migrate Ditto clipboard history → CopyQ
 Ditto (Windows) holds **17,820 clips from 2025-01-20 to 2026-10-15**: 16.9k text (958 with Hebrew), 9k with HTML, 39 RTF, 96 copied-file lists, and **783 images stored as raw bitmaps (3.4 GB of the 3.9 GB DB)**. There are no Ditto groups, pinned clips or shortcuts, so it's a flat history.
