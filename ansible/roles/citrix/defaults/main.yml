@@ -1,0 +1,6 @@
+---
+# Citrix serves the Workspace app .deb only after its EULA is accepted in a browser, so
+# Shmuel downloads it and the role installs that exact file.
+citrix_version: 24.11.0.85
+citrix_sha256: 196df4f88dd0dd4942a8bab1992b2d54e270c464df6013736cf78113479f2cb2
+citrix_deb: /home/{{ cfg.user }}/Downloads/icaclient_{{ citrix_version }}_amd64.deb

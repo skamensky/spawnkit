@@ -570,7 +570,8 @@ What it does:
 - [ ] Required Ubuntu host packages/services configured; Tailscale daemon reachable through the managed CLI
 - [ ] Docker works; supa-crm local stack starts
 - [ ] Before adopting the Windows VM: busy-GPU start refusal, Windows GPU acceleration and repeated return to Linux verified
-- [ ] Citrix / Windows 365 access works
+- [x] Citrix access works (2026-11-04: Workspace app 24.11 from the `citrix` role)
+- [ ] Windows 365 access works
 - [ ] Windows Downloads/Documents/Desktop present in `~/windows-import`; unsaved Notepad++ tabs reviewed
 - [ ] CopyQ autostarts; the `Ditto/*` tabs exist; the import printed "verified per tab"; a Hebrew clip and an image paste correctly
 - [ ] log complete; summary given to Shmuel

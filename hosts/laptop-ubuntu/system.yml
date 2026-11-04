@@ -15,6 +15,8 @@ iommu: true
 # Ubuntu build toolchain so they find system libraries.
 host_packages: [solaar, cmake, ninja-build, language-pack-he, language-pack-gnome-he, hunspell-he, culmus]
 webex: true
+# Work's Citrix desktop runs from Ubuntu; Windows keeps the camera for calls.
+citrix: true
 nix_chrome: true
 # Same tailnet identity and listener as the WSL node (migration C4); key-only.
 ssh: true

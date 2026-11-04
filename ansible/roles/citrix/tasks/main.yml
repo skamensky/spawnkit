@@ -1,0 +1,25 @@
+---
+- name: Inspect installed Ubuntu packages
+  ansible.builtin.package_facts:
+    manager: apt
+- name: Install the downloaded Citrix Workspace app
+  when: ansible_facts.packages.icaclient | default([]) | map(attribute='version') | first | default('') != citrix_version
+  block:
+    - name: Verify the downloaded Citrix Workspace .deb
+      ansible.builtin.stat:
+        path: "{{ citrix_deb }}"
+        checksum_algorithm: sha256
+      register: citrix_download
+    - name: Require the pinned Citrix Workspace .deb
+      ansible.builtin.assert:
+        that: citrix_download.stat.exists and citrix_download.stat.checksum == citrix_sha256
+        fail_msg: >-
+          Download icaclient_{{ citrix_version }}_amd64.deb from
+          https://www.citrix.com/downloads/workspace-app/linux/ (accepting the EULA) to
+          {{ citrix_deb }}, or update citrix_version and citrix_sha256.
+    - name: Install Citrix Workspace {{ citrix_version }}
+      ansible.builtin.apt:
+        deb: "{{ citrix_deb }}"
+      environment:
+        DEBIAN_FRONTEND: noninteractive
+      when: not ansible_check_mode

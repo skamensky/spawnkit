@@ -73,6 +73,7 @@ Existing cloud access is not replaced by an assumed configuration.
 | `virtualization` | Ubuntu QEMU/libvirt/OVMF/swtpm, groups, IOMMU GRUB drop-in, dedicated NAT network |
 | `gpu_handoff` | Separate libvirt lifecycle hook, GPU policy, Looking Glass tmpfiles rule |
 | `webex` | Cisco's rolling Webex .deb when absent (unpinned; it self-updates), AppArmor profile for its sandbox user namespace |
+| `citrix` | Citrix Workspace app from the pinned, hash-checked .deb in `~/Downloads` (Citrix gates downloads behind its EULA) |
 | `windows_vm` | Explicit `vm-define` playbook; managed domain and new disk, no automatic start |
 
 Ubuntu supplies the system service units. This repository stores settings and
