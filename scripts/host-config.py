@@ -19,9 +19,8 @@ from spawnkit_host import inventory, load_config, read_overrides, render_windows
 
 
 GPU_RESERVATION = Path("/run/spawnkit/gpu-owner.json")
-GUARD = "/usr/local/libexec/spawnkit/gpu-guard.py"
-# Seconds a deferred start waits for the desktop session to release the RTX.
-LOGOUT_TIMEOUT = 900
+# Passwordless through the gpu_handoff sudoers rule, which lists these exact command lines.
+GUARD = ["sudo", "/usr/bin/python3", "-I", "/usr/local/libexec/spawnkit/gpu-guard.py"]
 # Holders only a logout releases; the picker never offers to kill them.
 SESSION_HOLDERS = {"Xorg", "gnome-shell", "Xwayland"}
 
@@ -68,15 +67,41 @@ def wait_for_gpu_return(name, timeout):
 
 
 def guard_holders():
-    return json.loads(subprocess.check_output(["sudo", "/usr/bin/python3", GUARD, "holders"], text=True))
+    """RTX holders, each marked closable unless only a logout or another user can release it."""
+    if GPU_RESERVATION.exists():
+        raise ValueError("The RTX is assigned to Windows; no Linux program holds it")
+    return [h | {"closable": h["name"] not in SESSION_HOLDERS and h["uid"] == os.getuid()}
+            for h in json.loads(subprocess.check_output([*GUARD, "holders"], text=True))]
+
+
+def release_holders(pids, force):
+    """SIGTERM the chosen closable holders, SIGKILL them after 10 s with force; return the holders left."""
+    held = {h["pid"]: h for h in guard_holders()}
+    for pid in pids:
+        if pid not in held:
+            raise ValueError(f"PID {pid} does not hold the RTX")
+        if not held[pid]["closable"]:
+            raise ValueError(f"PID {pid} ({held[pid]['name']}) is not closable; it needs a logout or its owner")
+    for sig in (signal.SIGTERM, signal.SIGKILL) if force else (signal.SIGTERM,):
+        for pid in pids:
+            try:
+                os.kill(pid, sig)
+            except ProcessLookupError:
+                pass
+        deadline = time.monotonic() + 10
+        while (remaining := guard_holders()) and set(pids) & {h["pid"] for h in remaining} and time.monotonic() < deadline:
+            time.sleep(1)
+        if not set(pids) & {h["pid"] for h in remaining}:
+            break
+    return remaining
 
 
 def close_holders(held):
-    """Let the user pick the user-owned RTX holders to close; returns the holders that remain.
+    """Dialog front end for gpu-holders/gpu-release; returns the holders that remain.
 
     Display-server and other users' holders are left to the logout handoff.
     """
-    if any(h["name"] in SESSION_HOLDERS or h["uid"] != os.getuid() for h in held):
+    if not all(h["closable"] for h in held):
         return held
     rows = [field for h in held for field in ("TRUE", str(h["pid"]), h["name"], h["command"][:150])]
     picked = subprocess.run(["zenity", "--list", "--checklist", "--title=Start Windows", "--width=1000", "--height=420",
@@ -86,24 +111,15 @@ def close_holders(held):
                              "--print-column=2", "--separator= ", "--ok-label=Close and start Windows", *rows],
                             capture_output=True, text=True)
     if picked.returncode != 0:
-        run(["sudo", "/usr/bin/python3", GUARD, "attach-desktop"])
+        run([*GUARD, "attach-desktop"])
         raise ValueError("Cancelled; the RTX stays with Linux")
     chosen = [int(pid) for pid in picked.stdout.split()]
-    for sig in (signal.SIGTERM, signal.SIGKILL):
-        for pid in chosen:
-            try:
-                os.kill(pid, sig)
-            except ProcessLookupError:
-                pass
-        deadline = time.monotonic() + 10
-        while (remaining := guard_holders()) and time.monotonic() < deadline:
-            time.sleep(1)
-        if not remaining or sig == signal.SIGKILL:
-            break
+    remaining = release_holders(chosen, force=False)
+    if set(chosen) & {h["pid"] for h in remaining}:
         names = ", ".join(sorted({h["name"] for h in remaining}))
         if subprocess.run(["zenity", "--question", "--title=Start Windows", "--ok-label=Force-kill",
-                           f"--text={names} did not exit. Force-kill?"]).returncode != 0:
-            break
+                           f"--text={names} did not exit. Force-kill?"]).returncode == 0:
+            remaining = release_holders([h["pid"] for h in remaining if h["pid"] in chosen], force=True)
     return remaining
 
 
@@ -113,25 +129,20 @@ def start_windows(name, notify, gui):
     With gui, user-owned holders can be closed from a dialog first. Returns False when
     the start waits for the user to log out.
     """
-    held = json.loads(subprocess.check_output(["sudo", "/usr/bin/python3", GUARD, "detach-desktop"], text=True))
+    held = json.loads(subprocess.check_output([*GUARD, "detach-desktop"], text=True))
     if held and gui:
-        held = close_holders(held)
+        held = close_holders(guard_holders())
     if not held:
         try:
             run(["/usr/bin/virsh", "-c", "qemu:///system", "start", name], capture_output=True, text=True)
         except subprocess.CalledProcessError:
-            run(["sudo", "/usr/bin/python3", GUARD, "attach-desktop"])
+            run([*GUARD, "attach-desktop"])
             raise
         return True
-    # A root unit survives logout; a failed start returns the RTX to the desktop seat.
-    script = (f"/usr/bin/python3 {GUARD} await-idle {LOGOUT_TIMEOUT} && "
-              f"/usr/bin/virsh -c qemu:///system start {name} || "
-              f"{{ /usr/bin/python3 {GUARD} attach-desktop; exit 1; }}")
-    run(["sudo", "systemd-run", "--unit=spawnkit-windows-handoff", "--collect",
-         "--description=Start Windows once the desktop releases the RTX", "/bin/sh", "-c", script])
+    timeout = json.loads(subprocess.check_output([*GUARD, "schedule-start"], text=True))["timeout"]
     names = ", ".join(sorted({h["name"] for h in held}))
     message = (f"The RTX is still open by: {names}. Log out now; Windows starts once they exit "
-               f"(limit {LOGOUT_TIMEOUT // 60} min). Log back in and open Windows (Looking Glass). "
+               f"(limit {timeout // 60} min). Log back in and open Windows (Looking Glass). "
                "Progress: journalctl -u spawnkit-windows-handoff")
     print(message)
     if notify and shutil.which("notify-send"):
@@ -141,7 +152,7 @@ def start_windows(name, notify, gui):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=["select", "inventory", "check", "render", "plan", "apply", "facts", "vm-define", "vm-start", "vm-stop", "vm-view", "vm-console", "vm-exec", "gpu-status"])
+    parser.add_argument("action", choices=["select", "inventory", "check", "render", "plan", "apply", "facts", "vm-define", "vm-start", "vm-stop", "vm-view", "vm-console", "vm-exec", "gpu-status", "gpu-holders", "gpu-release"])
     parser.add_argument("--repo", type=Path, default=selector().default_repo(), help="Defaults to the enclosing checkout")
     parser.add_argument("--host", help="Explicit profile; normal selection shares the Home Manager registry")
     parser.add_argument("--hostname", default=socket.gethostname())
@@ -151,6 +162,8 @@ def main():
     parser.add_argument("--ask-become-pass", action="store_true")
     parser.add_argument("--notify", action="store_true", help="Also display desktop notifications for command failures")
     parser.add_argument("--gui", action="store_true", help="vm-start/vm-view: offer to close programs holding the RTX")
+    parser.add_argument("--pid", type=int, action="append", default=[], help="gpu-release: holder to close (repeatable)")
+    parser.add_argument("--force", action="store_true", help="gpu-release: SIGKILL holders still running after SIGTERM")
     parser.add_argument("--timeout", type=int, default=300, help="vm-stop: seconds to wait for guest shutdown and GPU return")
     parser.add_argument("--command", help="vm-exec: PowerShell to run as SYSTEM; read from stdin when omitted")
     parser.add_argument("--windows-iso", type=Path)
@@ -187,6 +200,15 @@ def main():
             (args.output / "windows.xml").write_text(xml)
             (args.output / "windows.json").write_text(json.dumps(cfg, indent=2) + "\n")
             print(args.output)
+        elif args.action == "gpu-holders":
+            print(json.dumps(guard_holders(), indent=2))
+        elif args.action == "gpu-release":
+            if not args.pid:
+                parser.error("gpu-release requires --pid")
+            remaining = release_holders(args.pid, args.force)
+            print(json.dumps(remaining, indent=2))
+            if set(args.pid) & {h["pid"] for h in remaining}:
+                raise ValueError("Some chosen holders are still running; retry with --force")
         elif args.action in ("vm-start", "vm-stop", "vm-view", "vm-console", "vm-exec", "gpu-status"):
             native_only()
             installed = Path("/etc/spawnkit/windows.json")
@@ -194,7 +216,7 @@ def main():
                 raise ValueError("Apply native host GPU configuration before using VM commands")
             active = json.loads(installed.read_text())
             if args.action == "gpu-status":
-                run(["sudo", "/usr/bin/python3", "/usr/local/libexec/spawnkit/gpu-guard.py", "status"])
+                run([*GUARD, "status"])
                 return
             name = active["windows_name"]
             if args.action == "vm-console":

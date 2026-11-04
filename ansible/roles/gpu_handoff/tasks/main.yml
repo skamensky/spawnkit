@@ -53,3 +53,16 @@
   ansible.builtin.command: systemd-tmpfiles --create /etc/tmpfiles.d/spawnkit-looking-glass.conf
   changed_when: false
   when: not ansible_check_mode
+# host-config's handoff primitives run without a password. Each entry is one exact
+# command line; recovery (reclaim) and the libvirt hook phases still need sudo auth.
+- name: Allow the user the GPU handoff primitives without a password
+  ansible.builtin.copy:
+    dest: /etc/sudoers.d/50-spawnkit-gpu-handoff
+    owner: root
+    group: root
+    mode: '0440'
+    validate: /usr/sbin/visudo -cf %s
+    content: |
+      Cmnd_Alias SPAWNKIT_GPU = {% for command in ['status', 'holders', 'detach-desktop', 'attach-desktop', 'schedule-start'] %}/usr/bin/python3 -I /usr/local/libexec/spawnkit/gpu-guard.py {{ command }}{{ '' if loop.last else ', ' }}{% endfor %}
+
+      {{ cfg.user }} ALL=(root) NOPASSWD: SPAWNKIT_GPU

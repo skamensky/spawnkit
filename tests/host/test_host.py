@@ -31,6 +31,10 @@ def gpu_config():
     return load_config(ROOT, 'laptop-ubuntu', yaml.safe_load((ROOT / 'tests/host/gpu.yml').read_text()))
 
 
+
+def holder(pid, name='python3', closable=True):
+    return {'pid': pid, 'name': name, 'command': f'{name} job', 'uid': os.getuid(), 'closable': closable}
+
 class Configuration(unittest.TestCase):
     def test_unknown_hosts_have_base_only_profile(self):
         registry = json.loads((ROOT / 'hosts/registry.json').read_text())
@@ -287,22 +291,49 @@ class GPUHandoff(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, 'systemctl stop nvidia-persistenced'):
                 guard.require_idle(['/dev/nvidia0'])
 
+    def test_holders_mark_session_and_foreign_processes_unclosable(self):
+        raw = [{'pid': 1, 'name': 'Xorg', 'command': 'Xorg', 'uid': os.getuid()},
+               {'pid': 2, 'name': 'python3', 'command': 'python3 a.py', 'uid': os.getuid() + 1},
+               {'pid': 3, 'name': 'python3', 'command': 'python3 b.py', 'uid': os.getuid()}]
+        with patch.object(cli.subprocess, 'check_output', return_value=json.dumps(raw)), \
+                patch.object(cli, 'GPU_RESERVATION', Path('/nonexistent')):
+            self.assertEqual([h['closable'] for h in cli.guard_holders()], [False, False, True])
+        with patch.object(cli, 'GPU_RESERVATION', Path(__file__)):
+            with self.assertRaisesRegex(ValueError, 'assigned to Windows'):
+                cli.guard_holders()
+
+    def test_release_refuses_unclosable_and_unknown_pids(self):
+        held = [holder(10, closable=False)]
+        with patch.object(cli, 'guard_holders', return_value=held), patch.object(cli.os, 'kill') as kill:
+            with self.assertRaisesRegex(ValueError, 'not closable'):
+                cli.release_holders([10], force=False)
+            with self.assertRaisesRegex(ValueError, 'does not hold'):
+                cli.release_holders([11], force=False)
+        kill.assert_not_called()
+
+    def test_release_force_kills_after_term(self):
+        held = [holder(10)]
+        with patch.object(cli, 'guard_holders', side_effect=[held, held, []]), patch.object(cli.os, 'kill') as kill, \
+                patch.object(cli.time, 'monotonic', side_effect=[0, 11, 0]), patch.object(cli.time, 'sleep'):
+            self.assertEqual(cli.release_holders([10], force=True), [])
+        self.assertEqual([c.args for c in kill.call_args_list], [(10, cli.signal.SIGTERM), (10, cli.signal.SIGKILL)])
+
     def test_picker_leaves_session_holders_to_logout(self):
-        held = [{'pid': 10, 'name': 'Xorg', 'command': 'Xorg', 'uid': os.getuid()}]
+        held = [holder(10, name='Xorg', closable=False)]
         with patch.object(cli.subprocess, 'run') as run:
             self.assertEqual(cli.close_holders(held), held)
         run.assert_not_called()
 
     def test_picker_closes_chosen_holders(self):
-        held = [{'pid': 10, 'name': 'python3', 'command': 'python3 train.py', 'uid': os.getuid()}]
+        held = [holder(10)]
         chose = subprocess.CompletedProcess([], 0, '10\n', '')
         with patch.object(cli.subprocess, 'run', return_value=chose), patch.object(cli.os, 'kill') as kill, \
-                patch.object(cli, 'guard_holders', return_value=[]):
+                patch.object(cli, 'guard_holders', side_effect=[held, []]):
             self.assertEqual(cli.close_holders(held), [])
         kill.assert_called_once_with(10, cli.signal.SIGTERM)
 
     def test_picker_cancel_returns_gpu_to_desktop(self):
-        held = [{'pid': 10, 'name': 'python3', 'command': 'python3 train.py', 'uid': os.getuid()}]
+        held = [holder(10)]
         with patch.object(cli.subprocess, 'run', return_value=subprocess.CompletedProcess([], 1, '', '')), \
                 patch.object(cli, 'run') as attach, patch.object(cli.os, 'kill') as kill:
             with self.assertRaisesRegex(ValueError, 'Cancelled'):

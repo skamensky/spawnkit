@@ -37,3 +37,8 @@ are discovered from the canonical assistant checkout during activation; do not
 maintain a duplicate skill inventory.
 Keep `hosts/registry.json` the single hostname map. Do not put mutable VM state,
 migration inventories or private exports in this repository.
+
+Spawnkit's own software is CLI first. Every graphical front end (dialogs, desktop
+entries, notifications) is a thin layer over subcommands that expose the same
+primitives with machine-readable output, so agents can do everything a person can
+without the GUI. Add the subcommand first, then the GUI that calls it.

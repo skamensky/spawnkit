@@ -127,7 +127,15 @@ tested guest display arrangement needs it. Firmware and TPM data are retained.
 host-config vm-view       # start if stopped, then launch Looking Glass
 host-config vm-stop       # graceful shutdown, then wait for verified GPU return
 host-config gpu-status    # root device/reservation inspection
+host-config gpu-holders   # JSON: Linux programs holding the RTX, each with "closable"
+host-config gpu-release --pid N [--pid M] [--force]   # SIGTERM (then SIGKILL) closable holders
 ```
+
+The `--gui` checklist is a front end over `gpu-holders` and `gpu-release`; agents
+call those directly, then `vm-start`. `/etc/sudoers.d/50-spawnkit-gpu-handoff`
+lets the user run exactly the guard's `status`, `holders`, `detach-desktop`,
+`attach-desktop` and `schedule-start` (the logout-deferred start unit) without a
+password; `reclaim` and everything else still need sudo authentication.
 
 The desktop entries are **Windows (Looking Glass)** and **Windows installation
 console**. Launch failures also produce a desktop notification. The latter opens the console; start first if the VM is off. Closing

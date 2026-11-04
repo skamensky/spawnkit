@@ -11,6 +11,8 @@ import xml.etree.ElementTree as ET
 SYSFS = Path('/sys/bus/pci/devices')
 STATE = Path('/run/spawnkit/gpu-owner.json')
 CONFIG = Path('/etc/spawnkit/windows.json')
+# Seconds a deferred start waits for the desktop session to release the RTX.
+LOGOUT_TIMEOUT = 900
 # Runtime-only (cleared at boot), so the Linux desktop owns the RTX by default.
 SEAT_RULE = Path('/run/udev/rules.d/72-spawnkit-gpu-handoff.rules')
 # Holders that are not ordinary GPU jobs get specific advice instead of a bare PID.
@@ -216,6 +218,18 @@ def main():
         return
     if sys.argv[1:] == ['attach-desktop']:
         desktop_seat(cfg, True)
+        return
+    if sys.argv[1:] == ['schedule-start']:
+        # A root unit survives logout; a failed start returns the RTX to the desktop seat.
+        # The unit, not this hook-reachable process, calls virsh.
+        guard = f'/usr/bin/python3 -I {Path(__file__).resolve()}'
+        script = (f"{guard} await-idle {LOGOUT_TIMEOUT} && "
+                  f"/usr/bin/virsh -c qemu:///system start {cfg['windows_name']} || "
+                  f"{{ {guard} attach-desktop; exit 1; }}")
+        subprocess.run(['systemd-run', '--unit=spawnkit-windows-handoff', '--collect',
+                        '--description=Start Windows once the desktop releases the RTX', '/bin/sh', '-c', script],
+                       check=True)
+        print(json.dumps({'timeout': LOGOUT_TIMEOUT}))
         return
     if sys.argv[1:2] == ['await-idle']:
         await_idle(cfg, int(sys.argv[2]))
