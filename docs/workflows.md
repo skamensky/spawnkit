@@ -447,9 +447,10 @@ nix --extra-experimental-features 'nix-command flakes' run .#host-config -- appl
 ```
 
 The host apply rewrites Spawnkit's own sources (Tailscale, NVIDIA Container
-Toolkit) for the new codename. Re-enable sources Spawnkit does not own (Chrome,
-VS Code, Claude desktop, PPAs) in Software & Updates, or remove the ones whose
-PPA has no build for the new release. Then confirm `nvidia-smi`, a Wayland session
+Toolkit) for the new codename. Chrome and VS Code come from Home Manager, so the
+laptop has no APT sources for them. Re-enable any other source Spawnkit does not
+own (Claude desktop, PPAs) in Software & Updates, or remove the ones whose PPA
+has no build for the new release. Then confirm `nvidia-smi`, a Wayland session
 (`echo $XDG_SESSION_TYPE`), `virsh net-list --all` and a Windows VM start with GPU handoff and Looking
 Glass, Citrix and Webex; the vendor `.deb` packages are the most likely to break.
 On Wayland, also check that `vm-start` does not name `gnome-shell` as an RTX
