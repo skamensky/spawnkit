@@ -36,7 +36,7 @@ def load_config(repo, profile, overrides=None):
     if unknown:
         raise ValueError(f"Unknown host settings: {', '.join(sorted(unknown))}")
     cfg = defaults | values
-    for key in ('gpu_devices', 'ssh_listen_addresses', 'base_packages', 'host_packages'):
+    for key in ('gpu_devices', 'windows_usb_devices', 'ssh_listen_addresses', 'base_packages', 'host_packages'):
         if not isinstance(cfg[key], list):
             raise ValueError(f'{key} must be a list')
     for key in ('windows_name', 'looking_glass_name', 'network_name', 'network_bridge', 'windows_disk', 'windows_iso', 'virtio_iso', 'nvidia_driver_package', 'nvidia_prime', 'desktop_session', 'windows_uuid', 'network_uuid', 'windows_mac', 'windows_address', 'windows_share', 'windows_unattend_iso', 'windows_edition', 'windows_computer_name', 'windows_timezone', 'windows_authorized_key', 'windows_display_gpu', 'windows_display_mode'):
@@ -106,6 +106,10 @@ def load_config(repo, profile, overrides=None):
         devices.add(address)
     if cfg["gpu_handoff"] and not any(d["driver"] == "nvidia" for d in cfg["gpu_devices"]):
         raise ValueError("GPU handoff must include the NVIDIA graphics function")
+    for device in cfg["windows_usb_devices"]:
+        if not isinstance(device, dict) or set(device) != {"vendor", "product"} or not all(
+                isinstance(v, str) and re.fullmatch(r"0x[0-9a-f]{4}", v) for v in device.values()):
+            raise ValueError("Each Windows USB device needs exactly vendor and product as 0x-prefixed lowercase hex")
     if cfg['windows_mac'] and not re.fullmatch(r'52:54:00(:[0-9a-f]{2}){3}', cfg['windows_mac']):
         raise ValueError('windows_mac must be a lowercase 52:54:00 libvirt address')
     if cfg['windows_address']:

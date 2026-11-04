@@ -28,6 +28,9 @@ windows_video: none
 windows_mac: "52:54:00:a1:8d:c3"
 windows_address: 192.168.123.10
 windows_share: /home/shmuel/Shared
+# The integrated camera (Luxvisions 30c9:00ac), for video calls in Windows.
+windows_usb_devices:
+  - {vendor: "0x30c9", product: "0x00ac"}
 windows_computer_name: ShmuelWIndows
 windows_timezone: Israel Standard Time
 windows_authorized_key: /home/shmuel/.ssh/id_rsa.pub

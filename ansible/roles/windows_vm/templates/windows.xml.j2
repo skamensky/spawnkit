@@ -48,12 +48,19 @@
     <filesystem type='mount' accessmode='passthrough'><driver type='virtiofs'/><source dir='{{ cfg.windows_share }}'/><target dir='spawnkit-share'/></filesystem>
 {% endif %}
     <video><model type='{{ cfg.windows_video }}'/></video>
-    <sound model='ich9'/><audio id='1' type='spice'/>
+    <!-- The micro codec presents a speaker and a microphone rather than line out and line in; Looking
+         Glass carries both over SPICE. -->
+    <sound model='ich9'><codec type='micro'/></sound><audio id='1' type='spice'/>
     <tpm model='tpm-crb'><backend type='emulator' version='2.0'/></tpm>
 {% for device in cfg.gpu_devices %}
 {% set pci = device.address.replace(':', '.').split('.') %}
     <hostdev mode='subsystem' type='pci' managed='yes'>
       <source><address domain='0x{{ pci[0] }}' bus='0x{{ pci[1] }}' slot='0x{{ pci[2] }}' function='0x{{ pci[3] }}'/></source>
+    </hostdev>
+{% endfor %}
+{% for device in cfg.windows_usb_devices %}
+    <hostdev mode='subsystem' type='usb' managed='yes'>
+      <source startupPolicy='optional'><vendor id='{{ device.vendor }}'/><product id='{{ device.product }}'/></source>
     </hostdev>
 {% endfor %}
     <shmem name='{{ cfg.looking_glass_name }}'><model type='ivshmem-plain'/><size unit='M'>{{ cfg.looking_glass_mib }}</size></shmem>

@@ -159,6 +159,11 @@
     path: '{{ windows_guest_cache }}\{{ windows_guest_pins.chrome.file }}'
     creates_path: C:\Program Files\Google\Chrome\Application\chrome.exe
     arguments: /norestart
+- name: Install Webex
+  ansible.windows.win_package:
+    path: '{{ windows_guest_cache }}\{{ windows_guest_pins.webex.file }}'
+    creates_path: C:\Program Files\Cisco Spark\CiscoCollabHost.exe
+    arguments: ALLUSERS=1 ACCEPT_EULA=TRUE AUTOSTART_WITH_WINDOWS=false /norestart
 
 - name: Install the Virtual Display Driver files
   ansible.windows.win_powershell:

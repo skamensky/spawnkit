@@ -39,3 +39,9 @@ windows_guest_pins:
     url: https://dl.google.com/dl/chrome/install/googlechromestandaloneenterprise64.msi
     file: googlechromestandaloneenterprise64.msi
     sha256: 55edacd348b4c1c9b291dab19e4665929c7a127c013d9625970be924f893273f
+  # Webex updates itself; like Chrome's, this unversioned MSI (46.8.0.35631 when pinned) is
+  # replaced on each release, so a fresh install needs url's current sha256 pinned here.
+  webex:
+    url: https://binaries.webex.com/Webex-Desktop-Windows-x64-Combined-Gold/WebexBundle_en.msi
+    file: WebexBundle_en.msi
+    sha256: 2d63f5da05b8f23b39ce012f4804f08647830210eb72ac4d8e98ac24e768ce8e

@@ -55,6 +55,9 @@ windows_mac: ""
 windows_address: ""
 # Host directory exported to Windows over virtiofs (tag spawnkit-share).
 windows_share: ""
+# Host USB devices ({vendor, product} as 0x-prefixed hex) Windows owns while it runs; Linux
+# loses them until the VM stops. Absent devices do not prevent the VM from starting.
+windows_usb_devices: []
 
 network_name: spawnkit
 network_uuid: "7c04dc12-ce53-4f15-b404-18afe3190591"

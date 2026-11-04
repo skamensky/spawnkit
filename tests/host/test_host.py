@@ -138,6 +138,17 @@ class Configuration(unittest.TestCase):
         self.assertIsNone(ET.fromstring(render_windows(ROOT, gpu_config() | {'windows_share': ''})).find('./devices/filesystem'))
         self.assertEqual(tree.find('./cpu/topology').attrib, {'sockets': '1', 'dies': '1', 'cores': '4', 'threads': '2'})
 
+    def test_domain_passes_declared_usb_devices_and_a_microphone(self):
+        cfg = gpu_config() | {'windows_usb_devices': [{'vendor': '0x30c9', 'product': '0x00ac'}]}
+        tree = ET.fromstring(render_windows(ROOT, cfg))
+        source = tree.find("./devices/hostdev[@type='usb']/source")
+        self.assertEqual((source.get('startupPolicy'), source.find('vendor').get('id'), source.find('product').get('id')),
+                         ('optional', '0x30c9', '0x00ac'))
+        self.assertEqual(tree.find('./devices/sound/codec').get('type'), 'micro')
+        self.assertTrue(guard.validate_domain(cfg, ET.tostring(tree)))
+        with self.assertRaises(ValueError):
+            load_config(ROOT, 'default', {'windows_usb_devices': [{'vendor': '30c9', 'product': '0x00ac'}]})
+
     def test_other_domain_cannot_take_reserved_gpu(self):
         cfg = gpu_config()
         tree = ET.fromstring(render_windows(ROOT, cfg))
