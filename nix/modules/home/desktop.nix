@@ -205,7 +205,12 @@ in
       Install.WantedBy = [ "default.target" ];
     };
     systemd.user.services.copyq-share = lib.mkIf (config.personal.desktop.copyqShare != null) {
-      Unit.Description = "Publish CopyQ history to the Windows VM share";
+      Unit = {
+        Description = "Publish CopyQ history to the Windows VM share";
+        # CopyQ writes several files at startup; the default start limit would fail this
+        # service and its path unit at every login.
+        StartLimitIntervalSec = 0;
+      };
       Service = {
         Type = "oneshot";
         Environment = "PATH=${lib.makeBinPath [ pkgs.coreutils pkgs.diffutils pkgs.gnugrep ]}";
