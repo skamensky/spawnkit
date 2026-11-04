@@ -454,7 +454,7 @@ class GPUHandoff(unittest.TestCase):
         held = [holder(10)]
         with patch.object(cli.subprocess, 'run', return_value=subprocess.CompletedProcess([], 1, '', '')), \
                 patch.object(cli, 'run') as attach, patch.object(cli.os, 'kill') as kill:
-            with self.assertRaisesRegex(ValueError, 'Cancelled'):
+            with self.assertRaisesRegex(cli.Cancelled, 'Cancelled'):
                 cli.close_holders(held)
         kill.assert_not_called()
         self.assertIn('attach-desktop', attach.call_args.args[0])

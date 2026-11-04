@@ -4,6 +4,15 @@
   personal.desktop.enable = true;
   # Matches plasma in system.yml.
   personal.desktop.plasma = true;
+  # The built-in touchpad scrolls naturally, as it did under GNOME; the mouse keeps wheel scrolling.
+  programs.plasma.input.touchpads = [
+    {
+      name = "ELAN06FA:00 04F3:327E Touchpad";
+      vendorId = "04f3";
+      productId = "327e";
+      naturalScroll = true;
+    }
+  ];
   # Z: in the Windows VM (windows_share in system.yml).
   personal.desktop.copyqShare = "${config.home.homeDirectory}/Shared/.copyq";
   # Must match the running Ubuntu driver (/proc/driver/nvidia/version, nvidia_driver_package

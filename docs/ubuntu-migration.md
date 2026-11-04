@@ -575,7 +575,10 @@ GNOME stays installed, so the session is chosen at login and the trial is revers
 
 - **Packages (done 2026-11-04):** `plasma: true` in the laptop profile installs
   `kde-plasma-desktop`, `kde-spectacle` and `qt-style-kvantum` without Recommends,
-  which would pull in SDDM and take over from GDM. `kubuntu-desktop` is avoided for
+  which would pull in SDDM and take over from GDM. The recommended parts a working
+  desktop needs are listed explicitly (added 2026-11-04, after the brightness keys did
+  nothing): PowerDevil, volume, network, KScreen, Bluetooth, System Settings, the KDE
+  portal, KIO extras and the GTK style module. `kubuntu-desktop` is avoided for
   the same reason and for its whole Kubuntu app set. GDM stays the display manager.
 - **Session (default since 2026-11-04):** the laptop already runs `desktop_session: wayland` (GNOME 50 has
   no Xorg session), so Plasma's Wayland session appears in GDM as soon as it is
@@ -609,10 +612,17 @@ GNOME stays installed, so the session is chosen at login and the trial is revers
   from the Fluent icon theme's source. Inactive windows show at 92% opacity. One
   translucent bottom panel holds the launcher, the task manager (file manager,
   browser and the Windows launchers pinned) and, on the right, only three widgets:
-  `tech.shmuel.battery` (visible only while on battery), `tech.shmuel.clock` and
-  notifications. There is no system tray, so applications' tray icons (CopyQ,
-  Claude) do not appear; volume, network and the keyboard layout have no
-  indicator. The clock's popup is a month view with event dots and the selected
+  `tech.shmuel.battery` (visible only while on battery), the keyboard layout as a
+  label (click or Meta+Space switches between English and Hebrew),
+  `tech.shmuel.clock` and notifications. There is no system tray, so applications'
+  tray icons (CopyQ, Claude) do not appear; volume and network have no indicator.
+  The launcher, `tech.shmuel.kickoff`, is Plasma 6.6.6's Kickoff with the Places
+  tab removed and every session and power action under one Power menu; it is pinned
+  to Ubuntu's Plasma version, so rebuild it from the new tarball after a Plasma
+  upgrade. Title bars show Windows' minimize, maximize and close on the right. Icons
+  are Fluent-dark without its application set (`Fluent-dark-real-apps`), so apps such
+  as Chrome keep their own icons. Windows are 30% and menus 15% see-through, Dolphin
+  included. The touchpad scrolls naturally; mice keep wheel scrolling. The clock's popup is a month view with event dots and the selected
   day's Google Calendar events (click opens the event, a camera button joins its
   Meet). `spawnkit-calendar sync` copies the calendars Google Calendar shows,
   from a month back to three months ahead, through the personal-secrets Google
@@ -620,9 +630,12 @@ GNOME stays installed, so the session is chosen at login and the trial is revers
   it every 15 minutes, and `events --from --to` and `status` print JSON from that
   copy, which the clock reads. KZones adds Windows-style snap layouts while
   dragging a window to the top; Meta+Up maximizes, Meta+Down minimizes and
-  Meta+Left/Right keep KWin's half tiling. The screen never locks on idle or on
-  waking from sleep, in Plasma and GNOME; PowerDevil is not installed, so Plasma
-  never suspends or ends the session either. plasma-manager's layout scripts call
+  Meta+Left/Right keep KWin's half tiling. `spawnkitsnapassist`, a KWin script, is
+  Windows' Snap Assist: once a window fills half the screen, the other windows on
+  that screen show as thumbnails over the free half; clicking one snaps it there,
+  Escape or a click outside dismisses them. Spectacle shows no notifications, and
+  cancelling the Windows VM's RTX handoff ends quietly. The screen never locks on idle or on
+  waking from sleep, in Plasma and GNOME, and PowerDevil never suspends on idle. plasma-manager's layout scripts call
   `qdbus`, so the profile provides one that runs Ubuntu's `qdbus6`; the panel
   script runs again at the next login only when the declared panel changes.
 - **Theme trial:** a Plasma theme applies to the whole session; it cannot differ

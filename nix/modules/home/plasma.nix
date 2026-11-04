@@ -80,11 +80,12 @@ let
     (theme "arc-dark" "Arc Dark" "dark" "varlesh" "com.github.varlesh.arc-dark" "ArcDark" "Arc-Dark" "The classic Arc look with transparent elements.")
     (theme "materia-dark" "Materia Dark" "dark" "varlesh" "com.github.varlesh.materia-dark" "MateriaDark" "Materia-Dark" "Google Material Design, dark.")
   ];
-  # Layan Dark with see-through Qt windows and menus; KWin's blur shows the wallpaper through.
+  # Layan Dark with see-through Qt windows (Dolphin's file view included) and menus; KWin's
+  # blur shows the wallpaper through.
   layanGlass = pkgs.runCommand "kvantum-layan-glass" { } ''
     mkdir -p $out/share/Kvantum/LayanGlass
     cp ${layan}/share/Kvantum/Layan/LayanDark.svg $out/share/Kvantum/LayanGlass/LayanGlass.svg
-    sed -e 's/^reduce_window_opacity=.*/reduce_window_opacity=15/' -e 's/^reduce_menu_opacity=.*/reduce_menu_opacity=10/' \
+    sed -e 's/^reduce_window_opacity=.*/reduce_window_opacity=30/' -e 's/^reduce_menu_opacity=.*/reduce_menu_opacity=15/' \
       ${layan}/share/Kvantum/Layan/LayanDark.kvconfig > $out/share/Kvantum/LayanGlass/LayanGlass.kvconfig
   '';
   # Windows 11 style cursors, which the Fluent icon theme's source ships prebuilt but nixpkgs
@@ -94,6 +95,21 @@ let
     cp -r ${pkgs.fluent-icon-theme.src}/cursors/dist $out/share/icons/Fluent-cursors
     chmod -R u+w $out
     sed -i 's/^Name=.*/Name=Fluent Cursors/' $out/share/icons/Fluent-cursors/index.theme
+  '';
+  # Fluent's dark Windows 11 style icons for folders, devices and actions, with each application's
+  # own icon: Fluent's restyled app icons (a flat Chrome, for one) are left out.
+  fluentRealApps = pkgs.runCommand "fluent-dark-real-apps" { } ''
+    src=${pkgs.fluent-icon-theme}/share/icons/Fluent-dark
+    dest=$out/share/icons/Fluent-dark-real-apps
+    for dir in $(cd $src && find -L . -mindepth 2 -maxdepth 2 -type d ! -name apps); do
+      mkdir -p $dest/$(dirname $dir)
+      ln -s $(readlink -f $src/$dir) $dest/$dir
+    done
+    for dir in $(cd $src && find -L . -mindepth 2 -maxdepth 2 -type d -path './symbolic/apps'); do
+      ln -s $(readlink -f $src/$dir) $dest/$dir
+    done
+    sed -e 's/^Name=.*/Name=Fluent dark (application icons)/' -e 's/^Inherits=.*/Inherits=hicolor,breeze-dark/' \
+      $src/index.theme > $dest/index.theme
   '';
   # Reads the Google calendars into a local copy for the panel clock (tech.shmuel.clock).
   calendarSync = pkgs.writers.writePython3Bin "spawnkit-calendar" {
@@ -110,6 +126,48 @@ let
         name: "substituteInPlace $out/share/plasma/plasmoids/${id}/contents/ui/main.qml --replace-fail @${name}@ ${substitutions.${name}}\n"
       ) (builtins.attrNames substitutions)}
     '';
+  # Plasma's Start menu (Kickoff) without its Places tab, which it has no option to hide. Kickoff
+  # is pure QML compiled into a plugin; this repackages that QML as a plain plasmoid. Pinned to
+  # Ubuntu's Plasma (6.6.6): move it with Ubuntu's Plasma, whose private QML modules it imports.
+  kickoffWidget =
+    let
+      id = "tech.shmuel.kickoff";
+      plasmaDesktop = pkgs.fetchurl {
+        url = "mirror://kde/stable/plasma/6.6.6/plasma-desktop-6.6.6.tar.xz";
+        hash = "sha256-268SrI3PihK6PqCXwR5x6Ea+SzZzfvYkIOEc83pPY44=";
+      };
+    in
+    pkgs.runCommand id { nativeBuildInputs = [ pkgs.jq ]; } ''
+      tar -xJf ${plasmaDesktop} plasma-desktop-6.6.6/applets/kickoff
+      src=plasma-desktop-6.6.6/applets/kickoff
+      patch -d $src -p1 < ${./plasma-kickoff.patch}
+      dest=$out/share/plasma/plasmoids/${id}
+      mkdir -p $dest/contents/ui/code $dest/contents/config
+      cp $src/*.qml $dest/contents/ui/
+      mv $dest/contents/ui/config.qml $dest/contents/config/
+      cp $src/main.xml $dest/contents/config/
+      cp $src/code/tools.js $dest/contents/ui/code/
+      # The plugin build registers these two as singletons; a plain directory needs a qmldir.
+      (
+        cd $dest/contents/ui
+        for f in *.qml; do
+          case $f in
+            main.qml) ;;
+            KickoffSingleton.qml|ActionMenu.qml) echo "singleton ''${f%.qml} 1.0 $f" ;;
+            *) echo "''${f%.qml} 1.0 $f" ;;
+          esac
+        done
+      ) > $dest/contents/ui/qmldir
+      jq --arg id ${id} '.KPackageStructure = "Plasma/Applet"
+        | .KPlugin |= (with_entries(select(.key | startswith("Name[") | not)) | .Id = $id | .Name = "Start menu")' \
+        $src/metadata.json > $dest/metadata.json
+    '';
+  # Windows' Snap Assist (kwin-snap-assist/contents/ui/main.qml): after a window snaps to half
+  # the screen, the other windows are offered for the free half.
+  snapAssist = pkgs.runCommand "kwin-snap-assist" { } ''
+    mkdir -p $out/share/kwin/scripts
+    cp -r ${./kwin-snap-assist} $out/share/kwin/scripts/spawnkitsnapassist
+  '';
   batteryWidget = plasmoid "tech.shmuel.battery" ./plasma-battery { };
   clockWidget = plasmoid "tech.shmuel.clock" ./plasma-clock { calendar = "${calendarSync}/bin/spawnkit-calendar"; };
   plasmaTheme = pkgs.writers.writePython3Bin "spawnkit-plasma-theme" {
@@ -128,14 +186,11 @@ in
   config = lib.mkIf (config.personal.desktop.enable && config.personal.desktop.plasma) {
     programs.plasma = {
       enable = true;
-      # English and Hebrew keyboard layouts; Super+Space switches, as on GNOME.
-      input.keyboard = {
-        layouts = [
-          { layout = "us"; }
-          { layout = "il"; }
-        ];
-        options = [ "grp:win_space_toggle" ];
-      };
+      # English and Hebrew keyboard layouts; Super+Space switches (shortcuts below), as on GNOME.
+      input.keyboard.layouts = [
+        { layout = "us"; }
+        { layout = "il"; }
+      ];
       # Print selects a region; nothing is taken until Enter, which copies it to the
       # clipboard and closes Spectacle without saving a file.
       spectacle.shortcuts = {
@@ -147,7 +202,7 @@ in
         colorScheme = "Layan";
         theme = "Layan";
         widgetStyle = "kvantum";
-        iconTheme = "Fluent-dark";
+        iconTheme = "Fluent-dark-real-apps";
         cursor = {
           theme = "Fluent-cursors";
           size = 24;
@@ -159,12 +214,16 @@ in
         wallpaper = "${layan}/share/wallpapers/Layan/contents/images/2560x1440.png";
       };
       # The session stays unlocked until an explicit lock or log out: no idle lock and no lock on
-      # waking from sleep. Without PowerDevil, Plasma never suspends or ends the session itself.
+      # waking from sleep. PowerDevil (brightness keys, power) never suspends on idle either;
+      # it still dims and turns off an idle screen.
       kscreenlocker = {
         autoLock = false;
         lockOnResume = false;
         timeout = 0;
       };
+      powerdevil = lib.genAttrs [ "AC" "battery" "lowBattery" ] (_: {
+        autoSuspend.action = "nothing";
+      });
       configFile."Kvantum/kvantum.kvconfig".General.theme = "LayanGlass";
       kwin.effects = {
         blur.enable = true;
@@ -179,7 +238,15 @@ in
           height = 44;
           opacity = "translucent";
           widgets = [
-            "org.kde.plasma.kickoff"
+            {
+              name = "tech.shmuel.kickoff";
+              # No power buttons: sleep, restart, shut down and the session actions share
+              # one Power menu.
+              config.General = {
+                primaryActions = 1;
+                systemFavorites = "";
+              };
+            }
             {
               iconTasks.launchers = [
                 "preferred://filemanager"
@@ -189,6 +256,8 @@ in
             }
             "org.kde.plasma.marginsseparator"
             "tech.shmuel.battery"
+            # The current layout; clicking it switches, and its menu picks one.
+            { keyboardLayout.displayStyle = "label"; }
             "tech.shmuel.clock"
             "org.kde.plasma.notifications"
           ];
@@ -197,7 +266,10 @@ in
       # Windows-style snapping: KWin's drag-to-edge halves and corner quarters, KZones' snap
       # layouts while dragging a window to the top, and Windows' Meta+arrow keys.
       configFile.kwinrc = {
-        Plugins.kzonesEnabled = true;
+        Plugins = {
+          kzonesEnabled = true;
+          spawnkitsnapassistEnabled = true;
+        };
         Effect-translucency = {
           Inactive = 92;
           MoveResize = 80;
@@ -208,6 +280,16 @@ in
         "Window Minimize" = "Meta+Down";
         "Window Quick Tile Top" = [ ];
         "Window Quick Tile Bottom" = [ ];
+        # KZones registers its actions in KWin's component and claims Super+Space by default;
+        # the layout switcher gets it instead.
+        "KZones: Snap all windows" = [ ];
+      };
+      shortcuts."KDE Keyboard Layout Switcher"."Switch to Next Keyboard Layout" = "Meta+Space";
+      # Windows' title bar buttons: the window menu on the left, minimize, maximize and
+      # close on the right (Layan's Aurorae theme defaults to macOS' left-hand set).
+      kwin.titlebarButtons = {
+        left = [ "more-window-actions" ];
+        right = [ "minimize" "maximize" "close" ];
       };
       configFile.spectaclerc = {
         General = {
@@ -217,7 +299,16 @@ in
         };
         GuiConfig.quitAfterSaveCopyExport = true;
       };
+      # Spectacle announces nothing: no popup for a copied, saved or recorded capture.
+      configFile."spectacle.notifyrc" = lib.genAttrs [
+        "Event/newScreenshotSaved"
+        "Event/recordingSaved"
+        "Event/ocrTextExtracted"
+      ] (_: { Action = ""; });
     };
+    # GTK and Chromium apps draw their own title bars from this layout; Plasma's GTK sync
+    # copies it from KWin's buttons, but it starts from whatever GNOME left.
+    dconf.settings."org/gnome/desktop/wm/preferences".button-layout = "appmenu:minimize,maximize,close";
     # Theme trial (migration D7): spawnkit-plasma-theme gallery applies these live; pin the
     # winner here. Their Kvantum themes use Ubuntu's Kvantum, which matches Plasma's Qt.
     home.packages = with pkgs; [
@@ -255,8 +346,11 @@ in
       # The pinned look and panel.
       layanGlass
       fluent-icon-theme
+      fluentRealApps
       fluentCursors
       kdePackages.kzones
+      kickoffWidget
+      snapAssist
       batteryWidget
       clockWidget
       calendarSync

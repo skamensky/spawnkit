@@ -235,6 +235,10 @@ def release(holder):
     return "service"
 
 
+class Cancelled(Exception):
+    """The user dismissed a dialog; nothing failed, so nothing is reported."""
+
+
 def ui_dialog(name, data):
     """Show a Spawnkit dialog (scripts/spawnkit-ui) and return its result, or None if dismissed."""
     shown = subprocess.run(["/usr/bin/python3", "-I", str(Path(__file__).with_name("spawnkit-ui.py")), name],
@@ -258,7 +262,7 @@ def close_holders(held, offer_without_rtx=False):
     picked = ui_dialog("rtx-holders", {"holders": holders, "without_rtx": offer_without_rtx})
     if picked is None:
         run([*GUARD, "attach-desktop"])
-        raise ValueError("Cancelled; the RTX stays with Linux")
+        raise Cancelled("Cancelled; the RTX stays with Linux")
     if picked["action"] == "without_rtx":
         return None
     closable = {h["pid"] for h in held if h["closable"]}
@@ -485,6 +489,8 @@ def main():
                 if args.ask_become_pass:
                     command.append("--ask-become-pass")
                 playbook(repo, data, command)
+    except Cancelled as cancelled:
+        parser.exit(1, f"host-config: {cancelled}\n")
     except (ValueError, OSError, subprocess.CalledProcessError) as error:
         details = error.stderr.strip() if isinstance(error, subprocess.CalledProcessError) and error.stderr else str(error)
         if args.notify and shutil.which('notify-send'):

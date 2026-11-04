@@ -1,0 +1,17 @@
+{
+  "KPlugin": {
+    "Authors": [{ "Name": "Shmuel Kamensky" }],
+    "Category": "Window Management",
+    "Description": "After a window snaps to half the screen, pick a window for the other half, as on Windows.",
+    "EnabledByDefault": false,
+    "Icon": "view-split-left-right",
+    "Id": "spawnkitsnapassist",
+    "License": "GPL-3.0+",
+    "Name": "Snap Assist",
+    "Version": "1.0"
+  },
+  "KPackageStructure": "KWin/Script",
+  "X-Plasma-API": "declarativescript",
+  "X-Plasma-API-Minimum-Version": "6.0",
+  "X-Plasma-MainScript": "ui/main.qml"
+}

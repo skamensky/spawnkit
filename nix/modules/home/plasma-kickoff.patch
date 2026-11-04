@@ -1,0 +1,41 @@
+--- a/Footer.qml
++++ b/Footer.qml
+@@ -40,7 +40,7 @@
+     PC3.TabBar {
+         id: tabBar
+ 
+-        property real tabWidth: Math.max(applicationsTab.implicitWidth, placesTab.implicitWidth)
++        property real tabWidth: applicationsTab.implicitWidth
+ 
+         focus: true
+ 
+@@ -104,18 +104,6 @@
+                     .forceActiveFocus(Qt.BacktabFocusReason)
+             }
+         }
+-        PC3.TabButton {
+-            id: placesTab
+-            width: tabBar.tabWidth
+-            anchors.top: tabBarListView.contentItem.top
+-            anchors.bottom: tabBarListView.contentItem.bottom
+-            anchors.topMargin: -root.topPadding
+-            anchors.bottomMargin: -root.bottomPadding
+-            icon.width: Kirigami.Units.iconSizes.smallMedium
+-            icon.height: Kirigami.Units.iconSizes.smallMedium
+-            icon.name: "compass"
+-            text: i18nc("@title:tab kickoff sidebar tab", "Places") //Explore? // qmllint disable unqualified
+-        }
+ 
+         Connections {
+             target: kickoff
+@@ -204,10 +192,4 @@
+         }
+     }
+ 
+-    Shortcut {
+-        sequences: ["Ctrl+Tab", "Ctrl+Shift+Tab", StandardKey.NextChild, StandardKey.PreviousChild]
+-        onActivated: {
+-            tabBar.currentIndex = (tabBar.currentIndex === 0) ? 1 : 0;
+-        }
+-    }
+ }
