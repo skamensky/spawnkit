@@ -36,6 +36,16 @@ windows_disk: /var/lib/libvirt/images/spawnkit-windows.qcow2
 windows_iso: ""
 virtio_iso: ""
 windows_video: vga
+# Unattended installation medium from `host-config guest-media`, attached as a third CD.
+windows_unattend_iso: ""
+# Guest identity for guest-media and guest-apply. The local account is cfg.user.
+windows_edition: Windows 11 Home
+windows_computer_name: spawnkit-win
+# Public key Linux uses for SSH (and Ansible) into the guest's administrator account.
+windows_authorized_key: ""
+# Virtual Display Driver monitor: the GPU it renders on (empty: the driver's default) and mode.
+windows_display_gpu: ""
+windows_display_mode: 1920x1080@60
 looking_glass_mib: 128
 looking_glass_name: spawnkit-windows
 # Fixed guest MAC and DHCP reservation give Linux a stable SSH address for Windows.

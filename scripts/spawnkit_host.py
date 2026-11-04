@@ -18,6 +18,13 @@ def selector():
     return module
 
 
+# Microsoft's generic installation keys: they select an edition but never activate Windows.
+WINDOWS_EDITIONS = {
+    "Windows 11 Home": "YTMG3-N6DKC-DKB77-7M9GH-8HVX7",
+    "Windows 11 Pro": "VK7JG-NPHTM-C97JM-9MPGT-3V66T",
+}
+
+
 def load_config(repo, profile, overrides=None):
     defaults = yaml.safe_load((repo / "hosts/default/system.yml").read_text())
     specific = repo / f"hosts/{profile}/system.yml"
@@ -32,7 +39,7 @@ def load_config(repo, profile, overrides=None):
     for key in ('gpu_devices', 'ssh_listen_addresses', 'base_packages', 'host_packages'):
         if not isinstance(cfg[key], list):
             raise ValueError(f'{key} must be a list')
-    for key in ('windows_name', 'looking_glass_name', 'network_name', 'network_bridge', 'windows_disk', 'windows_iso', 'virtio_iso', 'nvidia_driver_package', 'nvidia_prime', 'desktop_session', 'windows_uuid', 'network_uuid', 'windows_mac', 'windows_address', 'windows_share'):
+    for key in ('windows_name', 'looking_glass_name', 'network_name', 'network_bridge', 'windows_disk', 'windows_iso', 'virtio_iso', 'nvidia_driver_package', 'nvidia_prime', 'desktop_session', 'windows_uuid', 'network_uuid', 'windows_mac', 'windows_address', 'windows_share', 'windows_unattend_iso', 'windows_edition', 'windows_computer_name', 'windows_authorized_key', 'windows_display_gpu', 'windows_display_mode'):
         if not isinstance(cfg[key], str):
             raise ValueError(f'{key} must be a string')
     for key in ('base_packages', 'host_packages'):
@@ -109,7 +116,15 @@ def load_config(repo, profile, overrides=None):
             raise ValueError('windows_address must be a usable guest address within the declared network')
         if ipaddress.IPv4Address(cfg['network_dhcp_start']) <= address <= ipaddress.IPv4Address(cfg['network_dhcp_end']):
             raise ValueError('windows_address must lie outside the dynamic DHCP range')
-    for key in ("windows_disk", "windows_iso", "virtio_iso", "windows_share"):
+    if cfg['windows_edition'] not in WINDOWS_EDITIONS:
+        raise ValueError(f"windows_edition must be one of {', '.join(WINDOWS_EDITIONS)}")
+    if not re.fullmatch(r'[a-zA-Z0-9][a-zA-Z0-9-]{0,14}', cfg['windows_computer_name']) or cfg['windows_computer_name'].isdigit():
+        raise ValueError('windows_computer_name must be a NetBIOS name of at most 15 letters, digits or hyphens')
+    if not re.fullmatch(r'[1-9][0-9]{2,4}x[1-9][0-9]{2,4}@[1-9][0-9]{1,2}', cfg['windows_display_mode']):
+        raise ValueError('windows_display_mode must look like 2560x1600@60')
+    if any(c in cfg['windows_display_gpu'] for c in '<>&"\n\r\x00'):
+        raise ValueError('windows_display_gpu must be a plain device name')
+    for key in ("windows_disk", "windows_iso", "virtio_iso", "windows_share", "windows_unattend_iso", "windows_authorized_key"):
         if cfg[key] and (not Path(cfg[key]).is_absolute() or any(c in cfg[key] for c in "\n\r\x00<>\"'&") or ".." in Path(cfg[key]).parts):
             raise ValueError(f"{key} must be an absolute local path")
     if not cfg['windows_disk'].startswith('/var/lib/libvirt/images/'):
@@ -133,6 +148,31 @@ def inventory(repo, profile, cfg, revision):
             "spawnkit_revision": revision, "cfg": cfg,
         }}}
     }
+
+
+def guest_inventory(cfg, known_hosts, share_owner):
+    """Ansible inventory reaching the Windows guest over SSH, its host key pinned in known_hosts."""
+    return {
+        "all": {"hosts": {"windows": {
+            "ansible_host": cfg["windows_address"], "ansible_user": cfg["user"],
+            "ansible_connection": "ssh", "ansible_shell_type": "powershell",
+            "ansible_ssh_common_args": f"-o UserKnownHostsFile={known_hosts} -o StrictHostKeyChecking=yes",
+            "windows_share_uid": share_owner[0], "windows_share_gid": share_owner[1], "cfg": cfg,
+        }}}
+    }
+
+
+def bootstrap_settings(cfg, authorized_key):
+    net = ipaddress.IPv4Network(f"{cfg['network_address']}/{cfg['network_netmask']}", strict=False)
+    return {"authorized_key": authorized_key.strip(), "network": str(net)}
+
+
+def render_unattend(repo, cfg):
+    env = Environment(
+        loader=FileSystemLoader(str(repo / "ansible/roles/windows_guest/templates")),
+        undefined=StrictUndefined, autoescape=True, keep_trailing_newline=True,
+    )
+    return env.get_template("autounattend.xml.j2").render(cfg=cfg, product_key=WINDOWS_EDITIONS[cfg["windows_edition"]])
 
 
 def render_windows(repo, cfg):

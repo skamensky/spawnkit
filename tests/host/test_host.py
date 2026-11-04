@@ -12,7 +12,7 @@ import xml.etree.ElementTree as ET
 
 ROOT = Path(os.environ.get('SPAWNKIT_REPO', Path(__file__).resolve().parents[2]))
 sys.path.insert(0, str(ROOT / 'scripts'))
-from spawnkit_host import load_config, render_windows, selector
+from spawnkit_host import bootstrap_settings, guest_inventory, load_config, render_unattend, render_windows, selector
 
 
 def module(name, path):
@@ -35,6 +35,62 @@ def gpu_config():
 def holder(pid, name='python3', closable=True):
     return {'pid': pid, 'name': name, 'command': f'{name} job', 'uid': os.getuid(), 'closable': closable}
 
+UNATTEND = '{urn:schemas-microsoft-com:unattend}'
+
+
+class Guest(unittest.TestCase):
+    def test_unattend_installs_the_edition_for_a_passwordless_administrator(self):
+        cfg = gpu_config()
+        tree = ET.fromstring(render_unattend(ROOT, cfg))
+        self.assertEqual(tree.findtext(f'.//{UNATTEND}MetaData/{UNATTEND}Value'), 'Windows 11 Home')
+        self.assertEqual(tree.findtext(f'.//{UNATTEND}ProductKey/{UNATTEND}Key'), 'YTMG3-N6DKC-DKB77-7M9GH-8HVX7')
+        self.assertEqual(tree.findtext(f'.//{UNATTEND}ComputerName'), 'ShmuelWIndows')
+        account = tree.find(f'.//{UNATTEND}LocalAccount')
+        self.assertEqual((account.findtext(f'{UNATTEND}Name'), account.findtext(f'{UNATTEND}Group')), ('shmuel', 'Administrators'))
+        self.assertEqual(account.findtext(f'{UNATTEND}Password/{UNATTEND}Value'), '')
+        keys = [e.get('{http://schemas.microsoft.com/WMIConfig/2002/State}keyValue') for e in tree.iter(f'{UNATTEND}PathAndCredentials')]
+        self.assertEqual(len(keys), len(set(keys)))
+        self.assertIn('E:\\viostor\\w11\\amd64', [e.findtext(f'{UNATTEND}Path') for e in tree.iter(f'{UNATTEND}PathAndCredentials')])
+        commands = [e.findtext(f'{UNATTEND}CommandLine') for e in tree.iter(f'{UNATTEND}SynchronousCommand')]
+        self.assertTrue(commands[0].endswith('virtio-win-guest-tools.exe /install /quiet /norestart'))
+        self.assertIn('spawnkit\\bootstrap.ps1', commands[1])
+
+    def test_bootstrap_admits_only_the_vm_network(self):
+        self.assertEqual(bootstrap_settings(gpu_config(), 'ssh-rsa AAAA user\n'),
+                         {'authorized_key': 'ssh-rsa AAAA user', 'network': '192.168.123.0/24'})
+
+    def test_guest_inventory_pins_the_host_key(self):
+        cfg = gpu_config()
+        host_vars = guest_inventory(cfg, '/run/known_hosts', (1000, 1000))['all']['hosts']['windows']
+        self.assertEqual((host_vars['ansible_host'], host_vars['ansible_user'], host_vars['ansible_shell_type']), ('192.168.123.10', 'shmuel', 'powershell'))
+        self.assertIn('UserKnownHostsFile=/run/known_hosts -o StrictHostKeyChecking=yes', host_vars['ansible_ssh_common_args'])
+
+    def test_known_host_comes_from_the_guest_agent(self):
+        cfg = gpu_config()
+        with patch.object(cli, 'guest_run', return_value=(0, 'ssh-ed25519 AAAAkey windows\r\n', '')):
+            self.assertEqual(cli.guest_known_hosts(cfg), '192.168.123.10 ssh-ed25519 AAAAkey\n')
+        with patch.object(cli, 'guest_run', return_value=(1, '', 'missing')), self.assertRaises(ValueError):
+            cli.guest_known_hosts(cfg)
+
+    def test_unattend_medium_is_attached_as_a_third_cd(self):
+        tree = ET.fromstring(render_windows(ROOT, gpu_config() | {'windows_unattend_iso': '/var/lib/libvirt/images/unattend.iso'}))
+        media = {d.find('target').get('dev'): d.find('source').get('file') for d in tree.iterfind("./devices/disk[@device='cdrom']")}
+        self.assertEqual(media['sdc'], '/var/lib/libvirt/images/unattend.iso')
+
+    @unittest.skipUnless(cli.shutil.which('xorriso'), 'xorriso is unavailable')
+    def test_guest_media_carries_answer_file_and_bootstrap(self):
+        with tempfile.TemporaryDirectory() as temp:
+            key = Path(temp) / 'key.pub'
+            key.write_text('ssh-ed25519 AAAAtest user\n')
+            iso = Path(temp) / 'unattend.iso'
+            cli.guest_media(ROOT, gpu_config() | {'windows_authorized_key': str(key)}, iso)
+            subprocess.run(['xorriso', '-osirrox', 'on', '-indev', str(iso), '-extract', '/', f'{temp}/out'], check=True, capture_output=True)
+            settings = json.loads(Path(temp, 'out/spawnkit/bootstrap.json').read_text())
+            self.assertEqual(settings['authorized_key'], 'ssh-ed25519 AAAAtest user')
+            self.assertTrue(Path(temp, 'out/autounattend.xml').is_file())
+            self.assertTrue(Path(temp, 'out/spawnkit/bootstrap.ps1').is_file())
+
+
 class Configuration(unittest.TestCase):
     def test_unknown_hosts_have_base_only_profile(self):
         registry = json.loads((ROOT / 'hosts/registry.json').read_text())
@@ -52,7 +108,10 @@ class Configuration(unittest.TestCase):
                          {'desktop_session': 'xorg'}, {'windows_mac': '52:54:00:AA:00:01'},
                          {'windows_address': '192.168.123.10'},
                          {'windows_mac': '52:54:00:aa:00:01', 'windows_address': '192.168.123.50'},
-                         {'windows_share': 'relative/share'}, {'windows_vcpus': 7}):
+                         {'windows_share': 'relative/share'}, {'windows_vcpus': 7},
+                         {'windows_edition': 'Windows 11 Ultimate'}, {'windows_computer_name': 'name-longer-than-15'},
+                         {'windows_computer_name': 'bad name'}, {'windows_display_mode': '2560x1600'},
+                         {'windows_display_gpu': 'a<b'}, {'windows_authorized_key': 'id_rsa.pub'}):
             with self.subTest(settings=settings), self.assertRaises(ValueError):
                 load_config(ROOT, 'default', settings)
 

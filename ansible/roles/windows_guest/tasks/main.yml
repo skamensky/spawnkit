@@ -1,0 +1,184 @@
+---
+- name: Create the download cache
+  ansible.windows.win_file:
+    path: '{{ windows_guest_cache }}'
+    state: directory
+  # The cache is not managed state: filling it lets plan inspect the pinned packages.
+  check_mode: false
+- name: Download pinned installers
+  ansible.windows.win_get_url:
+    url: '{{ item.value.url }}'
+    dest: '{{ windows_guest_cache }}\{{ item.value.file }}'
+    checksum: '{{ item.value.sha256 }}'
+    checksum_algorithm: sha256
+  loop: '{{ windows_guest_pins | dict2items }}'
+  loop_control:
+    label: '{{ item.value.file }}'
+  check_mode: false
+- name: Unpack pinned archives
+  ansible.windows.win_powershell:
+    parameters:
+      Archive: '{{ windows_guest_cache }}\{{ windows_guest_pins[item].file }}'
+    script: |
+      [CmdletBinding(SupportsShouldProcess)]
+      param([string]$Archive)
+      $ErrorActionPreference = 'Stop'
+      $WhatIfPreference = $false
+      $Ansible.Changed = $false
+      $destination = $Archive -replace '\.zip$', ''
+      if (-not (Test-Path $destination)) {
+          $Ansible.Changed = $true
+          if (-not $Ansible.CheckMode) { Expand-Archive $Archive $destination }
+      }
+  loop: [looking_glass, virtual_display]
+  check_mode: false
+
+- name: Install virtio drivers, the QEMU guest agent and the SPICE agent
+  ansible.windows.win_package:
+    path: '{{ windows_guest_cache }}\{{ windows_guest_pins.virtio_tools.file }}'
+    product_id: '{{ windows_guest_pins.virtio_tools.product_id }}'
+    arguments: /install /quiet /norestart
+- name: Install WinFsp for the virtiofs share
+  ansible.windows.win_package:
+    path: '{{ windows_guest_cache }}\{{ windows_guest_pins.winfsp.file }}'
+    arguments: /norestart
+- name: Mount the host share with the host user's ownership
+  ansible.windows.win_regedit:
+    path: HKLM:\SOFTWARE\VirtIO-FS
+    name: '{{ item.name }}'
+    data: '{{ item.data }}'
+    type: dword
+  loop:
+    - {name: OverrideUid, data: '{{ windows_share_uid }}'}
+    - {name: OverrideGid, data: '{{ windows_share_gid }}'}
+  when: cfg.windows_share | length > 0
+- name: Mount the host share at boot
+  ansible.windows.win_service:
+    name: VirtioFsSvc
+    start_mode: auto
+    state: started
+  when: cfg.windows_share | length > 0
+- name: Install Tailscale
+  ansible.windows.win_package:
+    path: '{{ windows_guest_cache }}\{{ windows_guest_pins.tailscale.file }}'
+    creates_service: Tailscale
+    arguments: /norestart
+
+- name: Install the Virtual Display Driver files
+  ansible.windows.win_powershell:
+    parameters:
+      Source: '{{ windows_guest_cache }}\{{ windows_guest_pins.virtual_display.file | regex_replace("\.zip$", "") }}\VirtualDisplayDriver'
+    script: |
+      [CmdletBinding(SupportsShouldProcess)]
+      param([string]$Source)
+      $ErrorActionPreference = 'Stop'
+      $WhatIfPreference = $false
+      $Ansible.Changed = $false
+      $target = 'C:\VirtualDisplayDriver'
+      if (-not $Ansible.CheckMode) { New-Item -ItemType Directory $target -Force | Out-Null }
+      foreach ($name in 'mttvdd.cat', 'MttVDD.dll', 'MttVDD.inf') {
+          $installed = Join-Path $target $name
+          if (-not (Test-Path $installed) -or (Get-FileHash $installed).Hash -ne (Get-FileHash (Join-Path $Source $name)).Hash) {
+              $Ansible.Changed = $true
+              if (-not $Ansible.CheckMode) { Copy-Item (Join-Path $Source $name) $installed -Force }
+          }
+      }
+  notify: Restart the virtual display
+- name: Configure the virtual monitor
+  ansible.windows.win_powershell:
+    parameters:
+      Source: '{{ windows_guest_cache }}\{{ windows_guest_pins.virtual_display.file | regex_replace("\.zip$", "") }}\VirtualDisplayDriver\vdd_settings.xml'
+      Gpu: '{{ cfg.windows_display_gpu }}'
+      Mode: '{{ cfg.windows_display_mode }}'
+    script: |
+      [CmdletBinding(SupportsShouldProcess)]
+      param([string]$Source, [string]$Gpu, [string]$Mode)
+      $ErrorActionPreference = 'Stop'
+      $WhatIfPreference = $false
+      $Ansible.Changed = $false
+      $width, $rest = $Mode -split 'x'
+      $height, $rate = $rest -split '@'
+      [xml]$settings = Get-Content $Source
+      if ($Gpu) { $settings.vdd_settings.gpu.friendlyname = $Gpu }
+      $resolutions = $settings.vdd_settings.SelectSingleNode('resolutions')
+      $resolutions.RemoveAll()
+      $resolution = $resolutions.AppendChild($settings.CreateElement('resolution'))
+      foreach ($pair in ('width', $width), ('height', $height), ('refresh_rate', $rate)) {
+          $resolution.AppendChild($settings.CreateElement($pair[0])).InnerText = $pair[1]
+      }
+      $rendered = New-Object IO.MemoryStream
+      $settings.Save([IO.Stream]$rendered)
+      $installed = 'C:\VirtualDisplayDriver\vdd_settings.xml'
+      if (-not (Test-Path $installed) -or (Get-FileHash $installed).Hash -ne (Get-FileHash -InputStream ([IO.MemoryStream]::new($rendered.ToArray()))).Hash) {
+          $Ansible.Changed = $true
+          if (-not $Ansible.CheckMode) { [IO.File]::WriteAllBytes($installed, $rendered.ToArray()) }
+      }
+  notify: Restart the virtual display
+- name: Trust the Virtual Display Driver's signer for driver installation
+  ansible.windows.win_powershell:
+    script: |
+      [CmdletBinding(SupportsShouldProcess)]
+      param()
+      $ErrorActionPreference = 'Stop'
+      $WhatIfPreference = $false
+      $Ansible.Changed = $false
+      $signature = Get-AuthenticodeSignature 'C:\VirtualDisplayDriver\mttvdd.cat'
+      if ($signature.Status -ne 'Valid') { throw "Driver catalog signature is $($signature.Status)" }
+      if (-not (Test-Path "Cert:\LocalMachine\TrustedPublisher\$($signature.SignerCertificate.Thumbprint)")) {
+          $Ansible.Changed = $true
+          if (-not $Ansible.CheckMode) {
+              $store = New-Object Security.Cryptography.X509Certificates.X509Store 'TrustedPublisher', 'LocalMachine'
+              $store.Open('ReadWrite'); $store.Add($signature.SignerCertificate); $store.Close()
+          }
+      }
+- name: Create the virtual monitor device
+  ansible.windows.win_powershell:
+    script: "{{ lookup('ansible.builtin.file', 'virtual-display-device.ps1') }}"
+  notify: Restart Looking Glass
+
+- name: Install the Looking Glass host
+  ansible.windows.win_package:
+    path: '{{ windows_guest_cache }}\{{ windows_guest_pins.looking_glass.file | regex_replace("\.zip$", "") }}\looking-glass-host-setup.exe'
+    product_id: Looking Glass (host)
+    arguments: /S
+- name: Keep guest services running
+  ansible.windows.win_service:
+    name: '{{ item }}'
+    start_mode: auto
+    state: started
+  loop: [sshd, QEMU-GA, spice-agent, Looking Glass (host)]
+
+# The Linux session lock protects the VM, so Windows signs in by itself and never locks.
+- name: Sign in automatically
+  ansible.windows.win_regedit:
+    path: HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon
+    name: '{{ item.name }}'
+    data: '{{ item.data }}'
+    type: string
+  loop:
+    - {name: AutoAdminLogon, data: '1'}
+    - {name: DefaultUserName, data: '{{ cfg.user }}'}
+    - {name: DefaultPassword, data: ''}
+    - {name: DefaultDomainName, data: '{{ cfg.windows_computer_name | upper }}'}
+- name: Hide the lock screen
+  ansible.windows.win_regedit:
+    path: HKLM:\SOFTWARE\Policies\Microsoft\Windows\Personalization
+    name: NoLockScreen
+    data: 1
+    type: dword
+- name: Never lock, blank the display or sleep on AC power
+  ansible.windows.win_powershell:
+    script: |
+      [CmdletBinding(SupportsShouldProcess)]
+      param()
+      $ErrorActionPreference = 'Stop'
+      $WhatIfPreference = $false
+      $Ansible.Changed = $false
+      foreach ($setting in ('SUB_NONE', 'CONSOLELOCK'), ('SUB_VIDEO', 'VIDEOIDLE'), ('SUB_SLEEP', 'STANDBYIDLE')) {
+          $query = powercfg /qh SCHEME_CURRENT $setting[0] $setting[1] | Select-String 'Current AC Power Setting Index: (0x[0-9a-f]+)'
+          if ([Convert]::ToInt32($query.Matches[0].Groups[1].Value, 16) -ne 0) {
+              $Ansible.Changed = $true
+              if (-not $Ansible.CheckMode) { powercfg /setacvalueindex SCHEME_CURRENT $setting[0] $setting[1] 0 }
+          }
+      }
+      if ($Ansible.Changed -and -not $Ansible.CheckMode) { powercfg /setactive SCHEME_CURRENT }

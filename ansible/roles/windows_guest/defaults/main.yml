@@ -1,0 +1,27 @@
+---
+# Pinned guest software. Downloads are verified against these hashes before use;
+# updating one means changing its URL, hash and (for bundles) product_id together.
+windows_guest_cache: C:\ProgramData\spawnkit\cache
+windows_guest_pins:
+  virtio_tools:
+    url: https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/archive-virtio/virtio-win-0.1.302-1/virtio-win-guest-tools.exe
+    file: virtio-win-guest-tools-0.1.302.exe
+    sha256: d8ae9ea1e943384ac195e012cd36f82c3161620e5fc9529be4e42e6f420e222d
+    product_id: '{d76c31f9-9ea7-4266-bea9-a9875f742217}'
+  winfsp:
+    url: https://github.com/winfsp/winfsp/releases/download/v2.1/winfsp-2.1.25156.msi
+    file: winfsp-2.1.25156.msi
+    sha256: 073a70e00f77423e34bed98b86e600def93393ba5822204fac57a29324db9f7a
+  looking_glass:
+    url: https://looking-glass.io/artifact/B7/host
+    file: looking-glass-host-B7.zip
+    sha256: c2415a5a0c405f1d6aa936986bdd4b806c50574b4521747e113c3be2be047b1b
+  virtual_display:
+    url: https://github.com/VirtualDrivers/Virtual-Display-Driver/releases/download/25.7.23/VirtualDisplayDriver-x86.Driver.Only.zip
+    file: VirtualDisplayDriver-25.7.23.zip
+    sha256: e24210692b442b39af763536330ce78b423f19342b7a7792c26de3944e418b3a
+  # Tailscale updates itself after the first installation.
+  tailscale:
+    url: https://pkgs.tailscale.com/stable/tailscale-setup-1.104.5-amd64.msi
+    file: tailscale-setup-1.104.5-amd64.msi
+    sha256: 3c41318c83c5d95d0b017b1baa08ba7c99fd5334166122bbb1931e55af99839c

@@ -23,9 +23,9 @@
       <driver name='qemu' type='qcow2' discard='unmap'/>
       <source file='{{ cfg.windows_disk }}'/><target dev='vda' bus='virtio'/>
     </disk>
-{% for media in [cfg.windows_iso, cfg.virtio_iso] %}
+{% for media in [cfg.windows_iso, cfg.virtio_iso, cfg.windows_unattend_iso] %}
 {% if media %}
-    <disk type='file' device='cdrom'><driver name='qemu' type='raw'/><source file='{{ media }}'/><target dev='{{ "sda" if loop.index == 1 else "sdb" }}' bus='sata'/><readonly/></disk>
+    <disk type='file' device='cdrom'><driver name='qemu' type='raw'/><source file='{{ media }}'/><target dev='sd{{ "abc"[loop.index0] }}' bus='sata'/><readonly/></disk>
 {% endif %}
 {% endfor %}
     <controller type='usb' model='qemu-xhci'/>

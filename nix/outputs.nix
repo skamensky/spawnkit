@@ -138,6 +138,11 @@ in
       pkgs = pkgsFor system;
     in
     {
+      # Only the ansible.windows collection from the community bundle, for guest-apply.
+      ansible-windows = pkgs.runCommand "ansible-windows-collection" { } ''
+        mkdir -p "$out/ansible_collections/ansible"
+        cp -r ${pkgs.python3Packages.ansible}/${pkgs.python3.sitePackages}/ansible_collections/ansible/windows "$out/ansible_collections/ansible/"
+      '';
       home-config = pkgs.writeShellApplication {
         name = "home-config";
         runtimeInputs = [
@@ -159,8 +164,10 @@ in
           pkgs.python3Packages.ansible-core
           pkgs.libnotify
           pkgs.git
+          pkgs.xorriso
         ];
         text = ''
+          export ANSIBLE_COLLECTIONS_PATH=${self.packages.${system}.ansible-windows}
           exec python3 ${../scripts}/host-config.py "$@"
         '';
       };
@@ -222,10 +229,12 @@ in
               pkgs.python3Packages.ansible-core
               pkgs.libvirt
               pkgs.git
+              pkgs.xorriso
             ];
           }
           ''
             export HOME="$TMPDIR/home"
+            export ANSIBLE_COLLECTIONS_PATH=${self.packages.${system}.ansible-windows}
             mkdir -p "$HOME"
             cp -r ${../.} source
             chmod -R u+w source

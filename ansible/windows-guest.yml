@@ -1,0 +1,8 @@
+---
+# Run through `host-config guest-apply`, which pins the guest's SSH host key
+# through the QEMU guest agent and connects as the bootstrapped administrator.
+- name: Configure the Windows guest's software over SSH
+  hosts: windows
+  gather_facts: false
+  roles:
+    - role: windows_guest

@@ -1,0 +1,10 @@
+---
+- name: Restart the virtual display
+  ansible.windows.win_powershell:
+    script: |
+      Get-PnpDevice -PresentOnly | Where-Object { $_.HardwareID -contains 'Root\MttVDD' } | ForEach-Object { pnputil /restart-device $_.InstanceId | Out-Null }
+  notify: Restart Looking Glass
+- name: Restart Looking Glass
+  ansible.windows.win_service:
+    name: Looking Glass (host)
+    state: restarted

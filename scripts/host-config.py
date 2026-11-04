@@ -6,6 +6,7 @@ import base64
 import json
 import os
 from pathlib import Path
+import pwd
 import socket
 import sys
 import shutil
@@ -15,7 +16,7 @@ import tempfile
 import time
 import xml.etree.ElementTree as ET
 
-from spawnkit_host import inventory, load_config, read_overrides, render_windows, selector
+from spawnkit_host import bootstrap_settings, guest_inventory, inventory, load_config, read_overrides, render_unattend, render_windows, selector
 
 
 GPU_RESERVATION = Path("/run/spawnkit/gpu-owner.json")
@@ -29,8 +30,8 @@ def run(args, **kwargs):
     return subprocess.run(args, check=True, **kwargs)
 
 
-def guest_exec(name, script):
-    """Run PowerShell in the guest as SYSTEM through the QEMU guest agent; return its exit code."""
+def guest_run(name, script):
+    """Run PowerShell in the guest as SYSTEM through the QEMU guest agent; return exit code, stdout and stderr."""
     def agent(request):
         out = subprocess.check_output(["/usr/bin/virsh", "-c", "qemu:///system", "qemu-agent-command", name, json.dumps(request), "--timeout", "30"], text=True)
         return json.loads(out)["return"]
@@ -39,10 +40,49 @@ def guest_exec(name, script):
         "path": "powershell.exe", "arg": ["-NoProfile", "-NonInteractive", "-EncodedCommand", encoded], "capture-output": True}})["pid"]
     while not (status := agent({"execute": "guest-exec-status", "arguments": {"pid": pid}}))["exited"]:
         time.sleep(0.5)
-    for key, stream in (("out-data", sys.stdout), ("err-data", sys.stderr)):
-        if key in status:
-            stream.write(base64.b64decode(status[key]).decode("utf-8", "replace"))
-    return status.get("exitcode", 0)
+    out, err = (base64.b64decode(status.get(key, "")).decode("utf-8", "replace") for key in ("out-data", "err-data"))
+    return status.get("exitcode", 0), out, err
+
+
+def guest_exec(name, script):
+    code, out, err = guest_run(name, script)
+    sys.stdout.write(out)
+    sys.stderr.write(err)
+    return code
+
+
+def authorized_key(cfg):
+    if not cfg["windows_authorized_key"]:
+        raise ValueError("Set windows_authorized_key to the public key Linux uses for the guest")
+    return Path(cfg["windows_authorized_key"]).read_text()
+
+
+def guest_media(repo, cfg, output):
+    """Write the unattended installation CD: autounattend.xml and the Spawnkit bootstrap."""
+    with tempfile.TemporaryDirectory(prefix="spawnkit-unattend-") as temp:
+        root = Path(temp)
+        (root / "autounattend.xml").write_text(render_unattend(repo, cfg))
+        (root / "spawnkit").mkdir()
+        shutil.copy(repo / "ansible/roles/windows_guest/files/bootstrap.ps1", root / "spawnkit")
+        (root / "spawnkit/bootstrap.json").write_text(json.dumps(bootstrap_settings(cfg, authorized_key(cfg))))
+        run(["xorriso", "-as", "mkisofs", "-quiet", "-J", "-r", "-V", "SPAWNKIT_UNATTEND", "-o", str(output), str(root)])
+
+
+def guest_bootstrap(repo, cfg):
+    """Apply the first-access bootstrap to an installed guest through the QEMU guest agent."""
+    settings = bootstrap_settings(cfg, authorized_key(cfg))
+    quoted = {k: v.replace("'", "''") for k, v in settings.items()}
+    script = (repo / "ansible/roles/windows_guest/files/bootstrap.ps1").read_text()
+    return guest_exec(cfg["windows_name"], f"& {{\n{script}\n}} -AuthorizedKey '{quoted['authorized_key']}' -Network '{quoted['network']}'\n")
+
+
+def guest_known_hosts(cfg):
+    """The guest's SSH host key, read through the guest agent rather than trusted on first use."""
+    code, out, _ = guest_run(cfg["windows_name"], r"Get-Content $env:ProgramData\ssh\ssh_host_ed25519_key.pub")
+    fields = out.split()
+    if code or fields[:1] != ["ssh-ed25519"]:
+        raise ValueError("The guest has no OpenSSH host key; run guest-bootstrap first")
+    return f"{cfg['windows_address']} {fields[0]} {fields[1]}\n"
 
 
 def native_only():
@@ -152,13 +192,13 @@ def start_windows(name, notify, gui):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=["select", "inventory", "check", "render", "plan", "apply", "facts", "vm-define", "vm-start", "vm-stop", "vm-view", "vm-console", "vm-exec", "gpu-status", "gpu-holders", "gpu-release"])
+    parser.add_argument("action", choices=["select", "inventory", "check", "render", "plan", "apply", "facts", "vm-define", "vm-start", "vm-stop", "vm-view", "vm-console", "vm-exec", "gpu-status", "gpu-holders", "gpu-release", "guest-media", "guest-bootstrap", "guest-plan", "guest-apply"])
     parser.add_argument("--repo", type=Path, default=selector().default_repo(), help="Defaults to the enclosing checkout")
     parser.add_argument("--host", help="Explicit profile; normal selection shares the Home Manager registry")
     parser.add_argument("--hostname", default=socket.gethostname())
     parser.add_argument("--environment", choices=["linux", "wsl", "nixos"], default=selector().environment())
     parser.add_argument("--vars-file", type=Path, help="Local host setting overrides, e.g. installation media paths")
-    parser.add_argument("--output", type=Path, help="Output directory for render")
+    parser.add_argument("--output", type=Path, help="Output directory for render; ISO file for guest-media")
     parser.add_argument("--ask-become-pass", action="store_true")
     parser.add_argument("--notify", action="store_true", help="Also display desktop notifications for command failures")
     parser.add_argument("--gui", action="store_true", help="vm-start/vm-view: offer to close programs holding the RTX")
@@ -200,6 +240,28 @@ def main():
             (args.output / "windows.xml").write_text(xml)
             (args.output / "windows.json").write_text(json.dumps(cfg, indent=2) + "\n")
             print(args.output)
+        elif args.action == "guest-media":
+            if not args.output:
+                parser.error("guest-media requires --output")
+            guest_media(repo, cfg, args.output)
+            print(args.output)
+        elif args.action == "guest-bootstrap":
+            native_only()
+            raise SystemExit(guest_bootstrap(repo, cfg))
+        elif args.action in ("guest-plan", "guest-apply"):
+            native_only()
+            if not cfg["windows_address"]:
+                raise ValueError("Set windows_mac and windows_address so Ansible can reach the guest")
+            owner = pwd.getpwnam(cfg["user"])
+            with tempfile.TemporaryDirectory(prefix="spawnkit-guest-") as temp:
+                known_hosts = Path(temp) / "known_hosts"
+                known_hosts.write_text(guest_known_hosts(cfg))
+                path = Path(temp) / "inventory.json"
+                path.write_text(json.dumps(guest_inventory(cfg, known_hosts, (owner.pw_uid, owner.pw_gid))))
+                command = ["ansible-playbook", "-i", str(path), str(repo / "ansible/windows-guest.yml")]
+                if args.action == "guest-plan":
+                    command += ["--check", "--diff"]
+                run(command, env=os.environ | {"ANSIBLE_CONFIG": str(repo / "ansible/ansible.cfg")}, cwd=repo / "ansible")
         elif args.action == "gpu-holders":
             print(json.dumps(guard_holders(), indent=2))
         elif args.action == "gpu-release":
@@ -248,7 +310,7 @@ def main():
                 native_only()
             if args.action == "vm-define" and not cfg["windows_vm"]:
                 raise ValueError("Enable the Windows VM and record native GPU facts in the host configuration first")
-            playbooks = ["site.yml", "vm.yml"] if args.action == "check" else ["vm.yml" if args.action == "vm-define" else "site.yml"]
+            playbooks = ["site.yml", "vm.yml", "windows-guest.yml"] if args.action == "check" else ["vm.yml" if args.action == "vm-define" else "site.yml"]
             env = os.environ | {"ANSIBLE_CONFIG": str(repo / "ansible/ansible.cfg")}
             with tempfile.TemporaryDirectory(prefix="spawnkit-inventory-") as temp:
                 path = Path(temp) / "inventory.json"
