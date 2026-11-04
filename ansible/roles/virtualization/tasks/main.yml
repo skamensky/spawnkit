@@ -5,7 +5,8 @@
   when: ansible_check_mode
 - name: Install the Ubuntu virtualization stack
   ansible.builtin.apt:
-    name: [qemu-kvm, qemu-utils, libvirt-daemon-system, libvirt-clients, ovmf, swtpm, swtpm-tools, virtinst, libxml2-utils, pciutils, psmisc, virtiofsd, zenity]
+    # qemu-kvm is only a virtual package from 26.04, which apt refuses to pick a provider for.
+    name: [qemu-system-x86, qemu-utils, libvirt-daemon-system, libvirt-clients, ovmf, swtpm, swtpm-tools, virtinst, libxml2-utils, pciutils, psmisc, virtiofsd, zenity]
     state: present
   when: not ansible_check_mode
 - name: Grant local VM access

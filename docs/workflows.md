@@ -13,7 +13,7 @@ machine has not been applied or enrolled.
 
 For migration and data preservation, use the [complete Ubuntu migration
 guide](ubuntu-migration.md). For file ownership and system services, see
-[architecture](architecture.md). This guide describes the twelve everyday
+[architecture](architecture.md). This guide describes the thirteen everyday
 workflows and where each change belongs.
 
 ## 1 First startup on a new machine
@@ -413,3 +413,35 @@ requirement. [Application Default Credentials login](https://docs.cloud.google.c
 Update the Nix-owned SDK through Spawnkit's package/input configuration. Declare
 extra SDK components through its Nix package configuration when needed, rather
 than using the SDK's mutable component updater on a Nix-owned installation.
+
+## 13 Upgrade Ubuntu to a new release
+
+Ubuntu release upgrades are run by Shmuel, not by Spawnkit: `do-release-upgrade`
+is interactive, needs sudo and replaces most system packages. Spawnkit only has
+to keep working on the new release. Its Ansible roles read the running codename
+(`ansible_facts.distribution_release`) for vendor repositories and name real
+packages rather than virtual ones, which apt refuses to resolve.
+
+Before upgrading, check that every package Spawnkit installs exists in the new
+release: download its `Packages.xz` indexes from `archive.ubuntu.com` (release,
+`-updates` and `-security`) and look up the base, host, Docker, virtualization
+and pinned NVIDIA driver packages. For the 24.04 → 26.04 (`resolute`) upgrade on
+2026-11-04, all were present; `nvidia-driver-580` is the same 580.178.04 as on
+24.04, so the laptop pin and Home Manager's driver hash stay valid. Tailscale
+publishes `resolute` with the same signing key.
+
+The upgrade disables third-party APT sources. Afterwards:
+
+```bash
+sudo do-release-upgrade
+# reboot, then from the checkout:
+rtk home-config switch
+nix --extra-experimental-features 'nix-command flakes' run .#host-config -- apply --host laptop-ubuntu --ask-become-pass
+```
+
+The host apply rewrites Spawnkit's own sources (Tailscale, NVIDIA Container
+Toolkit) for the new codename. Re-enable sources Spawnkit does not own (Chrome,
+VS Code, Claude desktop, PPAs) in Software & Updates, or remove the ones whose
+PPA has no build for the new release. Then confirm `nvidia-smi`, the GDM session
+pin, `virsh net-list --all` and a Windows VM start with GPU handoff and Looking
+Glass, Citrix and Webex; the vendor `.deb` packages are the most likely to break.
