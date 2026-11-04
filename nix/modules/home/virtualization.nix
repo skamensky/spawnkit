@@ -17,7 +17,10 @@
   config = lib.mkIf config.personal.virtualization.enable {
     home.packages = [
       pkgs.virt-manager
-      pkgs.looking-glass-client
+      # B7 ignores the pointer after Alt+Tab until it leaves and re-enters the window.
+      (pkgs.looking-glass-client.overrideAttrs (old: {
+        patches = old.patches or [ ] ++ [ ./looking-glass-enter-on-ungrab.patch ];
+      }))
     ];
     # A desktop audio session holding the passthrough GPU's HDMI function makes the
     # GPU guard refuse to start the VM, so WirePlumber ignores those cards.

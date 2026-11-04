@@ -1,0 +1,14 @@
+--- a/displayservers/X11/x11.c
++++ b/displayservers/X11/x11.c
+@@ -1157,8 +1157,10 @@
+     {
+       atomic_store(&x11.lastWMEvent, microtime());
+       XIEnterEvent *xie = cookie->data;
++      /* A window raised under the pointer during a grab, such as GNOME's
++       * Alt+Tab switcher, only gets its enter event on the ungrab. */
+       if (x11.entered || xie->event != x11.window ||
+-          xie->mode != XINotifyNormal)
++          (xie->mode != XINotifyNormal && xie->mode != XINotifyUngrab))
+         return;
+ 
+       app_updateCursorPos(xie->event_x, xie->event_y);

@@ -298,18 +298,22 @@ and recovery; routine automation can use SSH.
   speed to `windows_guest_mouse_sensitivity` (6 of 20).
   The VM has virtio mouse and keyboard devices and no USB tablet, as Looking Glass
   requires.
+- **Alt+Tab into the viewer:** B7 drops the pointer-enter event that arrives
+  when a window is raised under the pointer during a grab (GNOME's Alt+Tab switcher
+  sends it with the Ungrab mode), then ignores all mouse input until the pointer
+  leaves and re-enters. Home Manager builds the client with
+  `nix/modules/home/looking-glass-enter-on-ungrab.patch`, which accepts that event.
+  Tested with synthetic Alt+Tab and a uinput relative mouse: stock B7 froze in 8 of 8
+  switches, the patched client in none of 35 (with and without the keyboard grab).
 - **Input stall watchdog:** `vm-view` runs `scripts/lg-watchdog.py` beside the
-  viewer. While the viewer is focused, the pointer is over it and X sees input, its
-  SPICE input channels must send; the main channel (the client's first socket) and
-  any channel streaming while the user is idle (the microphone) do not count. After a
-  return to the viewer (a click or Alt+Tab), the B7 client sometimes stops forwarding
-  input while it holds the pointer in place (reproduced with and without the keyboard
-  grab; Windows' cursor stays visible and receives nothing). Neither moving the pointer
-  out and back nor toggling capture mode reliably clears it. After 1.5 s without
-  traffic the watchdog shows a notification and restarts the viewer, appending the
-  event to `~/.local/state/spawnkit/looking-glass-stalls.jsonl`; more than five
-  restarts in a minute stops `vm-view`. The
-  viewer's own log is `~/.local/state/spawnkit/looking-glass.log`.
+  viewer as a safety net. While the viewer is focused, the pointer is over it and X
+  sees input, its SPICE input channels must send; the main channel (the client's
+  first socket) and any channel streaming while the user is idle (the microphone) do
+  not count. After 1.5 s without traffic the watchdog shows a notification and
+  restarts the viewer, appending the event to
+  `~/.local/state/spawnkit/looking-glass-stalls.jsonl`; more than five restarts in a
+  minute stops `vm-view`. The viewer's own log is
+  `~/.local/state/spawnkit/looking-glass.log`.
 - **Clipboard history:** CopyQ runs on both systems and Ctrl+` opens it on whichever
   one has the keyboard. Ubuntu's CopyQ saves new items within 10 s, and a user path
   unit copies its tabs to `~/Shared/.copyq` (`personal.desktop.copyqShare`). At each
