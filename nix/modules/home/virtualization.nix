@@ -46,6 +46,17 @@
             'g_cursor.acc.y = modf(ey, &ey);
           unsigned long long bx, by; memcpy(&bx, &ex, 8); memcpy(&by, &ey, 8);
           if ((bx & 0x7ff0000000000000ULL) == 0x7ff0000000000000ULL || (by & 0x7ff0000000000000ULL) == 0x7ff0000000000000ULL) { DEBUG_WARN("Dropping a non-finite mouse motion"); g_cursor.acc.x = g_cursor.acc.y = 0.0; ex = ey = 0.0; }'
+          # Leaving full screen (Insert+F), KWin configures 0x0, which xdg-shell
+          # means "choose your own size". B7 adopts 0x0 literally: its window has
+          # no size, it commits frames unthrottled (~900/s, the black flashing and
+          # stall) and the cursor scale goes infinite until a real configure
+          # arrives. Use the last windowed size instead, 1024x768 at first.
+          substituteInPlace displayservers/Wayland/desktops/xdg/xdg.c --replace-fail \
+            'state.width      = width;' \
+            'static int32_t floatW = 1024, floatH = 768;
+          if (state.floating && state.width > 0 && state.height > 0) { floatW = state.width; floatH = state.height; }
+          if (width <= 0 || height <= 0) { DEBUG_INFO("Compositor left the size to us, using %dx%d", floatW, floatH); width = floatW; height = floatH; }
+          state.width      = width;'
         '';
       }))
     ];

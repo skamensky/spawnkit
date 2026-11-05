@@ -238,7 +238,12 @@ leaves a 0 px output rectangle makes the cursor scale infinite, the fractional
 accumulator becomes NaN, and every later move converts to INT_MIN (the mouse goes
 dead) until a capture toggle resets it. The build also skips a 0 px scale and resets
 a non-finite accumulator, logging `Dropping a non-finite mouse motion`; it tests the
-float bits because the client builds with `-ffast-math`. To record a reproduction, run
+float bits because the client builds with `-ffast-math`. The 0 px rectangle itself
+comes from leaving full screen: KWin then configures the window as 0x0, which
+xdg-shell means "choose your own size", and B7 adopts it literally, committing frames
+unthrottled (about 900 a second: black flashing and a stalled desktop) until a real
+configure arrives. A `WAYLAND_DEBUG=1` run showed it. The build substitutes the last
+windowed size, 1024x768 at first, and logs `Compositor left the size to us`. To record a reproduction, run
 `scripts/vm-trace.py` (QEMU memory, CPU and cgroup, SPICE socket queues, Looking
 Glass log lines, twice a second) into `~/.local/state/spawnkit/vm-trace-*.jsonl`. Do not lower the guest's
 `oom_score_adj` instead: that protects the runaway process and sacrifices the desktop.
