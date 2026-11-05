@@ -500,7 +500,7 @@ def start_detached(name, held, notify, gui):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=["select", "inventory", "check", "render", "plan", "apply", "facts", "vm-define", "vm-start", "vm-stop", "vm-view", "vm-console", "vm-exec", "gpu-status", "gpu-holders", "gpu-release", "vm-install", "guest-media", "guest-bootstrap", "guest-plan", "guest-apply"])
+    parser.add_argument("action", choices=["select", "inventory", "check", "render", "plan", "apply", "facts", "vm-define", "vm-start", "vm-stop", "vm-pause", "vm-resume", "vm-restart", "vm-view", "vm-console", "vm-exec", "gpu-status", "gpu-holders", "gpu-release", "vm-install", "guest-media", "guest-bootstrap", "guest-plan", "guest-apply"])
     parser.add_argument("--repo", type=Path, default=selector().default_repo(), help="Defaults to the enclosing checkout")
     parser.add_argument("--host", help="Explicit profile; normal selection shares the Home Manager registry")
     parser.add_argument("--hostname", default=socket.gethostname())
@@ -573,7 +573,7 @@ def main():
             print(json.dumps(remaining, indent=2))
             if set(args.pid) & {h["pid"] for h in remaining}:
                 raise ValueError("Some chosen holders are still running; retry with --force")
-        elif args.action in ("vm-start", "vm-stop", "vm-view", "vm-console", "vm-exec", "gpu-status"):
+        elif args.action in ("vm-start", "vm-stop", "vm-pause", "vm-resume", "vm-restart", "vm-view", "vm-console", "vm-exec", "gpu-status"):
             native_only()
             installed = Path("/etc/spawnkit/windows.json")
             if not installed.is_file():
@@ -588,9 +588,20 @@ def main():
             if args.action == "vm-exec":
                 raise SystemExit(guest_exec(name, args.command if args.command is not None else sys.stdin.read()))
             state = subprocess.check_output(["/usr/bin/virsh", "-c", "qemu:///system", "domstate", name], text=True, env=os.environ | {'LC_ALL': 'C'}).strip()
+            if args.action in ("vm-pause", "vm-resume", "vm-restart"):
+                # Pause freezes the guest's processors and keeps its memory and the RTX; nothing in
+                # Windows runs, and its clock catches up after resume.
+                wanted = {"vm-pause": "running", "vm-resume": "paused", "vm-restart": "running"}[args.action]
+                if state != wanted:
+                    raise ValueError(f"Windows is {state}; {args.action} needs it {wanted}")
+                verb = {"vm-pause": "suspend", "vm-resume": "resume", "vm-restart": "reboot"}[args.action]
+                run(["/usr/bin/virsh", "-c", "qemu:///system", verb, name])
+                return
             if args.action == "vm-stop":
                 # Progress shows on the Windows launcher's stopping tag, not as notifications.
                 with windows_phase("stopping"):
+                    if state == "paused":
+                        run(["/usr/bin/virsh", "-c", "qemu:///system", "resume", name])
                     if state != "shut off":
                         run(["/usr/bin/virsh", "-c", "qemu:///system", "shutdown", name])
                     wait_for_gpu_return(name, args.timeout)

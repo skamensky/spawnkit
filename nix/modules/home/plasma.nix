@@ -56,12 +56,11 @@ let
   theme = id: name: tone: author: lookandfeel: kvantum: wallpaper: description: {
     inherit id name tone author lookandfeel kvantum wallpaper description;
   };
-  # WhatsApp (desktop.nix) and the Windows VM start and shut-down launchers, pinned to every
-  # task manager.
+  # WhatsApp (desktop.nix) and the Windows VM launcher, pinned to every task manager. Windows'
+  # power actions live in its right-click menu.
   panelPins = [
     "applications:chrome-web.whatsapp.com__-Default.desktop"
     "applications:spawnkit-windows.desktop"
-    "applications:spawnkit-windows-shutdown.desktop"
   ];
   catalog = [
     (theme "breeze-dark" "Breeze Dark" "dark" "KDE" "org.kde.breezedark.desktop" null null "Plasma's stock dark theme.")
@@ -195,6 +194,20 @@ let
   } (builtins.readFile ./plasma-places.py);
   batteryWidget = plasmoid "tech.shmuel.battery" ./plasma-battery { };
   languageWidget = plasmoid "tech.shmuel.language" ./plasma-language { };
+  # Processor, graphics, memory, swap, temperature and disk use as JSON, for the stats widget and agents.
+  statsTool = pkgs.writers.writePython3Bin "spawnkit-stats" {
+    flakeIgnore = [ "E501" ];
+    makeWrapperArgs = [ "--prefix" "PATH" ":" (lib.makeBinPath [ pkgs.pciutils ]) ];
+  } (builtins.readFile ./plasma-stats.py);
+  # The stats widget carries the Spawnkit UI components (Theme, Chip, SectionLabel, Spinner) as a
+  # local directory import, since plasmashell has no import path for the Spawnkit module.
+  statsWidget = (plasmoid "tech.shmuel.stats" ./plasma-stats { stats = "${statsTool}/bin/spawnkit-stats"; }).overrideAttrs (old: {
+    buildCommand = old.buildCommand + ''
+      ui=$out/share/plasma/plasmoids/tech.shmuel.stats/contents/ui
+      cp -r --no-preserve=mode ${../../../scripts/spawnkit-ui/Spawnkit} $ui/Spawnkit
+      sed -i 's/^import Spawnkit$/import "."/' $ui/Spawnkit/*.qml
+    '';
+  });
   # The Start menu's icon: a penguin on a rounded tile in Layan's colours. Fluent's start-here
   # is the Windows logo, which reads as one more window button.
   startIcon = pkgs.runCommand "spawnkit-start-icon" { } ''
@@ -296,6 +309,8 @@ in
             "tech.shmuel.battery"
             # The current layout: a click switches between two, or opens a menu of more.
             "tech.shmuel.language"
+            # Processor, graphics, memory, swap and disk use in a card that opens on click.
+            "tech.shmuel.stats"
             # The paired phone (shown only while connected): battery, texts, ring, send a file.
             "org.kde.kdeconnect"
             "tech.shmuel.clock"
@@ -464,6 +479,8 @@ in
       placesTool
       batteryWidget
       languageWidget
+      statsTool
+      statsWidget
       startIcon
       clockWidget
       calendarSync

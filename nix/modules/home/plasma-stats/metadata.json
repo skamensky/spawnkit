@@ -1,0 +1,12 @@
+{
+  "KPackageStructure": "Plasma/Applet",
+  "X-Plasma-API-Minimum-Version": "6.0",
+  "KPlugin": {
+    "Id": "tech.shmuel.stats",
+    "Name": "System stats",
+    "Description": "CPU, graphics, memory, swap, temperature and disk use, shown on click",
+    "Icon": "speedometer",
+    "Category": "System Information",
+    "License": "MIT"
+  }
+}

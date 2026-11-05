@@ -136,8 +136,13 @@ class WindowsTag:
 
     "starting" from vm-start until the guest agent first answers, "stopping" from vm-stop or from
     the agent going quiet (a shutdown inside Windows) until the RTX is back on Linux; then "RTX"
-    or "no RTX" while it runs, and no tag while it is off.
+    or "no RTX" while it runs, "paused" while suspended, and an empty tag while it is off. The
+    tag's actions name the launcher's desktop actions the task manager offers on right click.
     """
+
+    OFF = ["Open in a window", "Start without the RTX"]
+    RUNNING = ["Open in a window", "Pause", "Restart", "Shut down"]
+    PAUSED = ["Resume", "Shut down"]
 
     def __init__(self):
         self.up = None  # the domain id whose guest agent has answered
@@ -154,6 +159,8 @@ class WindowsTag:
         phase = host_config_phase()
         name = config["windows_name"]
         state = virsh("domstate", name)
+        if state == "paused" and not phase:
+            return {"text": "paused", "tone": "neutral", "actions": self.PAUSED}
         if state == "running":
             domain = virsh("domid", name)
             if phase != "stopping" and virsh("qemu-agent-command", name, '{"execute":"guest-ping"}', "--timeout", "1") is not None:
@@ -170,15 +177,15 @@ class WindowsTag:
             return STOPPING  # the release hook is returning the RTX to Linux
         else:
             self.up, self.stopping = None, False
-            return None
+            return {"text": "", "tone": "neutral", "actions": self.OFF}
         gpu = config.get("gpu_devices", [{}])[0].get("address")
         try:
             driver = gpu and os.path.basename(os.readlink(f"/sys/bus/pci/devices/{gpu}/driver"))
         except OSError:
             driver = None
         if driver == "vfio-pci":
-            return {"text": "RTX", "tone": "positive"}
-        return {"text": "no RTX", "tone": "neutral"}
+            return {"text": "RTX", "tone": "positive", "actions": self.RUNNING}
+        return {"text": "no RTX", "tone": "neutral", "actions": self.RUNNING}
 
 
 def virsh(*args):

@@ -104,20 +104,39 @@
             icon = "${./spawnkit-windows.svg}";
             # Groups the viewer's window under this launcher in the dock.
             startupWMClass = "looking-glass-client";
-            actions.windowed = {
-              name = "Open in a window";
-              exec = "host-config vm-view --notify --gui --windowed";
+            # The task manager shows only the actions the Windows tag lists for the
+            # current state (plasma-badges.py), matched by name.
+            actions = {
+              windowed = {
+                name = "Open in a window";
+                exec = "host-config vm-view --notify --gui --windowed";
+              };
+              without-rtx = {
+                name = "Start without the RTX";
+                exec = "host-config vm-view --notify --without-rtx";
+              };
+              pause = {
+                name = "Pause";
+                exec = "host-config vm-pause --notify";
+              };
+              resume = {
+                name = "Resume";
+                exec = "host-config vm-resume --notify";
+              };
+              restart = {
+                name = "Restart";
+                exec = "host-config vm-restart --notify";
+              };
+              shutdown = {
+                name = "Shut down";
+                exec = "host-config vm-stop --notify";
+              };
             };
           };
           spawnkit-windows-without-rtx = {
             desktopName = "Windows (no RTX)";
             exec = "host-config vm-view --notify --without-rtx";
             icon = "${./spawnkit-windows.svg}";
-          };
-          spawnkit-windows-shutdown = {
-            desktopName = "Shut down Windows";
-            exec = "host-config vm-stop --notify";
-            icon = "system-shutdown";
           };
           spawnkit-windows-console = {
             desktopName = "Windows installation console";
@@ -132,7 +151,7 @@
         run /usr/bin/kbuildsycoca6 --noincremental >/dev/null 2>&1 || true
       fi
     '';
-    # Pin the Windows launchers to the dock without replacing the user's own pins.
+    # Pin the Windows launcher to the dock without replacing the user's own pins.
     home.activation.pinWindowsLauncher = lib.hm.dag.entryAfter [ "dconfSettings" ] ''
       # gsettings, unlike dconf, also reports GNOME's default pins; without the dconf
       # module it would read and write a private keyfile instead.
@@ -141,7 +160,7 @@
       if [ -n "''${DBUS_SESSION_BUS_ADDRESS:-}" ] &&
           favorites=$($gsettings get org.gnome.shell favorite-apps 2>/dev/null); then
         updated=$favorites
-        for launcher in spawnkit-windows.desktop spawnkit-windows-shutdown.desktop; do
+        for launcher in spawnkit-windows.desktop; do
           case "$updated" in
             *"'$launcher'"*) ;;
             "@as []") updated="['$launcher']" ;;

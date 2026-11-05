@@ -611,11 +611,16 @@ GNOME stays installed, so the session is chosen at login and the trial is revers
   Layan wallpaper, Fluent-dark icons and the Fluent (Windows 11) cursors packaged
   from the Fluent icon theme's source. Inactive windows show at 92% opacity. One
   translucent bottom panel holds the launcher, the task manager (file manager,
-  browser and the Windows launchers pinned) and, on the right, only three widgets:
+  browser, WhatsApp and the Windows launcher pinned) and, on the right, only three widgets:
   `tech.shmuel.battery` (visible only while on battery), `tech.shmuel.language`
   (the current layout, hidden with one; a click switches between two, opens a menu
   with three or more, and the wheel steps through them; Meta+Space also switches),
-  `tech.shmuel.clock` and notifications. Both small widgets use Plasma's full
+  `tech.shmuel.stats` (a speedometer that opens, on click, a Spawnkit-styled card of
+  processor, integrated and discrete graphics, memory, swap and root-disk use with
+  temperatures; it polls the `spawnkit-stats` JSON CLI only while open, since
+  ksystemstats reports 0% for the Intel iGPU and would wake the sleeping RTX;
+  2026-11-05: renders live data under `plasmawindowed`), `tech.shmuel.clock` and
+  notifications. Both small widgets use Plasma's full
   representation: without one the panel never shows them. A running KWin keeps the
   old layout list when Home Manager rewrites `kxkbrc`; a relogin or
   `kwriteconfig6 --notify` on that file loads the new one. No XKB toggle option is
@@ -636,7 +641,9 @@ GNOME stays installed, so the session is chosen at login and the trial is revers
   Widgets are locked (`immutability=2` with `plasma/allow_configure_when_locked`
   off), so a task's right-click menu has no configure entries. The panel's task
   manager is `tech.shmuel.taskmanager`, a fork of Plasma's icon-only task manager
-  whose right-click menu offers only Pin/Unpin and Close. Its QML is compiled into
+  whose right-click menu offers only Pin/Unpin and Close, plus the launcher's desktop
+  actions that its `spawnkit-badges` tag lists for the current state (the Windows
+  launcher's power actions; see `docs/windows-vm.md`). Its QML is compiled into
   a C++ plugin, so the `plasma_taskmanager` host role (Plasma hosts only) downloads
   the matching plasma-desktop tarball (sha256-pinned), builds the applet with
   `taskmanager.patch` against Ubuntu's -dev packages under

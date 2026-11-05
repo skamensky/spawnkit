@@ -178,6 +178,8 @@ tested guest display arrangement needs it. Firmware and TPM data are retained.
 ```bash
 host-config vm-view       # start if stopped, then launch Looking Glass
 host-config vm-stop       # graceful shutdown, then wait for verified GPU return
+host-config vm-pause      # freeze the guest (memory and the RTX stay with it); vm-resume continues it
+host-config vm-restart    # ACPI restart; the RTX stays with Windows
 host-config gpu-status    # root device/reservation inspection
 host-config gpu-holders   # JSON: Linux programs holding the RTX, each with "closable"
 host-config gpu-release --pid N [--pid M] [--force]   # SIGTERM (then SIGKILL) closable holders
@@ -208,13 +210,22 @@ and `IconButton`. Type is Inter and Inter Display with IBM Plex Mono for command
 lines; the accent is Spawnkit's indigo. New applets add a file to
 `spawnkit-ui/dialogs` rather than using zenity or kdialog.
 
-The desktop entries are **Windows**, **Shut down Windows** and **Windows
+The desktop entries are **Windows**, **Windows (no RTX)** and **Windows
 installation console**, installed in `~/.local/share/applications` because GNOME
 Shell does not notice launchers added to the replaced profile directory until the
 next login. Activation pins **Windows** (four-pane icon; the viewer's window groups
-under it) and **Shut down Windows** (`vm-stop --notify`; the Windows icon's pulsing
-stopping tag shows progress, and only a failure produces a notification) to the dock, appended to the user's own
-pins. The viewer opens fullscreen. Looking Glass B7 on Wayland requests fullscreen
+under it) to the dock and Plasma's panel, appended to the user's own pins. Its desktop
+actions are **Open in a window**, **Start without the RTX**, **Pause**, **Resume**,
+**Restart** and **Shut down** (`vm-view --windowed`, `vm-view --without-rtx`,
+`vm-pause`, `vm-resume`, `vm-restart` and `vm-stop`, all `--notify`). In Plasma's
+forked task manager a right click shows only those valid now: `spawnkit-badges`
+lists them in the launcher's tag (off: open in a window, start without the RTX;
+running: open in a window, pause, restart, shut down; paused: resume, shut down;
+none while starting or stopping). Pause freezes the guest with its memory and the
+RTX and tags the icon "paused". There is no forced power-off entry; `vm-stop`
+resumes a paused guest before its graceful shutdown, whose progress the icon's
+pulsing stopping tag shows (only a failure produces a notification).
+The viewer opens fullscreen. Looking Glass B7 on Wayland requests fullscreen
 before its first configure, so KWin flags the window fullscreen at the default
 1024x768; host-config re-enters fullscreen through a one-shot KWin script
 (`scripts/lg-fullscreen.js`) for the first 15 s after each launch so the window fills
