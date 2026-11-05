@@ -272,8 +272,11 @@ in
                 systemFavorites = "";
               };
             }
+            # Plasma's icon-only task manager, forked by the plasma_taskmanager host role so
+            # that a right click offers only Pin/Unpin and Close.
             {
-              iconTasks.launchers = [
+              name = "tech.shmuel.taskmanager";
+              config.General.launchers = [
                 "preferred://filemanager"
                 "preferred://browser"
               ]
@@ -425,6 +428,18 @@ in
       clockWidget
       calendarSync
     ];
+    # Search scores an application by averaging its matches in Name, GenericName and Keywords, so
+    # System Settings, whose GenericName repeats its Name, ranked below "NVIDIA X Server Settings"
+    # for "settings". Ubuntu's entry, without that GenericName, takes its place.
+    home.activation.systemSettingsLauncher = lib.hm.dag.entryAfter [ "linkGeneration" ] ''
+      src=/usr/share/applications/systemsettings.desktop
+      dest=${config.xdg.dataHome}/applications/systemsettings.desktop
+      if [[ -f $src && ! -v DRY_RUN ]]; then
+        mkdir -p "$(dirname "$dest")"
+        ${pkgs.gnugrep}/bin/grep -v '^GenericName' "$src" > "$dest.tmp"
+        mv "$dest.tmp" "$dest"
+      fi
+    '';
     systemd.user.services.spawnkit-badges = {
       Unit = {
         Description = "Unread-count badges on task manager icons";

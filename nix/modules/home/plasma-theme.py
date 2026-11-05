@@ -102,7 +102,8 @@ def arrange(theme):
     paper = theme.get("wallpaper") and wallpaper(theme["wallpaper"])
     shell_script(f"""
 const pins = {json.dumps(PINS)};
-const docked = panels().some(p => p.widgets("org.kde.plasma.icontasks").length || p.widgets("org.kde.plasma.taskmanager").length);
+const taskManagers = ["tech.shmuel.taskmanager", "org.kde.plasma.icontasks", "org.kde.plasma.taskmanager"];
+const docked = panels().some(p => taskManagers.some(t => p.widgets(t).length));
 if (!docked) {{
   const dock = new Panel;
   dock.location = "bottom";
@@ -110,12 +111,12 @@ if (!docked) {{
   dock.lengthMode = "fit";
   dock.floating = true;
   dock.height = Math.round(gridUnit * 3);
-  const tasks = dock.addWidget("org.kde.plasma.icontasks");
+  const tasks = dock.addWidget("tech.shmuel.taskmanager");
   tasks.currentConfigGroup = ["General"];
   tasks.writeConfig("launchers", ["preferred://filemanager", "preferred://browser"]);
 }}
 for (const panel of panels()) {{
-  for (const tasks of panel.widgets("org.kde.plasma.icontasks")) {{
+  for (const tasks of taskManagers.flatMap(t => panel.widgets(t))) {{
     tasks.currentConfigGroup = ["General"];
     let have = tasks.readConfig("launchers", []);
     if (typeof have === "string") have = have.split(",").filter(p => p);

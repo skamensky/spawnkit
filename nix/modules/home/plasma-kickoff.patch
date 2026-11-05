@@ -1,34 +1,30 @@
 --- a/Footer.qml
 +++ b/Footer.qml
-@@ -40,7 +40,7 @@
+@@ -20,7 +20,7 @@
+     property real preferredTabBarWidth: 0
+     readonly property alias leaveButtons: leaveButtons
+ 
+-    contentWidth: tabBar.implicitWidth + spacing
++    contentWidth: leaveButtons.implicitWidth
+     contentHeight: leaveButtons.implicitHeight
+ 
+     // We use an increased vertical padding to improve touch usability
+@@ -40,11 +40,10 @@
      PC3.TabBar {
          id: tabBar
  
 -        property real tabWidth: Math.max(applicationsTab.implicitWidth, placesTab.implicitWidth)
 +        property real tabWidth: applicationsTab.implicitWidth
  
-         focus: true
+-        focus: true
+-
+-        width: root.preferredTabBarWidth > 0 ? root.preferredTabBarWidth : undefined
++        visible: false
++        width: 0
+         implicitWidth: contentWidth + leftPadding + rightPadding
+         implicitHeight: contentHeight + topPadding + bottomPadding
  
-@@ -104,18 +104,6 @@
-                     .forceActiveFocus(Qt.BacktabFocusReason)
-             }
-         }
--        PC3.TabButton {
--            id: placesTab
--            width: tabBar.tabWidth
--            anchors.top: tabBarListView.contentItem.top
--            anchors.bottom: tabBarListView.contentItem.bottom
--            anchors.topMargin: -root.topPadding
--            anchors.bottomMargin: -root.bottomPadding
--            icon.width: Kirigami.Units.iconSizes.smallMedium
--            icon.height: Kirigami.Units.iconSizes.smallMedium
--            icon.name: "compass"
--            text: i18nc("@title:tab kickoff sidebar tab", "Places") //Explore? // qmllint disable unqualified
--        }
- 
-         Connections {
-             target: kickoff
-@@ -204,10 +192,4 @@
+@@ -204,10 +203,4 @@
          }
      }
  
@@ -38,4 +34,138 @@
 -            tabBar.currentIndex = (tabBar.currentIndex === 0) ? 1 : 0;
 -        }
 -    }
+ }
+--- a/FullRepresentation.qml
++++ b/FullRepresentation.qml
+@@ -78,6 +78,18 @@
+         }
+     }
+ 
++    footer: Footer {
++        id: footer
++        Binding {
++            target: kickoff
++            property: "footer"
++            value: footer
++            restoreMode: Binding.RestoreBinding
++        }
++        // Eat down events to prevent them from reaching the contentArea or searchField
++        Keys.onDownPressed: event => {}
++    }
++
+     contentItem: VerticalStackView {
+         id: contentItemStackView
+         focus: true
+--- a/Header.qml
++++ b/Header.qml
+@@ -69,11 +69,12 @@
+ 
+             RowLayout {
+                 id: nameAndIcon
++                visible: false
+                 spacing: root.spacing
+                 anchors.left: parent.left
+                 LayoutMirroring.enabled: kickoff.sideBarOnRight
+                 height: parent.height
+-                width: root.preferredNameAndIconWidth - layoutContainer.anchors.leftMargin
++                width: 0
+ 
+                 KirigamiComponents.AvatarButton {
+                     id: avatar
+@@ -188,7 +189,6 @@
+                     id: searchField
+                     Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
+                     Layout.fillWidth: true
+-                    Layout.leftMargin: kickoff.backgroundMetrics.leftPadding
+                     focus: true
+ 
+                     Binding {
+@@ -244,7 +244,7 @@
+                 PC3.ToolButton {
+                     id: configureButton
+                     Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+-                    visible: Plasmoid.internalAction("configure").enabled
++                    visible: false
+                     icon.name: "configure"
+                     text: Plasmoid.internalAction("configure").text
+                     display: PC3.ToolButton.IconOnly
+@@ -270,6 +270,7 @@
+                 }
+                 PC3.ToolButton {
+                     id: pinButton
++                    visible: false
+                     checkable: true
+                     checked: Plasmoid.configuration.pin
+                     icon.name: "window-pin"
+--- a/NormalPage.qml
++++ b/NormalPage.qml
+@@ -7,48 +7,35 @@
+ 
+ import QtQuick
+ import QtQuick.Templates as T
++import org.kde.kirigami as Kirigami
++import org.kde.plasma.extras as PlasmaExtras
+ 
+ EmptyPage {
+     id: root
+-    property real preferredSideBarWidth: Math.max(footer.tabBar.implicitWidth, applicationsPage.implicitSideBarWidth)
++    property real preferredSideBarWidth: applicationsPage.implicitSideBarWidth
+ 
+-    contentItem: HorizontalStackView {
+-        id: stackView
+-        focus: true
+-        reverseTransitions: footer.tabBar.currentIndex === 1
+-        initialItem: ApplicationsPage {
+-            id: applicationsPage
+-            preferredSideBarWidth: root.preferredSideBarWidth + kickoff.backgroundMetrics.leftPadding
+-        }
+-        Component {
+-            id: placesPage
+-            PlacesPage {
++    // No applications or places, only a hint to type. The applications grid stays as an invisible,
++    // inert spacer so that the popup keeps its size for search results.
++    contentItem: Item {
++        implicitWidth: stackView.implicitWidth
++        implicitHeight: stackView.implicitHeight
++
++        HorizontalStackView {
++            id: stackView
++            anchors.fill: parent
++            enabled: false
++            opacity: 0
++            initialItem: ApplicationsPage {
++                id: applicationsPage
+                 preferredSideBarWidth: root.preferredSideBarWidth + kickoff.backgroundMetrics.leftPadding
+-                preferredSideBarHeight: applicationsPage.implicitSideBarHeight
+             }
+         }
+-        Connections {
+-            target: footer.tabBar
+-            function onCurrentIndexChanged() {
+-                if (footer.tabBar.currentIndex === 0) {
+-                    stackView.replace(applicationsPage)
+-                } else if (footer.tabBar.currentIndex === 1) {
+-                    stackView.replace(placesPage)
+-                }
+-            }
+-        }
+-    }
+ 
+-    footer: Footer {
+-        id: footer
+-        preferredTabBarWidth: root.preferredSideBarWidth
+-        Binding {
+-            target: kickoff
+-            property: "footer"
+-            value: footer
+-            restoreMode: Binding.RestoreBinding
++        PlasmaExtras.PlaceholderMessage {
++            anchors.centerIn: parent
++            width: parent.width - Kirigami.Units.gridUnit * 4
++            iconName: "search"
++            text: i18nc("@info:status", "Type to search") // qmllint disable unqualified
+         }
+-        // Eat down events to prevent them from reaching the contentArea or searchField
+-        Keys.onDownPressed: event => {}
+     }
  }

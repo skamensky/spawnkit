@@ -1,0 +1,104 @@
+diff -ru a/qml/ContextMenu.qml b/qml/ContextMenu.qml
+--- a/ContextMenu.qml	2026-11-05 13:02:34.291548927 +0200
++++ b/ContextMenu.qml	2026-11-05 13:02:34.309723846 +0200
+@@ -70,7 +70,6 @@
+     function show(): void {
+         Plasmoid.contextualActionsAboutToShow();
+ 
+-        loadDynamicLaunchActions(get(TaskManager.AbstractTasksModel.LauncherUrlWithoutIcon));
+         openRelative();
+     }
+ 
+@@ -86,7 +85,7 @@
+         return Qt.createQmlObject(`
+             import org.kde.plasma.extras as PlasmaExtras
+ 
+-            PlasmaExtras.MenuItem { separator: true }
++            PlasmaExtras.MenuItem { separator: true; visible: false }
+             `, parent) as PlasmaExtras.MenuItem;
+     }
+ 
+@@ -273,7 +272,7 @@
+ 
+     PlasmaExtras.MenuItem {
+         id: startNewInstanceItem
+-        visible: menu.get(TaskManager.AbstractTasksModel.CanLaunchNewInstance)
++        visible: false
+         text: i18nc("action:inmenu", "Open New Window")
+         icon: "window-new"
+ 
+@@ -283,7 +282,7 @@
+     PlasmaExtras.MenuItem {
+         id: virtualDesktopsMenuItem
+ 
+-        visible: virtualDesktopInfo.numberOfDesktops > 1
++        visible: false
+             && (menu.visualParent && !menu.get(TaskManager.AbstractTasksModel.IsLauncher)
+             && !menu.get(TaskManager.AbstractTasksModel.IsStartup)
+             && menu.get(TaskManager.AbstractTasksModel.IsVirtualDesktopsChangeable))
+@@ -371,9 +370,7 @@
+      PlasmaExtras.MenuItem {
+         id: activitiesDesktopsMenuItem
+ 
+-        visible: activityInfo.numberOfRunningActivities > 1
+-            && (menu.visualParent && !menu.get(TaskManager.AbstractTasksModel.IsLauncher)
+-            && !menu.get(TaskManager.AbstractTasksModel.IsStartup))
++        visible: false
+ 
+         enabled: visible
+ 
+@@ -602,7 +599,7 @@
+     PlasmaExtras.MenuItem {
+         id: moreActionsMenuItem
+ 
+-        visible: (menu.visualParent && !menu.get(TaskManager.AbstractTasksModel.IsLauncher) && !menu.get(TaskManager.AbstractTasksModel.IsStartup))
++        visible: false
+ 
+         enabled: visible
+ 
+@@ -746,13 +743,13 @@
+         }
+     }
+ 
+-    PlasmaExtras.MenuItem { separator: true }
++    PlasmaExtras.MenuItem { separator: true; visible: false }
+ 
+     PlasmaExtras.MenuItem {
+         property PlasmaCore.Action configureAction: null
+ 
+         enabled: configureAction && configureAction.enabled
+-        visible: configureAction && configureAction.visible
++        visible: false
+ 
+         text: configureAction ? configureAction.text : ""
+         icon: configureAction ? configureAction.icon : ""
+@@ -766,7 +763,7 @@
+         property PlasmaCore.Action editModeAction: null
+ 
+         enabled: editModeAction && editModeAction.enabled
+-        visible: editModeAction && editModeAction.visible
++        visible: false
+ 
+         text: editModeAction ? editModeAction.text : ""
+         icon: editModeAction ? editModeAction.icon : ""
+@@ -776,7 +773,7 @@
+         Component.onCompleted: editModeAction = Plasmoid.containment.internalAction("configure")
+     }
+ 
+-    PlasmaExtras.MenuItem { separator: true }
++    PlasmaExtras.MenuItem { separator: true; visible: false }
+ 
+     PlasmaExtras.MenuItem {
+         id: closeWindowItem
+diff -ru a/qml/main.qml b/qml/main.qml
+--- a/main.qml	2026-11-05 13:02:34.291872074 +0200
++++ b/main.qml	2026-11-05 13:02:34.309783159 +0200
+@@ -32,7 +32,7 @@
+ 
+     readonly property bool shouldShrinkToZero: tasksModel.count === 0
+     readonly property bool vertical: Plasmoid.formFactor === PlasmaCore.Types.Vertical
+-    readonly property bool iconsOnly: Plasmoid.pluginName === "org.kde.plasma.icontasks"
++    readonly property bool iconsOnly: true
+ 
+     property Task toolTipOpenedByClick
+     property Task toolTipAreaItem

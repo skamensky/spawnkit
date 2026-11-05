@@ -634,8 +634,17 @@ GNOME stays installed, so the session is chosen at login and the trial is revers
   GNOME Keyring, which GDM unlocks at login. Before that, each Chrome secret request
   opened a KDE Wallet prompt, and a new Chrome profile hung on a blank page.
   Widgets are locked (`immutability=2` with `plasma/allow_configure_when_locked`
-  off), so a task's right-click menu has no configure entries. Plasma's task
-  manager still lists its own window actions; it has no option to hide them.
+  off), so a task's right-click menu has no configure entries. The panel's task
+  manager is `tech.shmuel.taskmanager`, a fork of Plasma's icon-only task manager
+  whose right-click menu offers only Pin/Unpin and Close. Its QML is compiled into
+  a C++ plugin, so the `plasma_taskmanager` host role (Plasma hosts only) downloads
+  the matching plasma-desktop tarball (sha256-pinned), builds the applet with
+  `taskmanager.patch` against Ubuntu's -dev packages under
+  `/var/cache/spawnkit/plasma-taskmanager`, and installs it into Qt's plugin
+  directory. The role asserts the installed plasma-desktop version; after an Ubuntu
+  Plasma upgrade, update `plasma_desktop_version` and its sha256 in the role's
+  defaults, refresh the patch and rerun `host-config apply` (2026-11-05: built and
+  installed for 6.6.6; the panel loads it with no QML errors).
   WhatsApp is pinned to the panel. Its launcher opens web.whatsapp.com in a
   dedicated Chrome profile (`~/.local/share/spawnkit/whatsapp-chrome`, logged in
   once by QR code) with DevTools on 127.0.0.1:9333. The `spawnkit-badges` user
@@ -653,10 +662,16 @@ GNOME stays installed, so the session is chosen at login and the trial is revers
   shows call notifications and pauses media (2026-11-05: an SMS to Shmuel's own number
   and the dialer both verified on the Redmi Note 12 Pro+, after granting the app's
   SMS and phone permissions).
-  The launcher, `tech.shmuel.kickoff`, is Plasma 6.6.6's Kickoff with the Places
-  tab removed and every session and power action under one Power menu; it is pinned
-  to Ubuntu's Plasma version, so rebuild it from the new tarball after a Plasma
-  upgrade. Title bars show Windows' minimize, maximize and close on the right. Icons
+  The launcher, `tech.shmuel.kickoff`, is Plasma 6.6.6's Kickoff reduced to the
+  search field and one Power menu holding every session and power action; it has no
+  favourites, application tree, places or header buttons (2026-11-05: the open menu
+  showed only those two). It is pinned to Ubuntu's Plasma version, so rebuild it
+  from the new tarball after a Plasma upgrade. Search ranks an application by
+  averaging its matches across Name, GenericName and Keywords; Ubuntu's System
+  Settings repeats its name as GenericName and ranked below NVIDIA X Server
+  Settings for "settings", so an activation step writes a user copy of its desktop
+  entry without GenericName (2026-11-05: KRunner's services runner then scored
+  System Settings first). Title bars show Windows' minimize, maximize and close on the right. Icons
   are Fluent-dark without its application set (`Fluent-dark-real-apps`), so apps such
   as Chrome keep their own icons. Windows are 30% and menus 15% see-through, Dolphin
   included; Ubuntu's Kvantum reads themes only from `~/.config/Kvantum`, so the

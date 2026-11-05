@@ -42,3 +42,12 @@ Spawnkit's own software is CLI first. Every graphical front end (dialogs, deskto
 entries, notifications) is a thin layer over subcommands that expose the same
 primitives with machine-readable output, so agents can do everything a person can
 without the GUI. Add the subcommand first, then the GUI that calls it.
+
+Nothing on the desktop is off limits. When an upstream component (a Plasma
+applet, a GNOME extension, an application) lacks an option Shmuel wants, fork or
+patch it rather than settling for its defaults. Keep each fork reproducible: a
+QML-only package is patched and built in Nix (as `tech.shmuel.kickoff`), while one
+compiled against Ubuntu's libraries is built by an Ansible host role from a
+checksum-pinned upstream tarball and a tracked patch (as `plasma_taskmanager`).
+Rename the fork's plugin id under `tech.shmuel.*`, pin it to the upstream version
+it was cut from, and fail loudly when the host's version moves.

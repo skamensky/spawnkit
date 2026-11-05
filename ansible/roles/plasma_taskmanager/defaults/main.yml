@@ -1,0 +1,6 @@
+---
+# Must match Ubuntu's plasma-desktop: the fork links against the installed LibTaskManager.
+plasma_desktop_version: 6.6.6
+plasma_desktop_sha256: dbaf12ac8dcf8a12ba3ea097c11e71e846be4b36737ef62420e11cf37a4f638e
+plasma_taskmanager_dir: /var/cache/spawnkit/plasma-taskmanager
+plasma_taskmanager_plugins: /usr/lib/{{ ansible_facts.architecture }}-linux-gnu/qt6/plugins/plasma/applets
