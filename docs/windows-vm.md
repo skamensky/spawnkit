@@ -247,11 +247,16 @@ may need shutdown from inside Windows.
    you confirm **Force quit** in the same window; the compositor and Xwayland need
    a logout, which the window offers once the rest has closed; a service or another
    user's process must be stopped by its owner (the `systemctl stop` command is
-   shown, with a copy button). **Start without RTX** starts Windows
-   without it instead (see below); Cancel returns the RTX to the desktop. A
-   holder a logout cannot release (for example `nvidia-powerd`) refuses the start
-   rather than waiting out the timeout, and a second launch while a start already
-   waits for logout says so. If the desktop itself still holds it, the logout path
+   shown, with a copy button, and the window says plainly that nothing has been
+   closed). **Start without RTX** starts Windows without it instead (see below);
+   Cancel, a crashed dialog or any later failure returns the RTX to the desktop.
+   The NVIDIA services that keep the RTX open regardless of logins
+   (`nvidia-powerd`, Dynamic Boost on laptops, and `nvidia-persistenced`) are
+   stopped by the root guard with the detach and started again once the RTX is
+   back on Linux, so they never appear as holders; the running ones are noted
+   in `/run/spawnkit/gpu-services.json` meanwhile. Any other holder a logout
+   cannot release refuses the start rather than waiting out the timeout, and a
+   second launch while a start already waits for logout says so. If the desktop itself still holds it, the logout path
    below applies. Otherwise it schedules the root unit `spawnkit-windows-handoff`, which waits up
    to 15 minutes for the holders to exit (normally: you log out, which ends Xorg
    and the session's apps), then starts Windows; log back in and open Looking
@@ -262,7 +267,8 @@ may need shutdown from inside Windows.
    checks GPU/DRM/audio device users with `fuser`.
 3. Busy jobs/containers/GUI apps cause refusal with PIDs and process names. Nothing
    is killed. Known non-job holders get specific advice: `nvidia-persistenced`
-   and `nvidia-powerd` name the service to stop; `gnome-shell`, `Xwayland` and
+   and `nvidia-powerd` (only reachable when the VM is started by hand, since
+   `host-config vm-view` stops them) name the service to stop; `gnome-shell`, `Xwayland` and
    `Xorg` mean the desktop itself opened the RTX (see laptop risks below).
    Explicitly finish/close that work or stop the named service, then retry.
    CPU-only containers can keep running.

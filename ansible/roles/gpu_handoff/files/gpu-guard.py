@@ -15,14 +15,18 @@ CONFIG = Path('/etc/spawnkit/windows.json')
 LOGOUT_TIMEOUT = 900
 # Runtime-only (cleared at boot), so the Linux desktop owns the RTX by default.
 SEAT_RULE = Path('/run/udev/rules.d/72-spawnkit-gpu-handoff.rules')
+# System services that keep the RTX open: stopped while the desktop seat is detached (a logout never
+# ends them), started again once the RTX is back. The ones stopped here are remembered at runtime.
+GPU_SERVICES = ['nvidia-powerd.service', 'nvidia-persistenced.service']
+STOPPED_SERVICES = Path('/run/spawnkit/gpu-services.json')
 # Holders that are not ordinary GPU jobs get specific advice instead of a bare PID.
 ADVICE = {
     'gnome-shell': 'the desktop compositor opened the RTX; drive all Linux displays from the Intel iGPU '
                    '(dGPU-wired outputs cannot stay in use) and log out/in, see docs/windows-vm.md',
     'Xwayland': 'Xwayland opened the RTX (usually a PRIME-offloaded X11 app); close it or log out/in',
     'Xorg': 'the X session uses the RTX; host-config vm-start detaches it and starts Windows after you log out',
-    'nvidia-persistenced': 'run: sudo systemctl stop nvidia-persistenced (disable it to make this permanent)',
-    'nvidia-powerd': 'run: sudo systemctl stop nvidia-powerd',
+    'nvidia-persistenced': 'host-config vm-view stops it for the handoff; by hand: sudo systemctl stop nvidia-persistenced',
+    'nvidia-powerd': 'host-config vm-view stops it for the handoff; by hand: sudo systemctl stop nvidia-powerd',
 }
 
 
@@ -88,16 +92,34 @@ def inspect_devices(cfg, sysfs=SYSFS):
     return sorted(n for n in nodes if Path(n).exists())
 
 
-def desktop_seat(cfg, attached, sysfs=SYSFS, rule=SEAT_RULE):
+def gpu_services(attached, stopped=STOPPED_SERVICES):
+    """Stop the running GPU services before a detach; start the ones stopped that way after an attach."""
+    if attached:
+        if stopped.exists():
+            subprocess.run(['/usr/bin/systemctl', 'start', *json.loads(stopped.read_text())], check=False, timeout=60)
+            stopped.unlink()
+        return
+    active = [unit for unit in GPU_SERVICES
+              if subprocess.run(['/usr/bin/systemctl', 'is-active', '--quiet', unit], timeout=30).returncode == 0]
+    if active:
+        earlier = json.loads(stopped.read_text()) if stopped.exists() else []
+        stopped.parent.mkdir(parents=True, exist_ok=True, mode=0o755)
+        stopped.write_text(json.dumps(sorted(set(earlier) | set(active))))
+        subprocess.run(['/usr/bin/systemctl', 'stop', *active], check=True, timeout=60)
+
+
+def desktop_seat(cfg, attached, sysfs=SYSFS, rule=SEAT_RULE, stopped=STOPPED_SERVICES):
     """Attach the handoff GPU to the desktop seat or move it to a seat with no master device.
 
     Xorg opens every seat0 DRM device through logind at startup and keeps it until the
     session ends. A detached GPU is hidden from new display servers, logind and session
-    ACLs; already open descriptors stay until their owners exit (logout).
+    ACLs; already open descriptors stay until their owners exit (logout). The GPU services
+    are stopped with the detach and started again with the attach.
     """
     if attached:
         rule.unlink(missing_ok=True)
     else:
+        gpu_services(False, stopped)
         rule.parent.mkdir(parents=True, exist_ok=True)
         rule.write_text(''.join(
             f'SUBSYSTEM=="drm", KERNELS=="{d["address"]}", ENV{{ID_SEAT}}="spawnkit-gpu-handoff", TAG-="master-of-seat"\n'
@@ -106,6 +128,8 @@ def desktop_seat(cfg, attached, sysfs=SYSFS, rule=SEAT_RULE):
     subprocess.run(['/usr/bin/udevadm', 'control', '--reload'], check=True, timeout=30)
     if nodes:
         subprocess.run(['/usr/bin/udevadm', 'trigger', '--action=change', '--settle', *nodes], check=True, timeout=60)
+    if attached:
+        gpu_services(True, stopped)
 
 
 def holders(nodes):

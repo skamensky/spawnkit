@@ -46,7 +46,7 @@ DialogWindow {
     heading: phase === "logout" ? "Log out to start Windows"
            : phase === "waiting" ? "Windows is waiting"
            : phase === "starting" ? "Starting Windows" : "Start Windows"
-    subtitle: phase === "review" ? (blocked ? "A system service is holding the RTX." : "Some programs are still using the RTX.")
+    subtitle: phase === "review" ? (blocked ? names(stuck) + " holds the RTX, and only root can stop " + (stuck.length === 1 ? "it." : "them.") : "Some programs are still using the RTX.")
             : phase === "closing" ? "Closing " + names(closing.map(byPid)) + "…"
             : phase === "stuck" ? names(stubborn.map(byPid)) + " didn't close."
             : phase === "logout" ? names(left.filter(h => h.release === "logout")) + (left.filter(h => h.release === "logout").length === 1 ? " releases" : " release") + " the RTX when your session ends."
@@ -120,12 +120,14 @@ DialogWindow {
         status: rowPhase(modelData.pid) === "closed" ? "Closed"
               : rowPhase(modelData.pid) === "stuck" ? "Still open"
               : rowPhase(modelData.pid) === "closing" ? "Closing"
+              : root.blocked && modelData.release !== "service" ? "Stays open"
               : root.statuses[modelData.release][0]
         statusColor: rowPhase(modelData.pid) === "closed" ? Theme.positive
                    : rowPhase(modelData.pid) === "stuck" ? Theme.caution
                    : rowPhase(modelData.pid) === "closing" ? Theme.accent
+                   : root.blocked && modelData.release !== "service" ? Theme.textTertiary
                    : root.statuses[modelData.release][1]
-        tooltip: "PID " + modelData.pid + "\n" + modelData.command
+        tooltip: (root.blocked && modelData.release !== "service" ? "Nothing is closed while a system service holds the RTX.\n" : "") + "PID " + modelData.pid + "\n" + modelData.command
         phase: rowPhase(modelData.pid)
     }
 
@@ -177,7 +179,7 @@ DialogWindow {
                     visible: root.willClose.length > 0
                     Layout.leftMargin: Theme.s3
                     Layout.bottomMargin: Theme.s2
-                    text: root.blocked ? "Your programs"
+                    text: root.blocked ? "Also using the RTX"
                         : root.phase === "review" ? "Spawnkit will close"
                         : root.closing.every(p => root.closed.includes(p)) ? "Closed" : "Closing"
                     count: root.willClose.length
@@ -215,7 +217,7 @@ DialogWindow {
                 : root.phase === "starting"
                     ? "Windows (Looking Glass) opens in a moment."
                 : root.blocked
-                    ? "A logout does not release it. Stop the service and try again, or start Windows without the RTX."
+                    ? "Nothing has been closed. A system service survives a logout and Spawnkit cannot stop it for you. Run this, then start Windows again, or start it without the RTX:"
                 : root.atLogout.length
                     ? "Windows starts after you log out, when " + root.names(root.atLogout) + " let go."
                 : root.leftOpen.length

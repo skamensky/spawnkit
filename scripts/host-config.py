@@ -310,7 +310,6 @@ def close_holders(held, offer_without_rtx=False):
     with UiDialog("rtx-holders", {"holders": holders, "without_rtx": offer_without_rtx}) as ui:
         picked = ui.recv()
         if picked is None:
-            run([*GUARD, "attach-desktop"])
             raise Cancelled("Cancelled; the RTX stays with Linux")
         if picked["action"] == "without_rtx":
             return None, False
@@ -326,7 +325,6 @@ def close_holders(held, offer_without_rtx=False):
             ui.send({"event": "stuck", "pids": stubborn})
             answer = ui.recv()
             if answer is None:
-                run([*GUARD, "attach-desktop"])
                 raise Cancelled("Cancelled; the RTX stays with Linux")
             chosen, force = stubborn, answer["action"] == "force"
         ui.send({"event": "done", "left": [{"pid": h["pid"], "name": h["name"], "release": release(h)} for h in remaining]})
@@ -375,12 +373,22 @@ def start_windows(name, notify, gui):
     """Detach the RTX from the desktop, then start Windows now or once its holders exit.
 
     With gui, user-owned holders can be closed from a dialog first. Returns False when
-    the start waits for the user to log out.
+    the start waits for the user to log out. Whatever fails after the detach, including
+    a cancelled dialog, returns the RTX to the desktop.
     """
     if subprocess.run(["systemctl", "is-active", "--quiet", "spawnkit-windows-handoff.service"]).returncode == 0:
         raise ValueError("Windows already starts once you log out; to cancel, run "
                          "sudo systemctl stop spawnkit-windows-handoff, then host-config vm-view again")
     held = json.loads(subprocess.check_output([*GUARD, "detach-desktop"], text=True))
+    try:
+        return start_detached(name, held, notify, gui)
+    except BaseException:
+        run([*GUARD, "attach-desktop"])
+        raise
+
+
+def start_detached(name, held, notify, gui):
+    """start_windows after the detach: close holders, start now, or schedule the start for the logout."""
     logout = False
     if held and gui:
         held, logout = close_holders(guard_holders(), offer_without_rtx=True)
@@ -390,15 +398,10 @@ def start_windows(name, notify, gui):
             return True
     if stuck := sorted({h["name"] for h in held if not h["closable"] and h["name"] not in SESSION_HOLDERS}):
         # A logout cannot release these, so waiting for one would only time out.
-        run([*GUARD, "attach-desktop"])
         raise ValueError("A logout does not release the RTX from " + ", ".join(stuck) + "; stop it (a service: "
                          "sudo systemctl stop <name>) or start Windows without the RTX")
     if not held:
-        try:
-            run(["/usr/bin/virsh", "-c", "qemu:///system", "start", name], capture_output=True, text=True)
-        except subprocess.CalledProcessError:
-            run([*GUARD, "attach-desktop"])
-            raise
+        run(["/usr/bin/virsh", "-c", "qemu:///system", "start", name], capture_output=True, text=True)
         return True
     timeout = json.loads(subprocess.check_output([*GUARD, "schedule-start"], text=True))["timeout"]
     names = ", ".join(sorted({h["name"] for h in held}))

@@ -484,22 +484,49 @@ class GPUHandoff(unittest.TestCase):
         dialogs = Path(cli.__file__).with_name('spawnkit-ui') / 'dialogs'
         self.assertTrue((dialogs / 'rtx-holders.qml').is_file() and (dialogs / 'confirm.qml').is_file())
 
-    def test_picker_cancel_returns_gpu_to_desktop(self):
+    def test_picker_cancel_closes_nothing(self):
         held = [holder(10)]
         dialog, sent = self.picker()
-        with dialog, patch.object(cli, 'run') as attach, patch.object(cli.os, 'kill') as kill:
+        with dialog, patch.object(cli.os, 'kill') as kill:
             with self.assertRaisesRegex(cli.Cancelled, 'Cancelled'):
                 cli.close_holders(held)
         kill.assert_not_called()
-        self.assertIn('attach-desktop', attach.call_args.args[0])
 
-    def test_picker_cancel_while_stuck_returns_gpu_to_desktop(self):
+    def test_picker_cancel_while_stuck_stops_asking(self):
         held = [holder(10)]
         dialog, sent = self.picker({'action': 'close', 'pids': [10]})
-        with dialog, patch.object(cli, 'run') as attach, patch.object(cli, 'release_holders', return_value=held):
+        with dialog, patch.object(cli, 'release_holders', return_value=held):
             with self.assertRaisesRegex(cli.Cancelled, 'Cancelled'):
                 cli.close_holders(held)
-        self.assertIn('attach-desktop', attach.call_args.args[0])
+        self.assertEqual(sent[-1]['event'], 'stuck')
+
+    def test_start_returns_the_gpu_to_the_desktop_whenever_the_dialog_ends_early(self):
+        job = holder(10)
+        for failure in (cli.Cancelled('Cancelled'), ValueError('The rtx-holders dialog failed (exit -15)')):
+            with patch.object(cli.subprocess, 'run', return_value=subprocess.CompletedProcess([], 3)), \
+                    patch.object(cli.subprocess, 'check_output', return_value=json.dumps([job])), \
+                    patch.object(cli, 'guard_holders', return_value=[job]), \
+                    patch.object(cli, 'close_holders', side_effect=failure), patch.object(cli, 'run') as run:
+                with self.assertRaises(type(failure)):
+                    cli.start_windows('windows', notify=False, gui=True)
+            self.assertIn('attach-desktop', run.call_args.args[0])
+
+    def test_gpu_services_are_stopped_for_the_detach_and_started_with_the_attach(self):
+        with tempfile.TemporaryDirectory() as directory:
+            stopped = Path(directory) / 'services.json'
+            with patch.object(guard.subprocess, 'run', return_value=subprocess.CompletedProcess([], 0)) as run:
+                guard.gpu_services(False, stopped)
+            self.assertEqual(json.loads(stopped.read_text()), sorted(guard.GPU_SERVICES))
+            self.assertEqual(run.call_args.args[0][:2], ['/usr/bin/systemctl', 'stop'])
+            with patch.object(guard.subprocess, 'run') as run:
+                guard.gpu_services(True, stopped)
+            self.assertEqual(run.call_args.args[0][:2], ['/usr/bin/systemctl', 'start'])
+            self.assertFalse(stopped.exists())
+            with patch.object(guard.subprocess, 'run', return_value=subprocess.CompletedProcess([], 3)) as run:
+                guard.gpu_services(False, stopped)
+                guard.gpu_services(True, stopped)
+            self.assertFalse(stopped.exists())
+            self.assertTrue(all(c.args[0][1] == 'is-active' for c in run.call_args_list))
 
     def test_start_logs_out_when_the_dialog_asked_for_it(self):
         shell = holder(10, name='kwin_wayland', closable=False)

@@ -23,18 +23,21 @@
       }))
     ];
     # A desktop audio session holding the passthrough GPU's HDMI function makes the
-    # GPU guard refuse to start the VM, so WirePlumber ignores those cards.
-    xdg.configFile."wireplumber/main.lua.d/51-spawnkit-passthrough-audio.lua" =
+    # GPU guard refuse to start the VM, so WirePlumber (0.5, SPA-JSON rules) ignores those cards.
+    xdg.configFile."wireplumber/wireplumber.conf.d/51-spawnkit-passthrough-audio.conf" =
       lib.mkIf (config.personal.virtualization.passthroughAudio != [ ])
         {
-          text = lib.concatMapStrings (address: ''
-            table.insert(alsa_monitor.rules, {
-              matches = { { { "device.name", "equals", "alsa_card.pci-${
-                lib.replaceStrings [ ":" ] [ "_" ] address
-              }" } } },
-              apply_properties = { ["device.disabled"] = true },
-            })
-          '') config.personal.virtualization.passthroughAudio;
+          text = ''
+            monitor.alsa.rules = [
+            ${lib.concatMapStrings (address: ''
+              {
+                matches = [ { device.name = "alsa_card.pci-${
+                  lib.replaceStrings [ ":" ] [ "_" ] address
+                }" } ]
+                actions = { update-props = { device.disabled = true } }
+              }
+            '') config.personal.virtualization.passthroughAudio}]
+          '';
         };
     # Launchers live in ~/.local/share/applications rather than the profile: GNOME
     # Shell never notices launchers added to a profile directory that a switch
