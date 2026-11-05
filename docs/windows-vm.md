@@ -225,7 +225,17 @@ Closing Looking Glass leaves Windows running.
 The domain's `memtune` hard limit caps the whole QEMU process at guest RAM plus
 Looking Glass memory plus 2 GiB. QEMU once grew by about 170 MB/s while Looking Glass
 flooded its SPICE connections; uncapped, that exhausted RAM and swap and the kernel
-killed desktop apps. With the cap, only the guest dies. Do not lower the guest's
+killed desktop apps. With the cap, only the guest dies, but it swaps guest memory
+first, so Windows (and call audio) stutters before the kill.
+
+The flood was one bogus pointer move: after a resize such as Insert+F, B7 can compute
+a delta of about 2e9 px, and PureSpice splits every move into 127 px virtio-mouse
+steps, so it sent a single 270 MB message (`Only wrote ... of the expected ... bytes`
+in `~/.local/state/spawnkit/looking-glass.log`) whose millions of motion events QEMU
+queued. The Home Manager build patches PureSpice to drop any move over 16384 px and
+log `Dropping a bogus ... px mouse motion`. To record a reproduction, run
+`scripts/vm-trace.py` (QEMU memory, CPU and cgroup, SPICE socket queues, Looking
+Glass log lines, twice a second) into `~/.local/state/spawnkit/vm-trace-*.jsonl`. Do not lower the guest's
 `oom_score_adj` instead: that protects the runaway process and sacrifices the desktop.
 `home-config` holds `$XDG_RUNTIME_DIR/home-config.lock` for its whole run so two
 evaluations (about 4 GB each) never overlap.

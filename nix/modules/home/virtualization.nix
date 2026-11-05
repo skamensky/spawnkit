@@ -20,6 +20,16 @@
       # B7 ignores the pointer after Alt+Tab until it leaves and re-enters the window.
       (pkgs.looking-glass-client.overrideAttrs (old: {
         patches = old.patches or [ ] ++ [ ./looking-glass-enter-on-ungrab.patch ];
+        # A resize (Insert+F) can leave B7's cursor scale bogus for one event, and
+        # PureSpice then splits a ~2e9 px move into 127 px steps: one 270 MB send
+        # whose millions of motion events QEMU queues until it runs out of memory.
+        # No real pointer move exceeds a screen, so drop larger ones.
+        postPatch = (old.postPatch or "") + ''
+          substituteInPlace ../repos/PureSpice/src/channel_inputs.c --replace-fail \
+            'const unsigned msgs  = (delta + 126) / 127;' \
+            'if (delta > 16384) { PS_LOG_ERROR("Dropping a bogus %u px mouse motion", delta); return true; }
+          const unsigned msgs  = (delta + 126) / 127;'
+        '';
       }))
     ];
     # A desktop audio session holding the passthrough GPU's HDMI function makes the
