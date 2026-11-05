@@ -356,9 +356,11 @@ in
       # task's right-click menu keeps only its own actions (pin, unpin, close). Panels stay
       # declared here; the plasma-manager scripts still apply them.
       configFile."plasma-org.kde.plasma.desktop-appletsrc".General.immutability = 2;
-      # Plasma's application runner gives way to spawnkit-search (krunner/dbusplugins below).
+      # Plasma's application runner gives way to spawnkit-search (krunner/dbusplugins below), and
+      # search offers no Software Center installs.
       configFile.krunnerrc = {
         Plugins.krunner_servicesEnabled = false;
+        Plugins.krunner_appstreamEnabled = false;
         Plugins."tech.shmuel.appsEnabled" = true;
         "Plugins/Favorites".plugins = "tech.shmuel.apps";
       };

@@ -670,7 +670,7 @@ GNOME stays installed, so the session is chosen at login and the trial is revers
   version, so rebuild it from the new tarball after a Plasma upgrade. Applications
   are found by `spawnkit-search`, a user service that KRunner and the menu query
   over D-Bus (runner `tech.shmuel.apps`); `krunnerrc` turns off Plasma's own
-  application runner and lists the new one as the favourite, so applications lead
+  application runner and its Software Center results, and lists the new one as the favourite, so applications lead
   every result list. It scores an app by how the query matches its name (whole name,
   prefix, word prefix, initials, letters from a word start, substring, then
   keywords and command), prefers shorter names on ties, and learns: apps launched
