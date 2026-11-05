@@ -92,6 +92,7 @@ in
       with pkgs;
       [
         firefox
+        ladybird
         vscode
         copyq
         (if config.personal.desktop.session == "x11" then xclip else wl-clipboard)
