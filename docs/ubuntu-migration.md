@@ -621,6 +621,8 @@ GNOME stays installed, so the session is chosen at login and the trial is revers
   `kwriteconfig6 --notify` on that file loads the new one. No XKB toggle option is
   set, since GNOME's `grp:win_space_toggle` would make Meta+Space switch twice. There is no system tray, so applications'
   tray icons (CopyQ, Claude) do not appear; volume and network have no indicator.
+  Ctrl+` toggles CopyQ through a plasma-manager command (GNOME binds it in
+  `desktop.nix`); like any new global shortcut it needs a relogin to take effect.
   The launcher, `tech.shmuel.kickoff`, is Plasma 6.6.6's Kickoff with the Places
   tab removed and every session and power action under one Power menu; it is pinned
   to Ubuntu's Plasma version, so rebuild it from the new tarball after a Plasma
@@ -693,6 +695,7 @@ GNOME stays installed, so the session is chosen at login and the trial is revers
 - [x] Docker works (2026-11-04: Engine 29.1.3 reachable without sudo); the supa-crm local stack is not part of the migration
 - [ ] Before adopting the Windows VM: busy-GPU start refusal, Windows GPU acceleration and repeated return to Linux verified
 - [x] Citrix access works (2026-11-04: Workspace app 24.11 from the `citrix` role)
+- [ ] `.ica` files opened from Chrome start Citrix: the laptop profile makes `wfica.desktop` the default and replaces Ubuntu's launcher with one that drops the Nix Chrome wrapper's `LD_LIBRARY_PATH` (2026-11-05: with it, wfica exited on a Nix sqlite needing a newer glibc)
 - [ ] Windows Downloads/Documents/Desktop present in `~/windows-import` (2026-11-04: rsync dry run against read-only C: shows no differences except the deliberately skipped `Chrome Passwords.csv` and the portable `Desktop/Tor Browser`); all 51 Notepad++ backups imported, review by Shmuel pending
 - [x] CopyQ autostarts; the `Ditto/*` tabs exist; the import printed "verified per tab"; a Hebrew clip and an image paste correctly (2026-11-04)
 - [ ] log complete; summary given to Shmuel

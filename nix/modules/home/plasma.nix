@@ -289,6 +289,12 @@ in
         "KZones: Snap all windows" = [ ];
       };
       shortcuts."KDE Keyboard Layout Switcher"."Switch to Next Keyboard Layout" = "Meta+Space";
+      # Ditto's shortcut, as on GNOME (desktop.nix): Ctrl+` shows or hides CopyQ's history.
+      hotkeys.commands.copyq-toggle = {
+        name = "CopyQ";
+        key = "Ctrl+`";
+        command = "${pkgs.copyq}/bin/copyq toggle";
+      };
       # Windows' title bar buttons: the window menu on the left, minimize, maximize and
       # close on the right (Layan's Aurorae theme defaults to macOS' left-hand set).
       kwin.titlebarButtons = {
