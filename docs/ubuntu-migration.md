@@ -617,9 +617,15 @@ GNOME stays installed, so the session is chosen at login and the trial is revers
   with three or more, and the wheel steps through them; Meta+Space also switches),
   `tech.shmuel.stats` (a speedometer that opens, on click, a Spawnkit-styled card of
   processor, integrated and discrete graphics, memory, swap and root-disk use with
-  temperatures; it polls the `spawnkit-stats` JSON CLI only while open, since
+  temperatures. Numbers and bars ease to each reading over the roughly one-second
+  poll, and the processor row unfolds into a map of physical cores (performance and
+  efficiency cores apart, a bar per hardware thread) whose cores name their threads'
+  load and clock when pointed at. Pointing at the integrated graphics row offers a
+  hide button, persisted in the widget's `hideIntegratedGpu` setting, with a Show
+  link to bring it back. It polls the `spawnkit-stats` JSON CLI (which also
+  reports each thread under `cpu.threads`) only while open, since
   ksystemstats reports 0% for the Intel iGPU and would wake the sleeping RTX;
-  2026-11-05: renders live data under `plasmawindowed`), `tech.shmuel.clock` and
+  2026-11-05: renders live data, core map and hidden integrated graphics included, under `plasmawindowed`), `tech.shmuel.clock` and
   notifications. Both small widgets use Plasma's full
   representation: without one the panel never shows them. A running KWin keeps the
   old layout list when Home Manager rewrites `kxkbrc`; a relogin or

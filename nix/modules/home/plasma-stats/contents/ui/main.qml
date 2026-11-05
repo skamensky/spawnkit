@@ -1,6 +1,9 @@
 // The machine's load in one popup: an icon in the panel that opens, on click, a Spawnkit card with
 // processor, graphics, memory, swap and disk use. It polls `spawnkit-stats` (the same JSON agents
-// read) only while the card is open.
+// read) about once a second, only while the card is open. Every number and bar glides to its new
+// value over one poll, so updates read as motion rather than jumps. The processor row unfolds into
+// a map of its physical cores, one bar per hardware thread; pointing at a core names its threads
+// and clock.
 import QtQuick
 import QtQuick.Layouts
 import org.kde.plasma.plasmoid
@@ -12,15 +15,31 @@ import "Spawnkit"
 PlasmoidItem {
     id: root
 
-    readonly property string statsCommand: "@stats@ --interval 0.6"
+    readonly property string statsCommand: "@stats@ --interval 0.5"
+    // One poll: the CLI's 0.5 s measurement, its start-up and the pause below.
+    readonly property int glide: 950
     property var stats: null
+    property bool showCores: false
+    property var hoveredCore: null
+
+    // Lists rebuilt only when their length changes, so their delegates (and animations) survive
+    // each poll; the delegates read the current values from root.stats.
+    readonly property int gpuCount: stats ? stats.gpus.length : 0
+    readonly property int threadCount: stats && stats.cpu.threads ? stats.cpu.threads.length : 0
+    property var coreGroups: []
+    onThreadCountChanged: coreGroups = groupCores()
 
     Plasmoid.icon: "speedometer-symbolic"
     Plasmoid.backgroundHints: PlasmaCore.Types.NoBackground
     toolTipMainText: i18n("System stats")
     toolTipSubText: i18n("Click for processor, graphics, memory and disk use")
 
-    onExpandedChanged: if (root.expanded) poll()
+    onExpandedChanged: {
+        if (root.expanded)
+            poll()
+        else
+            hoveredCore = null
+    }
 
     function poll() {
         if (!runner.connectedSources.length)
@@ -35,7 +54,7 @@ PlasmoidItem {
             try {
                 root.stats = JSON.parse(data.stdout)
             } catch (err) {
-                root.stats = null
+                // Keep the last snapshot rather than blanking the card.
             }
             if (root.expanded)
                 next.restart()
@@ -43,8 +62,52 @@ PlasmoidItem {
     }
     Timer {
         id: next
-        interval: 1000
+        interval: 350
         onTriggered: root.poll()
+    }
+
+    // [{kind, title, cores: [{core, threads: [index into stats.cpu.threads]}]}], performance
+    // cores first, each physical core's threads together.
+    function groupCores() {
+        const threads = stats && stats.cpu.threads ? stats.cpu.threads : []
+        const groups = []
+        for (const kind of ["performance", "efficiency", null]) {
+            const cores = []
+            const byCore = {}
+            threads.forEach((thread, index) => {
+                if (thread.kind !== kind)
+                    return
+                const key = thread.core === null ? "t" + thread.id : "c" + thread.core
+                if (byCore[key] === undefined) {
+                    byCore[key] = cores.length
+                    cores.push({ core: cores.length + 1, threads: [] })
+                }
+                cores[byCore[key]].threads.push(index)
+            })
+            if (cores.length)
+                groups.push({
+                    kind,
+                    title: kind === "performance" ? i18n("Performance cores")
+                        : kind === "efficiency" ? i18n("Efficiency cores") : i18n("Cores"),
+                    cores,
+                })
+        }
+        return groups
+    }
+    function thread(index) {
+        return stats && stats.cpu.threads ? stats.cpu.threads[index] : null
+    }
+    function averageGhz(group) {
+        let sum = 0, n = 0
+        for (const core of group.cores)
+            for (const index of core.threads) {
+                const t = thread(index)
+                if (t && t.mhz) {
+                    sum += t.mhz
+                    n++
+                }
+            }
+        return n ? (sum / n / 1000).toFixed(1) : ""
     }
 
     function gib(bytes) {
@@ -59,56 +122,129 @@ PlasmoidItem {
         return value >= critical ? Theme.negative : value >= high ? Theme.caution : Theme.accent
     }
 
+    // A value that eases to each new reading over one poll.
+    component Glide: QtObject {
+        property real target: 0
+        property real value: target
+        Behavior on value {
+            enabled: Theme.motion
+            NumberAnimation { duration: root.glide; easing.type: Easing.InOutSine }
+        }
+    }
+
     component Metric: ColumnLayout {
         id: metric
         property string label
         property string detail
-        property string value
+        // -1 hides the value and the bar.
         property real percent: -1
-        property color fill: root.tone(percent, 75, 92)
+        property bool ready: root.stats !== null
+        property real high: 75
+        property real critical: 92
         property string chip
         property color chipTone: Theme.textTertiary
+        property bool expandable: false
+        property bool open: false
+        // A hide button that appears on hover.
+        property bool hideable: false
+        signal toggled()
+        signal hideRequested()
+        readonly property Glide shown: Glide { target: Math.max(0, metric.percent) }
         spacing: Theme.s2
         Layout.fillWidth: true
 
-        RowLayout {
-            spacing: Theme.s2
+        HoverHandler { id: rowHover }
+
+        Item {
             Layout.fillWidth: true
-            ColumnLayout {
-                spacing: 1
-                Layout.fillWidth: true
-                Text {
-                    text: metric.label
-                    font.family: Theme.font
-                    font.pointSize: Theme.base
-                    font.weight: Font.Medium
-                    color: Theme.text
-                }
-                Text {
-                    visible: text.length > 0
-                    text: metric.detail
-                    elide: Text.ElideRight
+            implicitHeight: header.implicitHeight
+
+            Rectangle {
+                visible: metric.expandable
+                anchors.fill: parent
+                anchors.margins: -Theme.s1
+                radius: Theme.radiusSm
+                color: press.pressed ? Theme.pressed : hover.hovered ? Theme.hover : "transparent"
+                Behavior on color { ColorAnimation { duration: Theme.quick } }
+            }
+            HoverHandler {
+                id: hover
+                enabled: metric.expandable
+                cursorShape: Qt.PointingHandCursor
+            }
+            TapHandler {
+                id: press
+                enabled: metric.expandable
+                onTapped: metric.toggled()
+            }
+
+            RowLayout {
+                id: header
+                anchors.left: parent.left
+                anchors.right: parent.right
+                spacing: Theme.s2
+                ColumnLayout {
+                    spacing: 1
                     Layout.fillWidth: true
-                    font.family: Theme.font
-                    font.pointSize: Theme.microSize
-                    color: Theme.textTertiary
+                    RowLayout {
+                        spacing: Theme.s1
+                        Text {
+                            text: metric.label
+                            font.family: Theme.font
+                            font.pointSize: Theme.base
+                            font.weight: Font.Medium
+                            color: Theme.text
+                        }
+                        Kirigami.Icon {
+                            visible: metric.expandable
+                            source: "arrow-down"
+                            implicitWidth: Kirigami.Units.iconSizes.small
+                            implicitHeight: implicitWidth
+                            color: Theme.textTertiary
+                            rotation: metric.open ? 180 : 0
+                            Behavior on rotation {
+                                enabled: Theme.motion
+                                NumberAnimation { duration: Theme.standard; easing.type: Easing.OutCubic }
+                            }
+                        }
+                    }
+                    Text {
+                        visible: text.length > 0
+                        text: metric.detail
+                        elide: Text.ElideRight
+                        Layout.fillWidth: true
+                        font.family: Theme.font
+                        font.pointSize: Theme.microSize
+                        font.features: { "tnum": 1 }
+                        color: Theme.textTertiary
+                    }
                 }
-            }
-            Chip {
-                visible: metric.chip.length > 0
-                text: metric.chip
-                tone: metric.chipTone
-            }
-            Text {
-                visible: text.length > 0
-                text: metric.value
-                font.family: Theme.display
-                font.pointSize: Theme.leadSize * 1.15
-                font.weight: Font.DemiBold
-                font.features: { "tnum": 1 }
-                color: Theme.text
-                horizontalAlignment: Text.AlignRight
-                Layout.minimumWidth: Theme.s7 + Theme.s5
+                // Always laid out, only faded, so hovering does not shift the row.
+                IconButton {
+                    visible: metric.hideable
+                    opacity: rowHover.hovered || hovered ? 1 : 0
+                    Behavior on opacity { NumberAnimation { duration: Theme.quick } }
+                    size: 24
+                    iconName: "view-hidden"
+                    tooltip: i18n("Hide this row")
+                    onClicked: metric.hideRequested()
+                }
+                Chip {
+                    visible: metric.chip.length > 0
+                    text: metric.chip
+                    tone: metric.chipTone
+                }
+                Text {
+                    visible: metric.percent >= 0
+                    text: metric.ready ? Math.round(metric.shown.value) + "%" : "–"
+                    font.family: Theme.display
+                    font.pointSize: Theme.leadSize * 1.15
+                    font.weight: Font.DemiBold
+                    font.features: { "tnum": 1 }
+                    color: Theme.text
+                    horizontalAlignment: Text.AlignRight
+                    Layout.minimumWidth: Theme.s7 + Theme.s5
+                }
             }
         }
         Rectangle {
@@ -118,13 +254,83 @@ PlasmoidItem {
             radius: 3
             color: Theme.raised
             Rectangle {
-                width: parent.width * Math.max(0, Math.min(100, metric.percent)) / 100
+                width: parent.width * Math.min(100, metric.shown.value) / 100
                 height: parent.height
                 radius: 3
-                color: metric.fill
-                Behavior on width { enabled: Theme.motion; NumberAnimation { duration: Theme.standard; easing.type: Easing.OutCubic } }
-                Behavior on color { ColorAnimation { duration: Theme.standard } }
+                color: root.tone(metric.shown.value, metric.high, metric.critical)
+                Behavior on color { ColorAnimation { duration: root.glide } }
             }
+        }
+    }
+
+    // One physical core: a bar per hardware thread rising from the cell's foot, and the core's
+    // busiest thread as a number.
+    component CoreCell: Rectangle {
+        id: cell
+        property var core
+        property string kind
+        readonly property bool hovered: cellHover.hovered
+        readonly property real peak: {
+            let p = 0
+            for (const index of core.threads) {
+                const t = root.thread(index)
+                if (t)
+                    p = Math.max(p, t.usage_percent)
+            }
+            return p
+        }
+        readonly property Glide peakShown: Glide { target: cell.peak }
+        implicitHeight: Theme.tileSize
+        Layout.fillWidth: true
+        radius: Theme.radiusSm
+        color: Theme.raised
+        border.width: hovered ? 1 : 0
+        border.color: Theme.outline
+        clip: true
+
+        HoverHandler {
+            id: cellHover
+            onHoveredChanged: {
+                if (hovered)
+                    root.hoveredCore = { kind: cell.kind, core: cell.core }
+                else if (root.hoveredCore && root.hoveredCore.core === cell.core)
+                    root.hoveredCore = null
+            }
+        }
+
+        Row {
+            id: lanes
+            anchors.fill: parent
+            anchors.margins: 2
+            spacing: 2
+            Repeater {
+                model: cell.core.threads
+                delegate: Item {
+                    id: lane
+                    required property int modelData
+                    readonly property var info: root.thread(modelData)
+                    readonly property Glide load: Glide { target: lane.info ? lane.info.usage_percent : 0 }
+                    width: (lanes.width - (cell.core.threads.length - 1) * lanes.spacing) / cell.core.threads.length
+                    height: lanes.height
+                    Rectangle {
+                        anchors.bottom: parent.bottom
+                        width: parent.width
+                        height: Math.max(2, parent.height * Math.min(100, lane.load.value) / 100)
+                        radius: Theme.radiusSm - 2
+                        color: Qt.alpha(root.tone(lane.load.value, 75, 92), 0.55)
+                        Behavior on color { ColorAnimation { duration: root.glide } }
+                    }
+                }
+            }
+        }
+        Text {
+            anchors.centerIn: parent
+            text: Math.round(cell.peakShown.value)
+            font.family: Theme.font
+            font.pointSize: Theme.microSize
+            font.weight: Font.Medium
+            font.features: { "tnum": 1 }
+            color: cell.peak >= 50 ? Theme.text : Theme.textSecondary
         }
     }
 
@@ -151,7 +357,8 @@ PlasmoidItem {
                     Layout.fillWidth: true
                 }
                 Spinner {
-                    visible: root.stats === null
+                    opacity: root.stats === null ? 1 : 0
+                    Behavior on opacity { NumberAnimation { duration: Theme.standard } }
                 }
             }
 
@@ -160,30 +367,129 @@ PlasmoidItem {
             Metric {
                 readonly property var cpu: root.stats ? root.stats.cpu : null
                 label: i18n("Processor")
-                detail: cpu ? i18np("%1 thread", "%1 threads", cpu.cores) : ""
-                value: cpu ? Math.round(cpu.usage_percent) + "%" : "–"
+                detail: !cpu ? ""
+                    : root.showCores ? i18n("Each core's busiest thread")
+                    : i18np("%1 thread · click for each core", "%1 threads · click for each core", cpu.cores)
                 percent: cpu ? cpu.usage_percent : 0
                 chip: cpu && cpu.temperature_c !== null ? Math.round(cpu.temperature_c) + " °C" : ""
                 chipTone: cpu ? root.tone(cpu.temperature_c, 80, 92) : Theme.textTertiary
+                expandable: root.threadCount > 0
+                open: root.showCores
+                onToggled: root.showCores = !root.showCores
+            }
+
+            ColumnLayout {
+                id: coreMap
+                visible: root.showCores && root.threadCount > 0
+                Layout.fillWidth: true
+                spacing: Theme.s3
+
+                Repeater {
+                    model: root.coreGroups
+                    delegate: ColumnLayout {
+                        id: group
+                        required property var modelData
+                        Layout.fillWidth: true
+                        spacing: Theme.s1 + 2
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            Text {
+                                text: group.modelData.title
+                                font.family: Theme.font
+                                font.pointSize: Theme.microSize
+                                font.weight: Font.Medium
+                                color: Theme.textSecondary
+                                Layout.fillWidth: true
+                            }
+                            Text {
+                                readonly property string ghz: root.averageGhz(group.modelData)
+                                text: i18np("%1 core", "%1 cores", group.modelData.cores.length)
+                                    + (ghz ? " · " + i18n("%1 GHz", ghz) : "")
+                                font.family: Theme.font
+                                font.pointSize: Theme.microSize
+                                font.features: { "tnum": 1 }
+                                color: Theme.textTertiary
+                            }
+                        }
+                        GridLayout {
+                            Layout.fillWidth: true
+                            columns: 8
+                            columnSpacing: Theme.s1
+                            rowSpacing: Theme.s1
+                            uniformCellWidths: true
+                            Repeater {
+                                model: group.modelData.cores
+                                delegate: CoreCell {
+                                    required property var modelData
+                                    core: modelData
+                                    kind: group.modelData.kind ?? ""
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Pointing at a core names its threads, their loads and clocks.
+                Text {
+                    Layout.fillWidth: true
+                    elide: Text.ElideRight
+                    font.family: Theme.font
+                    font.pointSize: Theme.microSize
+                    font.features: { "tnum": 1 }
+                    color: root.hoveredCore ? Theme.textSecondary : Theme.textTertiary
+                    text: {
+                        const h = root.hoveredCore
+                        if (!h)
+                            return i18n("Point at a core for its threads and clock")
+                        const name = h.kind === "performance" ? i18n("P-core %1", h.core.core)
+                            : h.kind === "efficiency" ? i18n("E-core %1", h.core.core)
+                            : i18n("Core %1", h.core.core)
+                        const parts = h.core.threads.map(index => {
+                            const t = root.thread(index)
+                            return t ? i18n("CPU %1 %2%", t.id, Math.round(t.usage_percent))
+                                + (t.mhz ? " " + i18n("at %1 GHz", (t.mhz / 1000).toFixed(1)) : "") : ""
+                        })
+                        return name + " · " + parts.join(", ")
+                    }
+                }
             }
 
             Repeater {
-                model: root.stats ? root.stats.gpus : []
+                model: root.gpuCount
                 delegate: Metric {
-                    required property var modelData
-                    readonly property bool active: modelData.state === "active" && modelData.usage_percent !== undefined
-                    label: modelData.kind === "discrete" ? i18n("Graphics card") : i18n("Graphics")
-                    detail: modelData.name
-                    value: active ? Math.round(modelData.usage_percent) + "%" : ""
-                    percent: active ? modelData.usage_percent : -1
-                    chip: modelData.state === "windows" ? i18n("In Windows")
-                        : modelData.state === "asleep" ? i18n("Asleep")
-                        : modelData.state === "off" ? i18n("Off")
-                        : modelData.temperature_c !== undefined ? Math.round(modelData.temperature_c) + " °C" : ""
-                    chipTone: modelData.state === "windows" ? Theme.accent
-                        : modelData.temperature_c !== undefined ? root.tone(modelData.temperature_c, 80, 90)
+                    required property int index
+                    readonly property var gpu: root.stats ? root.stats.gpus[index] : null
+                    readonly property string state: gpu ? gpu.state : ""
+                    readonly property bool active: state === "active" && gpu.usage_percent !== undefined
+                    readonly property bool integrated: gpu !== null && gpu.kind === "integrated"
+                    visible: !(integrated && Plasmoid.configuration.hideIntegratedGpu)
+                    hideable: integrated
+                    onHideRequested: Plasmoid.configuration.hideIntegratedGpu = true
+                    label: gpu && gpu.kind === "discrete" ? i18n("Graphics card") : i18n("Graphics")
+                    detail: gpu ? gpu.name : ""
+                    percent: active ? gpu.usage_percent : -1
+                    chip: state === "windows" ? i18n("In Windows")
+                        : state === "asleep" ? i18n("Asleep")
+                        : state === "off" ? i18n("Off")
+                        : gpu && gpu.temperature_c !== undefined ? Math.round(gpu.temperature_c) + " °C" : ""
+                    chipTone: state === "windows" ? Theme.accent
+                        : gpu && gpu.temperature_c !== undefined ? root.tone(gpu.temperature_c, 80, 90)
                         : Theme.textTertiary
                 }
+            }
+
+            Text {
+                visible: Plasmoid.configuration.hideIntegratedGpu
+                    && root.stats !== null && root.stats.gpus.some(g => g.kind === "integrated")
+                text: i18n("Integrated graphics hidden · <a href=\"show\">Show</a>")
+                textFormat: Text.StyledText
+                linkColor: Theme.accent
+                font.family: Theme.font
+                font.pointSize: Theme.microSize
+                color: Theme.textTertiary
+                onLinkActivated: Plasmoid.configuration.hideIntegratedGpu = false
+                HoverHandler { cursorShape: parent.hoveredLink ? Qt.PointingHandCursor : Qt.ArrowCursor }
             }
 
             SectionLabel { text: i18n("Memory and storage") }
@@ -192,23 +498,21 @@ PlasmoidItem {
                 readonly property var part: root.stats ? root.stats.memory : null
                 label: i18n("Memory")
                 detail: part ? i18n("%1 of %2 GiB", root.gib(part.used_bytes), root.gib(part.total_bytes)) : ""
-                value: part ? Math.round(root.share(part)) + "%" : "–"
                 percent: root.share(part)
             }
             Metric {
                 readonly property var part: root.stats ? root.stats.swap : null
                 label: i18n("Swap")
                 detail: part ? i18n("%1 of %2 GiB", root.gib(part.used_bytes), root.gib(part.total_bytes)) : ""
-                value: part ? Math.round(root.share(part)) + "%" : "–"
                 percent: root.share(part)
             }
             Metric {
                 readonly property var part: root.stats ? root.stats.disk : null
                 label: i18n("Disk")
                 detail: part ? i18n("%1 of %2 GiB used on %3", root.gib(part.used_bytes), root.gib(part.total_bytes), part.path) : ""
-                value: part ? Math.round(root.share(part)) + "%" : "–"
                 percent: root.share(part)
-                fill: root.tone(percent, 85, 95)
+                high: 85
+                critical: 95
             }
         }
     }

@@ -1,6 +1,6 @@
 """spawnkit-stats: one JSON snapshot of the machine's load, for the panel's stats widget and for agents.
 
-CPU and integrated-GPU load are measured over --interval seconds. The integrated GPU's load is the
+CPU (overall and per hardware thread) and integrated-GPU load are measured over --interval seconds. The integrated GPU's load is the
 share of that time it spent out of its RC6 sleep state (i915's rc6_residency_ms). A discrete
 NVIDIA GPU is reported as held by the Windows VM (bound to vfio-pci), asleep (runtime-suspended,
 left asleep rather than woken by a query) or with nvidia-smi's utilisation and temperature.
@@ -16,9 +16,52 @@ from pathlib import Path
 
 
 def cpu_times():
-    fields = [int(v) for v in Path("/proc/stat").read_text().split("\n", 1)[0].split()[1:]]
-    idle = fields[3] + fields[4]  # idle + iowait
-    return sum(fields[:8]), idle
+    """{"cpu": (total, idle), "cpu0": ..., ...} from /proc/stat's aggregate and per-thread lines."""
+    times = {}
+    for line in Path("/proc/stat").read_text().splitlines():
+        if not line.startswith("cpu"):
+            break
+        name, *values = line.split()
+        fields = [int(v) for v in values]
+        times[name] = (sum(fields[:8]), fields[3] + fields[4])  # idle + iowait
+    return times
+
+
+def busy(before, after):
+    total, idle = after[0] - before[0], after[1] - before[1]
+    return round(100 * (1 - idle / total), 1) if total > 0 else 0.0
+
+
+def cpu_ranges(path):
+    """CPU ids from a sysfs list such as "0-15,32"."""
+    try:
+        text = Path(path).read_text().strip()
+    except OSError:
+        return set()
+    ids = set()
+    for part in filter(None, text.split(",")):
+        low, _, high = part.partition("-")
+        ids.update(range(int(low), int(high or low) + 1))
+    return ids
+
+
+def threads(before, after):
+    """Each hardware thread's load, physical core, clock and, on hybrid CPUs, core kind."""
+    performance = cpu_ranges("/sys/devices/cpu_core/cpus")
+    efficiency = cpu_ranges("/sys/devices/cpu_atom/cpus")
+    result = []
+    for name in sorted((n for n in after if n != "cpu" and n in before), key=lambda n: int(n[3:])):
+        cpu = int(name[3:])
+        base = Path(f"/sys/devices/system/cpu/{name}")
+        khz = read_int(base / "cpufreq/scaling_cur_freq")
+        result.append({
+            "id": cpu,
+            "core": read_int(base / "topology/core_id"),
+            "kind": "performance" if cpu in performance else "efficiency" if cpu in efficiency else None,
+            "usage_percent": busy(before[name], after[name]),
+            "mhz": round(khz / 1000) if khz else None,
+        })
+    return result
 
 
 def rc6_cards():
@@ -113,26 +156,27 @@ def disk(path):
 
 def snapshot(interval, disk_path):
     cards = rc6_cards()
-    total0, idle0 = cpu_times()
+    cpu0 = cpu_times()
     rc60 = {name: read_int(counter) for name, (_, counter) in cards.items()}
     start = time.monotonic()
     time.sleep(interval)
     elapsed_ms = (time.monotonic() - start) * 1000
-    total1, idle1 = cpu_times()
+    cpu1 = cpu_times()
     gpus = []
     for name, (card, counter) in cards.items():
         rc61 = read_int(counter)
         if rc60[name] is None or rc61 is None:
             continue
-        busy = max(0.0, min(100.0, 100 * (1 - (rc61 - rc60[name]) / elapsed_ms)))
+        load = max(0.0, min(100.0, 100 * (1 - (rc61 - rc60[name]) / elapsed_ms)))
         gpus.append({"name": pci_name((card / "device").resolve()), "kind": "integrated", "state": "active",
-                     "usage_percent": round(busy, 1)})
+                     "usage_percent": round(load, 1)})
     ram, swap = memory()
     return {
         "cpu": {
-            "usage_percent": round(100 * (1 - (idle1 - idle0) / max(1, total1 - total0)), 1),
+            "usage_percent": busy(cpu0["cpu"], cpu1["cpu"]),
             "temperature_c": cpu_temperature(),
             "cores": os.cpu_count(),
+            "threads": threads(cpu0, cpu1),
         },
         "gpus": gpus + nvidia_gpus(),
         "memory": ram,
