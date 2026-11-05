@@ -117,6 +117,21 @@ in
         fira-code
         jetbrains-mono
         ubuntu-classic
+        ubuntu-sans
+        ubuntu-sans-mono
+        # Hack is KDE's default fixed-width font: without it terminals fall back to a
+        # proportional font and space letters far apart.
+        hack-font
+        cascadia-code
+        liberation-sans-narrow
+        montserrat
+        poppins
+        raleway
+        merriweather
+        crimson-pro
+        eb-garamond
+        font-awesome
+        nerd-fonts.symbols-only
       ]
       ++ lib.optionals pkgs.stdenv.hostPlatform.isx86_64 [
         # Linux Chrome lists the Vulkan adapters but hands WebGPU none without this.

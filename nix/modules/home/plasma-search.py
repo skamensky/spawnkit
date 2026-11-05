@@ -38,8 +38,9 @@ def words(text):
 
 
 class App:
-    def __init__(self, app_id, entry):
+    def __init__(self, app_id, entry, path):
         self.id = app_id
+        self.path = path
         self.name = entry.get("Name", app_id)
         self.icon = entry.get("Icon", "application-x-executable")
         self.comment = entry.get("Comment", "")
@@ -104,7 +105,7 @@ class Catalog:
                 seen.add(app_id)
                 entry = read_entry(path)
                 if entry and shown(entry):
-                    app = App(app_id, entry)
+                    app = App(app_id, entry, path)
                     # One result per name: Firefox from the profile hides the snap's Firefox.
                     if app.lname not in names:
                         names.add(app.lname)
@@ -215,8 +216,13 @@ def search(catalog, history, text):
     return results[:LIMIT]
 
 
-def launch(app_id, query, history):
-    subprocess.Popen(["kstart", "--application", app_id], start_new_session=True,
+def launch(app_id, query, history, catalog):
+    app = catalog.current().get(app_id)
+    if app is None:
+        return
+    # kioclient starts D-Bus-activated apps (Ptyxis, most GNOME apps); `kstart --application`
+    # waits forever on them without starting anything.
+    subprocess.Popen(["kioclient", "exec", str(app.path)], start_new_session=True,
                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     # Plasma's recent and frequent lists read this usage database.
     subprocess.run(["qdbus6", "org.kde.ActivityManager", "/ActivityManager/Resources",
@@ -258,7 +264,7 @@ def serve():
 
         @method()
         def Run(self, match_id: "s", action_id: "s"):
-            launch(match_id, self.query, history)
+            launch(match_id, self.query, history, catalog)
 
     async def main():
         bus = await MessageBus(bus_type=BusType.SESSION).connect()
@@ -279,7 +285,7 @@ def main(argv):
             for score, learned, app in search(Catalog(), history, argv[1])
         ], indent=1))
     elif len(argv) in (2, 4) and argv[0] == "launch" and (len(argv) == 2 or argv[2] == "--query"):
-        launch(argv[1], argv[3] if len(argv) == 4 else "", History())
+        launch(argv[1], argv[3] if len(argv) == 4 else "", History(), Catalog())
     elif argv == ["history"]:
         print(json.dumps(History().data, indent=1, sort_keys=True))
     else:

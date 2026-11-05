@@ -36,6 +36,7 @@
     # PySide6 drives Spawnkit's own Kirigami dialogs (scripts/spawnkit-ui) with Plasma's Qt.
     # kwin-style-aurorae draws theme window decorations such as Layan's.
     # kdeconnect pairs the Android phone: its texts, call notices and dialer (Windows' Phone Link).
+    # konsole is the default terminal (kdeglobals in the Home Manager Plasma module).
     # Recommends would pull in SDDM, which takes over from GDM, so the parts of a working
     # desktop that kde-plasma-desktop only recommends are listed here: brightness and power
     # (powerdevil), volume, network, displays, Bluetooth, System Settings and the KDE portal.
@@ -43,7 +44,7 @@
       [kde-plasma-desktop, kde-spectacle, kwin-style-aurorae, qt-style-kvantum, python3-pyside6.qtquick, python3-pyside6.qtqml, python3-pyside6.qtgui,
        powerdevil, plasma-pa, plasma-nm, kscreen, bluedevil, systemsettings, xdg-desktop-portal-kde, kio-extras, breeze-gtk-theme, kde-config-gtk-style,
        kinfocenter, kmenuedit, ksystemstats, plasma-systemmonitor, plasma-disks, plasma-thunderbolt, kde-config-screenlocker, libpam-kwallet5, ksshaskpass,
-       appmenu-gtk3-module, kdeconnect]
+       appmenu-gtk3-module, kdeconnect, konsole]
     install_recommends: false
     state: present
   when: cfg.plasma and not ansible_check_mode

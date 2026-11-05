@@ -384,6 +384,11 @@ in
         "Plugins/Favorites".plugins = "tech.shmuel.apps";
       };
       configFile.kdeglobals."KDE Action Restrictions"."plasma/allow_configure_when_locked" = false;
+      # Konsole (installed by the host base role) opens for Ctrl+Alt+T and "Open Terminal Here".
+      configFile.kdeglobals.General = {
+        TerminalApplication = "konsole";
+        TerminalService = "org.kde.konsole.desktop";
+      };
       # Dolphin's right-click menu: Open in New Tab, Create New, Cut, Copy, Copy Location, Rename,
       # Move to Trash, Open Terminal Here and Properties. The Dolphin host role patches out the
       # entries these settings cannot remove (Open Folder With, Paste on items, service menus).
