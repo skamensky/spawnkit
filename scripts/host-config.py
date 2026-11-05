@@ -215,18 +215,39 @@ def parent_pid(pid):
 
 
 def app_root(pid):
-    """The program a process belongs to: its topmost ancestor running the same executable.
+    """The program a process belongs to: its topmost ancestor run from the same install directory.
 
-    A browser keeps the GPU open from a helper process that it starts again when the helper
-    exits, so closing the program means closing that ancestor.
+    Programs keep the GPU open from a helper they start again when it exits: Chrome's
+    helpers run its own executable, Zoom's (/opt/zoom/ZoomWebviewHost) a sibling one.
+    Closing the program means closing that ancestor and everything under it.
     """
+    def same_program(a, b):
+        # A shared bin directory holds unrelated programs, such as a terminal and its jobs.
+        return a == b or (os.path.dirname(a) == os.path.dirname(b) and
+                          os.path.basename(os.path.dirname(a)) not in ("bin", "sbin", "libexec"))
     try:
         exe = os.readlink(f"/proc/{pid}/exe")
-        while (parent := parent_pid(pid)) > 1 and os.readlink(f"/proc/{parent}/exe") == exe:
+        while (parent := parent_pid(pid)) > 1 and same_program(os.readlink(f"/proc/{parent}/exe"), exe):
             pid = parent
     except OSError:
         pass
     return pid
+
+
+def descendants(pid):
+    """pid and every process below it."""
+    children = {}
+    for entry in Path("/proc").iterdir():
+        if entry.name.isdigit():
+            try:
+                children.setdefault(parent_pid(int(entry.name)), []).append(int(entry.name))
+            except (OSError, ValueError):
+                pass
+    tree, todo = [], [pid]
+    while todo:
+        tree.append(current := todo.pop())
+        todo += children.get(current, [])
+    return tree
 
 
 def guard_holders():
@@ -262,10 +283,12 @@ def release_holders(pids, force, progress=None):
             raise ValueError(f"PID {pid} ({held[pid]['name']}) is not closable; it needs a logout or its owner")
     for sig in (signal.SIGTERM, signal.SIGKILL) if force else (signal.SIGTERM,):
         for pid in pids:
-            try:
-                os.kill(pid, sig)
-            except ProcessLookupError:
-                pass
+            # The whole program, so its main process cannot start a new GPU helper.
+            for member in descendants(pid):
+                try:
+                    os.kill(member, sig)
+                except ProcessLookupError:
+                    pass
         deadline = time.monotonic() + 10
         while True:
             remaining = guard_holders()
