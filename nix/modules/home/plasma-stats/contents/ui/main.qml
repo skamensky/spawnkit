@@ -3,7 +3,8 @@
 // read) about once a second, only while the card is open. Every number and bar glides to its new
 // value over one poll, so updates read as motion rather than jumps. The processor row unfolds into
 // a map of its physical cores, one bar per hardware thread; pointing at a core names its threads
-// and clock.
+// and clock. Below them, the busiest processes with End buttons, and a link to the process window
+// (ProcessWindow.qml) for every process.
 import QtQuick
 import QtQuick.Layouts
 import org.kde.plasma.plasmoid
@@ -11,11 +12,13 @@ import org.kde.plasma.core as PlasmaCore
 import org.kde.plasma.plasma5support as P5Support
 import org.kde.kirigami as Kirigami
 import "Spawnkit"
+import "processes.js" as P
 
 PlasmoidItem {
     id: root
 
-    readonly property string statsCommand: "@stats@ --interval 0.5"
+    readonly property string statsPath: "@stats@"
+    readonly property string statsCommand: statsPath + " --interval 0.5 --top 8"
     // One poll: the CLI's 0.5 s measurement, its start-up and the pause below.
     readonly property int glide: 950
     property var stats: null
@@ -28,6 +31,51 @@ PlasmoidItem {
     readonly property int threadCount: stats && stats.cpu.threads ? stats.cpu.threads.length : 0
     property var coreGroups: []
     onThreadCountChanged: coreGroups = groupCores()
+    // The busiest processes, re-ranked at most every two seconds and never under the pointer.
+    property double rankedAt: 0
+    property bool holdingTop: false
+    readonly property int topShown: 5
+    ListModel { id: topModel }
+    onStatsChanged: rankTop()
+    onHoldingTopChanged: if (!holdingTop) rankedAt = 0
+    function rankTop() {
+        const procs = stats && stats.processes ? stats.processes : []
+        const row = p => ({
+            key: "p:" + p.pid + ":" + p.start,
+            name: p.name, command: p.command, cpu: p.cpu_percent, memory: p.memory_bytes,
+            own: p.own, critical: p.critical, target: P.target(p),
+        })
+        const now = Date.now()
+        if (!holdingTop && now - rankedAt >= 2000) {
+            rankedAt = now
+            P.sync(topModel, procs.slice(0, topShown).map(row), true)
+            return
+        }
+        // Held: refresh the listed rows' figures where the new reading still has them.
+        const byKey = {}
+        procs.forEach(p => byKey["p:" + p.pid + ":" + p.start] = p)
+        const rows = []
+        for (let i = 0; i < topModel.count; i++) {
+            const old = topModel.get(i)
+            const p = byKey[old.key]
+            rows.push(p ? row(p) : {
+                key: old.key, name: old.name, command: old.command, cpu: old.cpu, memory: old.memory,
+                own: old.own, critical: old.critical, target: old.target,
+            })
+        }
+        P.sync(topModel, rows, false)
+    }
+
+    Ender {
+        id: processEnder
+        stats: root.statsPath
+    }
+    ProcessWindow {
+        id: processWindow
+        stats: root.statsPath
+        ender: processEnder
+        visible: false
+    }
 
     Plasmoid.icon: "speedometer-symbolic"
     Plasmoid.backgroundHints: PlasmaCore.Types.NoBackground
@@ -513,6 +561,128 @@ PlasmoidItem {
                 percent: root.share(part)
                 high: 85
                 critical: 95
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                SectionLabel { text: i18n("Busiest processes"); Layout.fillWidth: true }
+                Text {
+                    text: i18n("<a href=\"all\">All processes</a>")
+                    textFormat: Text.StyledText
+                    linkColor: Theme.accent
+                    font.family: Theme.font
+                    font.pointSize: Theme.microSize
+                    font.weight: Font.Medium
+                    onLinkActivated: {
+                        root.expanded = false
+                        processWindow.open()
+                    }
+                    HoverHandler { cursorShape: parent.hoveredLink ? Qt.PointingHandCursor : Qt.ArrowCursor }
+                }
+            }
+
+            ListView {
+                id: topList
+                Layout.fillWidth: true
+                implicitHeight: count * 36
+                interactive: false
+                model: topModel
+                HoverHandler { onHoveredChanged: root.holdingTop = hovered }
+                move: Transition {
+                    enabled: Theme.motion
+                    NumberAnimation { properties: "y"; duration: Theme.slow; easing.type: Easing.OutCubic }
+                }
+                moveDisplaced: Transition {
+                    enabled: Theme.motion
+                    NumberAnimation { properties: "y"; duration: Theme.slow; easing.type: Easing.OutCubic }
+                }
+                add: Transition {
+                    enabled: Theme.motion
+                    NumberAnimation { property: "opacity"; from: 0; to: 1; duration: Theme.standard }
+                }
+                displaced: Transition {
+                    enabled: Theme.motion
+                    NumberAnimation { properties: "y"; duration: Theme.slow; easing.type: Easing.OutCubic }
+                }
+                delegate: Item {
+                    id: topRow
+                    required property string key
+                    required property string name
+                    required property string command
+                    required property real cpu
+                    required property real memory
+                    required property bool own
+                    required property bool critical
+                    required property string target
+                    readonly property Glide cpuShown: Glide { target: topRow.cpu }
+                    readonly property bool active: topHover.hovered || processEnder.state(key) !== ""
+                    width: ListView.view.width
+                    height: 36
+                    HoverHandler { id: topHover }
+                    Rectangle {
+                        anchors.fill: parent
+                        anchors.leftMargin: -Theme.s2
+                        anchors.rightMargin: -Theme.s2
+                        radius: Theme.radiusSm
+                        color: topHover.hovered ? Theme.hover : "transparent"
+                        Behavior on color { ColorAnimation { duration: Theme.quick } }
+                    }
+                    RowLayout {
+                        anchors.fill: parent
+                        spacing: Theme.s2
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 0
+                            Text {
+                                Layout.fillWidth: true
+                                text: topRow.name
+                                elide: Text.ElideRight
+                                font.family: Theme.font
+                                font.pointSize: Theme.metaSize
+                                font.weight: Font.Medium
+                                color: Theme.text
+                            }
+                            Text {
+                                Layout.fillWidth: true
+                                text: P.bytes(topRow.memory) + " · " + topRow.command
+                                elide: Text.ElideRight
+                                font.family: Theme.font
+                                font.pointSize: Theme.microSize
+                                color: Theme.textTertiary
+                            }
+                        }
+                        // Always laid out, only faded, so hovering does not shift the row.
+                        EndButton {
+                            visible: topRow.own
+                            opacity: topRow.active ? 1 : 0
+                            Behavior on opacity { NumberAnimation { duration: Theme.quick } }
+                            ender: processEnder
+                            key: topRow.key
+                            targets: [topRow.target]
+                            label: topRow.name
+                            critical: topRow.critical
+                        }
+                        Text {
+                            text: P.percent(topRow.cpuShown.value)
+                            horizontalAlignment: Text.AlignRight
+                            Layout.minimumWidth: Theme.s7 + Theme.s4
+                            font.family: Theme.font
+                            font.pointSize: Theme.base
+                            font.weight: Font.DemiBold
+                            font.features: { "tnum": 1 }
+                            color: Theme.text
+                        }
+                    }
+                }
+            }
+            Text {
+                visible: processEnder.message.length > 0
+                Layout.fillWidth: true
+                text: processEnder.message
+                elide: Text.ElideRight
+                font.family: Theme.font
+                font.pointSize: Theme.microSize
+                color: Theme.textSecondary
             }
         }
     }
