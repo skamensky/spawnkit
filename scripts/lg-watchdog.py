@@ -147,7 +147,6 @@ def main():
         args.log.parent.mkdir(parents=True, exist_ok=True)
         with args.log.open("a") as f:
             f.write(json.dumps(record) + "\n")
-        subprocess.run(["notify-send", "Looking Glass", "Input stopped reaching Windows; restarting the viewer."], check=False)
         os.kill(args.pid, signal.SIGTERM)
         sys.exit(75)
 

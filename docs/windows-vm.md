@@ -212,8 +212,8 @@ The desktop entries are **Windows**, **Shut down Windows** and **Windows
 installation console**, installed in `~/.local/share/applications` because GNOME
 Shell does not notice launchers added to the replaced profile directory until the
 next login. Activation pins **Windows** (four-pane icon; the viewer's window groups
-under it) and **Shut down Windows** (`vm-stop --notify`, with notifications when
-shutdown starts and when the RTX is back) to the dock, appended to the user's own
+under it) and **Shut down Windows** (`vm-stop --notify`; the Windows icon's pulsing
+stopping tag shows progress, and only a failure produces a notification) to the dock, appended to the user's own
 pins. The viewer opens fullscreen. Looking Glass B7 on Wayland requests fullscreen
 before its first configure, so KWin flags the window fullscreen at the default
 1024x768; host-config re-enters fullscreen through a one-shot KWin script
@@ -393,8 +393,7 @@ and recovery; routine automation can use SSH.
   viewer as a safety net. While the viewer is focused, the pointer is over it and X
   sees input, its SPICE input channels must send; the main channel (the client's
   first socket) and any channel streaming while the user is idle (the microphone) do
-  not count. After 1.5 s without traffic the watchdog shows a notification and
-  restarts the viewer, appending the event to
+  not count. After 1.5 s without traffic the watchdog silently restarts the viewer, appending the event to
   `~/.local/state/spawnkit/looking-glass-stalls.jsonl`; more than five restarts in a
   minute stops `vm-view`. The viewer's own log is
   `~/.local/state/spawnkit/looking-glass.log`.
