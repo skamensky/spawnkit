@@ -1,23 +1,24 @@
 // A yes-or-no question. Input: {heading, text, confirm, cancel, destructive}.
 // Result: {action: "confirm"}.
 import QtQuick
-import org.kde.kirigami as Kirigami
 import Spawnkit
 
 DialogWindow {
+    id: root
     heading: dialog.input.heading
     subtitle: dialog.input.text
-    preferredWidth: Kirigami.Units.gridUnit * 26
+    preferredWidth: 480
 
     actions: [
-        ActionButton {
+        Button {
             text: dialog.input.cancel || "Cancel"
-            onClicked: dialog.dismiss()
+            onClicked: root.reject()
         },
-        ActionButton {
+        Button {
             kind: dialog.input.destructive ? "danger" : "primary"
+            defaultButton: !dialog.input.destructive
             text: dialog.input.confirm
-            onClicked: dialog.finish({action: "confirm"})
+            onClicked: root.accept({action: "confirm"})
         }
     ]
 }

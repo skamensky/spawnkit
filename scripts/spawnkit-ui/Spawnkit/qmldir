@@ -1,6 +1,13 @@
 module Spawnkit
 singleton Theme 1.0 Theme.qml
 DialogWindow 1.0 DialogWindow.qml
-ActionButton 1.0 ActionButton.qml
-CheckMark 1.0 CheckMark.qml
+Button 1.0 Button.qml
+IconButton 1.0 IconButton.qml
+Spinner 1.0 Spinner.qml
+Check 1.0 Check.qml
+IconTile 1.0 IconTile.qml
+Chip 1.0 Chip.qml
 ListRow 1.0 ListRow.qml
+Steps 1.0 Steps.qml
+Callout 1.0 Callout.qml
+SectionLabel 1.0 SectionLabel.qml

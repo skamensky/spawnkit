@@ -189,15 +189,24 @@ lets the user run exactly the guard's `status`, `holders`, `detach-desktop`,
 `attach-desktop` and `schedule-start` (the logout-deferred start unit) without a
 password; `reclaim` and everything else still need sudo authentication.
 
-The checklist and its force-quit question are Spawnkit dialogs
-(`scripts/spawnkit-ui.py <dialog> < input.json`, printing the result as JSON). They
-are QML on Ubuntu's PySide6 and Kirigami, so they use Plasma's own Qt. The shared
-components in `scripts/spawnkit-ui/Spawnkit` (`Theme`, `DialogWindow`,
-`ActionButton`, `ListRow`) give every Spawnkit applet one look. That look is a single
-flat surface in Inter, with the Plasma colour scheme's background and text. The accent
-is Spawnkit's indigo, used for primary buttons and checkboxes. Hierarchy comes from text
-opacity, not from borders or panels. New applets add a file to `spawnkit-ui/dialogs`
-rather than using zenity or kdialog.
+The checklist is a Spawnkit dialog (`scripts/spawnkit-ui.py <dialog>`), QML on
+Ubuntu's PySide6 and Kirigami, so it uses Plasma's own Qt and colour scheme. The
+first line on stdin is the dialog's input; every further line is a message the
+dialog receives, and each message it sends is one JSON line on stdout, so
+`host-config` (`UiDialog`) keeps the window open and shows the closing live:
+the chosen rows get a spinner, then a green mark; a program that ignores SIGTERM
+turns the same window into the force-quit question; and when only the compositor
+is left the window offers **Log out now** (`org.kde.Shutdown` over D-Bus). The
+components in `scripts/spawnkit-ui/Spawnkit` give every Spawnkit applet one look:
+a frameless floating card with a soft shadow (`DialogWindow`, draggable by its
+header, Esc cancels, Return triggers the primary action), `Theme` tokens for
+colour, spacing, radii and motion (durations follow Plasma's animation speed, so
+reduced motion is honoured), `Button` (primary, danger, tonal, ghost, busy),
+`ListRow` with an `IconTile` (app icon or a monogram), `Check`, `Chip`, `Steps`
+(the path to Windows: close, log out, start), `Callout`, `SectionLabel`, `Spinner`
+and `IconButton`. Type is Inter and Inter Display with IBM Plex Mono for command
+lines; the accent is Spawnkit's indigo. New applets add a file to
+`spawnkit-ui/dialogs` rather than using zenity or kdialog.
 
 The desktop entries are **Windows**, **Shut down Windows** and **Windows
 installation console**, installed in `~/.local/share/applications` because GNOME
@@ -233,11 +242,12 @@ may need shutdown from inside Windows.
    from the desktop seat (`gpu-guard.py detach-desktop`, a runtime udev rule under
    `/run`). If nothing still holds the RTX it asks libvirt to start the domain.
    With `--gui` (the desktop entry) and anything holding the RTX, a checklist
-   groups every holder into ones Spawnkit closes and ones it cannot (`gpu-guard.py holders`), with how each releases the RTX (**Show details** adds
-   PIDs and command lines):
-   your own programs are checked and get SIGTERM, then a confirmed SIGKILL after
-   10 s; the compositor and Xwayland need a logout; a service or another user's
-   process must be stopped by its owner. **Start without RTX** starts Windows
+   groups every holder into ones Spawnkit closes and ones it cannot (`gpu-guard.py holders`), with how each releases the RTX and its command line:
+   your own programs are checked and get SIGTERM, then a SIGKILL after 10 s once
+   you confirm **Force quit** in the same window; the compositor and Xwayland need
+   a logout, which the window offers once the rest has closed; a service or another
+   user's process must be stopped by its owner (the `systemctl stop` command is
+   shown, with a copy button). **Start without RTX** starts Windows
    without it instead (see below); Cancel returns the RTX to the desktop. A
    holder a logout cannot release (for example `nvidia-powerd`) refuses the start
    rather than waiting out the timeout, and a second launch while a start already

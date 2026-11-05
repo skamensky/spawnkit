@@ -1,6 +1,6 @@
-// One row of a Spawnkit list: an optional checkbox (or a lock when it cannot be toggled), an
-// icon, a title, a status with a coloured dot on the right and, when expanded, a detail line.
-// The whole row toggles; it has no border and only a faint fill on hover.
+// One row of a Spawnkit list: a checkbox (a lock when the row cannot be toggled), an icon tile,
+// a title over a secondary line, and a status chip. phase shows the row's progress once work
+// starts: "idle", "closing" (spinner), "closed" (green mark) or "stuck" (warning).
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Templates as T
@@ -12,30 +12,31 @@ T.AbstractButton {
     id: root
     property string iconName
     property string title
+    property string secondary
     property string status
-    property color statusColor: Theme.textFaint
-    property string detail
+    property color statusColor: Theme.textTertiary
     property string tooltip
-    property bool expanded
-    property bool locked: !checkable
+    property string phase: "idle"
+    readonly property bool locked: !checkable
+    readonly property bool interactive: checkable && phase === "idle"
+    readonly property bool dimmed: (checkable && !checked && phase === "idle") || phase === "closed"
 
-    implicitHeight: Math.max(Theme.rowHeight, content.implicitHeight + Theme.s2 * 2)
-    hoverEnabled: true
-    focusPolicy: checkable ? Qt.StrongFocus : Qt.NoFocus
-    scale: pressed ? 0.995 : 1
-    Behavior on scale { NumberAnimation { duration: root.pressed ? 70 : Theme.fast } }
-    Behavior on implicitHeight { NumberAnimation { duration: Theme.normal; easing.type: Easing.OutCubic } }
+    implicitHeight: Theme.rowHeight
+    // Rows that cannot be toggled stay enabled so their icons keep their colours; they just do nothing.
+    hoverEnabled: interactive
+    focusPolicy: interactive ? Qt.StrongFocus : Qt.NoFocus
+    leftPadding: Theme.s3
+    rightPadding: Theme.s3
 
-    QQC2.ToolTip.visible: hovered && tooltip.length > 0 && !expanded
-    QQC2.ToolTip.delay: 600
+    QQC2.ToolTip.visible: hovered && tooltip.length > 0
+    QQC2.ToolTip.delay: 700
     QQC2.ToolTip.text: tooltip
-
-    HoverHandler { cursorShape: root.checkable ? Qt.PointingHandCursor : Qt.ArrowCursor }
+    HoverHandler { enabled: root.interactive; cursorShape: Qt.PointingHandCursor }
 
     background: Rectangle {
         radius: Theme.radiusMd
-        color: !root.checkable ? "transparent" : root.pressed ? Theme.pressed : root.hovered ? Theme.hover : "transparent"
-        Behavior on color { ColorAnimation { duration: Theme.fast } }
+        color: root.pressed ? Theme.pressed : root.hovered ? Theme.hover : "transparent"
+        Behavior on color { ColorAnimation { duration: Theme.quick } }
         Rectangle {
             anchors { fill: parent; margins: -2 }
             radius: parent.radius + 2
@@ -46,82 +47,83 @@ T.AbstractButton {
         }
     }
 
-    contentItem: Item {
-        implicitHeight: content.implicitHeight
-        RowLayout {
-            id: content
-            anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter }
-            anchors.leftMargin: Theme.s3
-            anchors.rightMargin: Theme.s3
-            spacing: Theme.s3
+    contentItem: RowLayout {
+        spacing: Theme.s3
 
-            Item {
-                Layout.alignment: Qt.AlignTop
-                Layout.topMargin: (title.implicitHeight - 18) / 2 + 2
-                implicitWidth: 18
-                implicitHeight: 18
-                CheckMark { visible: !root.locked; checked: root.checked }
-                Kirigami.Icon {
-                    anchors.centerIn: parent
-                    visible: root.locked
-                    width: 14
-                    height: 14
-                    source: "object-locked-symbolic"
-                    isMask: true
-                    color: Theme.textFaint
-                }
+        // Leading mark: checkbox, lock, spinner, done or warning.
+        Item {
+            implicitWidth: 20
+            implicitHeight: 20
+            Check {
+                anchors.centerIn: parent
+                visible: !root.locked && root.phase !== "closing" && root.phase !== "stuck"
+                checked: root.checked || root.phase === "closed"
+                tone: root.phase === "closed" ? Theme.positive : Theme.accent
+                mark: root.phase === "closed" ? "#FFFFFF" : Theme.accentText
+                round: root.phase === "closed"
             }
             Kirigami.Icon {
-                Layout.alignment: Qt.AlignTop
-                implicitWidth: 22
-                implicitHeight: 22
-                Layout.topMargin: (title.implicitHeight - 22) / 2
-                source: root.iconName
-                fallback: "application-x-executable"
+                anchors.centerIn: parent
+                visible: root.locked && root.phase === "idle"
+                width: 15; height: 15
+                source: "object-locked-symbolic"
+                isMask: true
+                color: Theme.textTertiary
             }
-            ColumnLayout {
+            Spinner {
+                anchors.centerIn: parent
+                visible: root.phase === "closing"
+                size: 18
+                color: Theme.accent
+            }
+            Kirigami.Icon {
+                anchors.centerIn: parent
+                visible: root.phase === "stuck"
+                width: 18; height: 18
+                source: "dialog-warning-symbolic"
+                isMask: true
+                color: Theme.caution
+            }
+        }
+
+        IconTile {
+            iconName: root.iconName
+            label: root.title
+            dim: root.dimmed ? 0.5 : 1
+        }
+
+        ColumnLayout {
+            Layout.fillWidth: true
+            spacing: 1
+            Text {
                 Layout.fillWidth: true
-                spacing: 2
-                RowLayout {
-                    spacing: Theme.s3
-                    Text {
-                        id: title
-                        Layout.fillWidth: true
-                        text: root.title
-                        elide: Text.ElideRight
-                        font.family: Theme.font
-                        font.pointSize: Theme.base
-                        font.weight: Font.Medium
-                        color: Theme.text
-                        opacity: root.checkable && !root.checked ? 0.55 : 1
-                        Behavior on opacity { NumberAnimation { duration: Theme.normal } }
-                    }
-                    Rectangle {
-                        implicitWidth: 6
-                        implicitHeight: 6
-                        radius: 3
-                        color: root.statusColor
-                    }
-                    Text {
-                        text: root.status
-                        font.family: Theme.font
-                        font.pointSize: Theme.metaSize
-                        color: Theme.textMuted
-                    }
-                }
-                Text {
-                    Layout.fillWidth: true
-                    visible: opacity > 0
-                    opacity: root.expanded ? 1 : 0
-                    Layout.preferredHeight: root.expanded ? implicitHeight : 0
-                    text: root.detail
-                    elide: Text.ElideRight
-                    font.family: Theme.mono
-                    font.pointSize: Theme.monoSize
-                    color: Theme.textFaint
-                    Behavior on opacity { NumberAnimation { duration: Theme.normal } }
-                }
+                text: root.title
+                elide: Text.ElideRight
+                font.family: Theme.font
+                font.pointSize: Theme.base
+                font.weight: Font.Medium
+                color: Theme.text
+                opacity: root.dimmed ? 0.5 : 1
+                Behavior on opacity { NumberAnimation { duration: Theme.standard } }
             }
+            Text {
+                Layout.fillWidth: true
+                visible: text.length > 0
+                text: root.secondary
+                elide: Text.ElideMiddle
+                font.family: Theme.mono
+                font.pointSize: Theme.monoSize
+                color: Theme.textTertiary
+                opacity: root.dimmed ? 0.6 : 1
+                Behavior on opacity { NumberAnimation { duration: Theme.standard } }
+            }
+        }
+
+        Chip {
+            text: root.status
+            tone: root.statusColor
+            opacity: root.dimmed ? 0.6 : 1
+            Behavior on opacity { NumberAnimation { duration: Theme.standard } }
         }
     }
 }

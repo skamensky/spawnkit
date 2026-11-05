@@ -135,7 +135,7 @@ def install_windows(repo, profile, cfg, revision, args):
     # Keys go to the CD prompt from this process, so it cannot wait out a logout-scheduled start.
     held = guard_holders()
     if held and args.gui:
-        held = close_holders(held)
+        held, _ = close_holders(held)
     if held:
         raise ValueError("The RTX is open by " + ", ".join(sorted({h["name"] for h in held})) + "; close them (gpu-release) and rerun vm-install")
     authorized_key(cfg)
@@ -204,8 +204,11 @@ def guard_holders():
             for h in json.loads(subprocess.check_output([*GUARD, "holders"], text=True))]
 
 
-def release_holders(pids, force):
-    """SIGTERM the chosen closable holders, SIGKILL them after 10 s with force; return the holders left."""
+def release_holders(pids, force, progress=None):
+    """SIGTERM the chosen closable holders, SIGKILL them after 10 s with force; return the holders left.
+
+    progress, if given, is called with the holders still open after each check.
+    """
     held = {h["pid"]: h for h in guard_holders()}
     for pid in pids:
         if pid not in held:
@@ -219,7 +222,12 @@ def release_holders(pids, force):
             except ProcessLookupError:
                 pass
         deadline = time.monotonic() + 10
-        while (remaining := guard_holders()) and set(pids) & {h["pid"] for h in remaining} and time.monotonic() < deadline:
+        while True:
+            remaining = guard_holders()
+            if progress:
+                progress(remaining)
+            if not set(pids) & {h["pid"] for h in remaining} or time.monotonic() >= deadline:
+                break
             time.sleep(1)
         if not set(pids) & {h["pid"] for h in remaining}:
             break
@@ -239,43 +247,91 @@ class Cancelled(Exception):
     """The user dismissed a dialog; nothing failed, so nothing is reported."""
 
 
-def ui_dialog(name, data):
-    """Show a Spawnkit dialog (scripts/spawnkit-ui) and return its result, or None if dismissed."""
-    shown = subprocess.run(["/usr/bin/python3", "-I", str(Path(__file__).with_name("spawnkit-ui.py")), name],
-                           input=json.dumps(data), capture_output=True, text=True)
-    if shown.returncode == 1 and not shown.stdout:
+class UiDialog:
+    """A Spawnkit dialog (scripts/spawnkit-ui) kept open while this process works.
+
+    The dialog gets its input first, then every message sent here, one JSON line each;
+    recv returns the dialog's next message, or None once the user dismissed it.
+    """
+
+    def __init__(self, name, data):
+        self.name = name
+        self.process = subprocess.Popen(["/usr/bin/python3", "-I", str(Path(__file__).with_name("spawnkit-ui.py")), name],
+                                        stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+        self.send(data)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        self.close()
+
+    def send(self, message):
+        try:
+            self.process.stdin.write(json.dumps(message) + "\n")
+            self.process.stdin.flush()
+        except BrokenPipeError:
+            pass  # the dialog is gone; recv reports it
+
+    def recv(self):
+        line = self.process.stdout.readline()
+        if line:
+            return json.loads(line)
+        self.close()
         return None
-    if shown.returncode != 0:
-        raise ValueError(f"The {name} dialog failed: {shown.stderr.strip()}")
-    return json.loads(shown.stdout)
+
+    def progress(self, remaining):
+        self.send({"event": "progress", "left": [h["pid"] for h in remaining]})
+
+    def close(self):
+        if self.process.stdin and not self.process.stdin.closed:
+            self.process.stdin.close()
+        if self.process.wait() not in (0, 1):
+            raise ValueError(f"The {self.name} dialog failed (exit {self.process.returncode})")
+
+
+def ui_dialog(name, data):
+    """Show a dialog that answers once and return its result, or None if dismissed."""
+    with UiDialog(name, data) as ui:
+        return ui.recv()
 
 
 def close_holders(held, offer_without_rtx=False):
-    """Dialog front end for gpu-holders/gpu-release; returns the holders that remain.
+    """Dialog front end for gpu-holders/gpu-release; returns (holders left, logout requested).
 
     Every holder is listed with how it releases the RTX; only the user's own programs
-    can be closed here, and display-server holders are left to the logout handoff.
-    With offer_without_rtx, returns None when the user picks starting without the RTX.
+    can be closed here, and display-server holders are left to the logout handoff. The
+    closing is shown live in the same window, which also offers the logout when one
+    is needed. With offer_without_rtx, returns (None, False) when the user picks
+    starting without the RTX.
     """
     holders = [{"pid": h["pid"], "name": h["name"], "command": h["command"], "closable": h["closable"],
                 "release": release(h)} for h in held]
-    picked = ui_dialog("rtx-holders", {"holders": holders, "without_rtx": offer_without_rtx})
-    if picked is None:
-        run([*GUARD, "attach-desktop"])
-        raise Cancelled("Cancelled; the RTX stays with Linux")
-    if picked["action"] == "without_rtx":
-        return None
-    closable = {h["pid"] for h in held if h["closable"]}
-    chosen = [pid for pid in picked["pids"] if pid in closable]
-    remaining = release_holders(chosen, force=False) if chosen else held
-    if stubborn := [h for h in remaining if h["pid"] in chosen]:
-        names = " and ".join(sorted({h["name"] for h in stubborn}))
-        it = "it" if len(stubborn) == 1 else "them"
-        if ui_dialog("confirm", {"heading": f"{names} didn't close",
-                                 "text": f"Force-quit {it} so Windows can start? Anything unsaved in {it} is lost.",
-                                 "confirm": "Force quit", "cancel": "Keep waiting", "destructive": True}):
-            remaining = release_holders([h["pid"] for h in stubborn], force=True)
-    return remaining
+    with UiDialog("rtx-holders", {"holders": holders, "without_rtx": offer_without_rtx}) as ui:
+        picked = ui.recv()
+        if picked is None:
+            run([*GUARD, "attach-desktop"])
+            raise Cancelled("Cancelled; the RTX stays with Linux")
+        if picked["action"] == "without_rtx":
+            return None, False
+        closable = {h["pid"] for h in held if h["closable"]}
+        chosen = [pid for pid in picked["pids"] if pid in closable]
+        remaining, force = held, False
+        while chosen:
+            ui.send({"event": "closing", "pids": chosen})
+            remaining = release_holders(chosen, force=force, progress=ui.progress)
+            stubborn = [h["pid"] for h in remaining if h["pid"] in chosen]
+            if not stubborn or force:
+                break
+            ui.send({"event": "stuck", "pids": stubborn})
+            answer = ui.recv()
+            if answer is None:
+                run([*GUARD, "attach-desktop"])
+                raise Cancelled("Cancelled; the RTX stays with Linux")
+            chosen, force = stubborn, answer["action"] == "force"
+        ui.send({"event": "done", "left": [{"pid": h["pid"], "name": h["name"], "release": release(h)} for h in remaining]})
+        answer = ui.recv()
+    return remaining, bool(answer) and answer["action"] == "logout"
 
 
 def view_looking_glass(command, port):
@@ -325,8 +381,9 @@ def start_windows(name, notify, gui):
         raise ValueError("Windows already starts once you log out; to cancel, run "
                          "sudo systemctl stop spawnkit-windows-handoff, then host-config vm-view again")
     held = json.loads(subprocess.check_output([*GUARD, "detach-desktop"], text=True))
+    logout = False
     if held and gui:
-        held = close_holders(guard_holders(), offer_without_rtx=True)
+        held, logout = close_holders(guard_holders(), offer_without_rtx=True)
         if held is None:
             run([*GUARD, "attach-desktop"])
             start_without_rtx(name)
@@ -351,6 +408,8 @@ def start_windows(name, notify, gui):
     print(message)
     if notify and shutil.which("notify-send"):
         subprocess.run(["notify-send", "Spawnkit Windows VM", message], check=False)
+    if logout:
+        subprocess.run(["qdbus6", "org.kde.Shutdown", "/Shutdown", "org.kde.Shutdown.logout"], check=False)
     return False
 
 

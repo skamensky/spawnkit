@@ -402,22 +402,50 @@ class GPUHandoff(unittest.TestCase):
             self.assertEqual(cli.release_holders([10], force=True), [])
         self.assertEqual([c.args for c in kill.call_args_list], [(10, cli.signal.SIGTERM), (10, cli.signal.SIGKILL)])
 
+    def picker(self, *replies):
+        """Patch the rtx-holders dialog with one that answers recv() from replies and records what it was sent."""
+        sent = []
+
+        class FakeUi:
+            def __init__(self, name, data):
+                sent.append(('open', name, data))
+                self.replies = list(replies)
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                pass
+
+            def send(self, message):
+                sent.append(message)
+
+            def recv(self):
+                return self.replies.pop(0) if self.replies else None
+
+            def progress(self, remaining):
+                sent.append({'event': 'progress', 'left': [h['pid'] for h in remaining]})
+
+        return patch.object(cli, 'UiDialog', FakeUi), sent
+
     def test_picker_lists_session_holders_and_leaves_them_to_logout(self):
         held = [holder(10, name='gnome-shell', closable=False), holder(11)]
-        chose = subprocess.CompletedProcess([], 0, '{"action": "close", "pids": [10, 11]}', '')
-        with patch.object(cli.subprocess, 'run', return_value=chose) as dialog, patch.object(cli.os, 'kill') as kill, \
-                patch.object(cli, 'guard_holders', side_effect=[held, held[:1]]):
-            self.assertEqual(cli.close_holders(held), held[:1])
-        shown = json.loads(dialog.call_args.kwargs['input'])['holders']
+        dialog, sent = self.picker({'action': 'close', 'pids': [10, 11]}, {'action': 'logout'})
+        with dialog, patch.object(cli.os, 'kill') as kill, patch.object(cli, 'guard_holders', side_effect=[held, held[:1]]):
+            self.assertEqual(cli.close_holders(held), (held[:1], True))
+        shown = sent[0][2]['holders']
         self.assertEqual([(h['pid'], h['release']) for h in shown], [(10, 'logout'), (11, 'close')])
         kill.assert_called_once_with(11, cli.signal.SIGTERM)
+        self.assertEqual([m['event'] for m in sent[1:]], ['closing', 'progress', 'done'])
+        self.assertEqual(sent[-1]['left'], [{'pid': 10, 'name': 'gnome-shell', 'release': 'logout'}])
 
     def test_picker_can_start_without_the_rtx(self):
         held = [holder(10, name='gnome-shell', closable=False)]
-        chose = subprocess.CompletedProcess([], 0, '{"action": "without_rtx"}', '')
-        with patch.object(cli.subprocess, 'run', return_value=chose), patch.object(cli, 'run') as attach:
-            self.assertIsNone(cli.close_holders(held, offer_without_rtx=True))
+        dialog, sent = self.picker({'action': 'without_rtx'})
+        with dialog, patch.object(cli, 'run') as attach:
+            self.assertEqual(cli.close_holders(held, offer_without_rtx=True), (None, False))
         attach.assert_not_called()
+        self.assertTrue(sent[0][2]['without_rtx'])
 
     def test_start_refuses_to_wait_for_holders_a_logout_cannot_release(self):
         powerd = holder(10, name='nvidia-powerd', closable=False) | {'uid': 0}
@@ -430,21 +458,27 @@ class GPUHandoff(unittest.TestCase):
 
     def test_picker_closes_chosen_holders(self):
         held = [holder(10)]
-        chose = subprocess.CompletedProcess([], 0, '{"action": "close", "pids": [10]}', '')
-        with patch.object(cli.subprocess, 'run', return_value=chose), patch.object(cli.os, 'kill') as kill, \
-                patch.object(cli, 'guard_holders', side_effect=[held, []]):
-            self.assertEqual(cli.close_holders(held), [])
+        dialog, sent = self.picker({'action': 'close', 'pids': [10]}, {'action': 'started'})
+        with dialog, patch.object(cli.os, 'kill') as kill, patch.object(cli, 'guard_holders', side_effect=[held, []]):
+            self.assertEqual(cli.close_holders(held), ([], False))
         kill.assert_called_once_with(10, cli.signal.SIGTERM)
+        self.assertEqual(sent[-1], {'event': 'done', 'left': []})
 
     def test_picker_force_kills_a_holder_that_ignores_close_once_confirmed(self):
         held = [holder(10)]
-        chose = subprocess.CompletedProcess([], 0, '{"action": "close", "pids": [10]}', '')
-        confirmed = subprocess.CompletedProcess([], 0, '{"action": "confirm"}', '')
-        with patch.object(cli.subprocess, 'run', side_effect=[chose, confirmed]) as dialogs, \
-                patch.object(cli, 'release_holders', side_effect=[held, []]) as release:
-            self.assertEqual(cli.close_holders(held), [])
-        self.assertEqual(dialogs.call_args.args[0][-1], 'confirm')
-        self.assertEqual([c.kwargs for c in release.call_args_list], [{'force': False}, {'force': True}])
+        dialog, sent = self.picker({'action': 'close', 'pids': [10]}, {'action': 'force'}, {'action': 'started'})
+        with dialog, patch.object(cli, 'release_holders', side_effect=[held, []]) as release:
+            self.assertEqual(cli.close_holders(held), ([], False))
+        self.assertEqual([c.kwargs['force'] for c in release.call_args_list], [False, True])
+        self.assertEqual([m['event'] for m in sent[1:]], ['closing', 'stuck', 'closing', 'done'])
+        self.assertEqual(sent[2]['pids'], [10])
+
+    def test_picker_keeps_waiting_when_asked(self):
+        held = [holder(10)]
+        dialog, sent = self.picker({'action': 'close', 'pids': [10]}, {'action': 'wait'}, {'action': 'later'})
+        with dialog, patch.object(cli, 'release_holders', side_effect=[held, []]) as release:
+            self.assertEqual(cli.close_holders(held), ([], False))
+        self.assertEqual([c.kwargs['force'] for c in release.call_args_list], [False, False])
 
     def test_picker_dialogs_exist(self):
         dialogs = Path(cli.__file__).with_name('spawnkit-ui') / 'dialogs'
@@ -452,12 +486,39 @@ class GPUHandoff(unittest.TestCase):
 
     def test_picker_cancel_returns_gpu_to_desktop(self):
         held = [holder(10)]
-        with patch.object(cli.subprocess, 'run', return_value=subprocess.CompletedProcess([], 1, '', '')), \
-                patch.object(cli, 'run') as attach, patch.object(cli.os, 'kill') as kill:
+        dialog, sent = self.picker()
+        with dialog, patch.object(cli, 'run') as attach, patch.object(cli.os, 'kill') as kill:
             with self.assertRaisesRegex(cli.Cancelled, 'Cancelled'):
                 cli.close_holders(held)
         kill.assert_not_called()
         self.assertIn('attach-desktop', attach.call_args.args[0])
+
+    def test_picker_cancel_while_stuck_returns_gpu_to_desktop(self):
+        held = [holder(10)]
+        dialog, sent = self.picker({'action': 'close', 'pids': [10]})
+        with dialog, patch.object(cli, 'run') as attach, patch.object(cli, 'release_holders', return_value=held):
+            with self.assertRaisesRegex(cli.Cancelled, 'Cancelled'):
+                cli.close_holders(held)
+        self.assertIn('attach-desktop', attach.call_args.args[0])
+
+    def test_start_logs_out_when_the_dialog_asked_for_it(self):
+        shell = holder(10, name='kwin_wayland', closable=False)
+        with patch.object(cli.subprocess, 'run', return_value=subprocess.CompletedProcess([], 3)) as run, \
+                patch.object(cli.subprocess, 'check_output', side_effect=[json.dumps([shell]), json.dumps({'timeout': 600})]), \
+                patch.object(cli, 'guard_holders', return_value=[shell]), \
+                patch.object(cli, 'close_holders', return_value=([shell], True)), patch.object(cli.shutil, 'which', return_value=None):
+            self.assertFalse(cli.start_windows('windows', notify=False, gui=True))
+        self.assertEqual(run.call_args.args[0][:2], ['qdbus6', 'org.kde.Shutdown'])
+
+    def test_ui_dialog_round_trip(self):
+        with patch.object(cli.subprocess, 'Popen') as popen:
+            popen.return_value.stdout.readline.side_effect = ['{"action": "confirm"}\n', '']
+            popen.return_value.wait.return_value = 0
+            popen.return_value.stdin.closed = False
+            self.assertEqual(cli.ui_dialog('confirm', {'heading': 'x'}), {'action': 'confirm'})
+        written = ''.join(c.args[0] for c in popen.return_value.stdin.write.call_args_list)
+        self.assertEqual(json.loads(written), {'heading': 'x'})
+        popen.return_value.stdin.close.assert_called()
 
     def test_iommu_group_must_be_complete(self):
         cfg = gpu_config()
