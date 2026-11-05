@@ -630,7 +630,9 @@ GNOME stays installed, so the session is chosen at login and the trial is revers
   window: apps grouped by their systemd unit (`app-<desktop id>` scopes take the
   desktop entry's name and icon, QEMU guests become "Virtual machine NAME", services
   and sessions keep their unit name), sortable by name, CPU, memory, PID or user (root first),
-  searchable by name or command, or flattened to All processes. Rows re-rank at
+  searchable by name or command, or flattened to All processes. CPU shows whole
+  percents with a decimal only under 1%; the Granular toggle, persisted in
+  `granularProcesses`, puts a decimal on every figure. Rows re-rank at
   most every 2 seconds and hold still while pointed at. End sends SIGTERM to the
   process or the whole group and waits 3 seconds; if anything survives the button
   becomes Force kill (SIGKILL). Processes the desktop session needs (plasmashell,

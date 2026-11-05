@@ -74,6 +74,8 @@ PlasmoidItem {
         id: processWindow
         stats: root.statsPath
         ender: processEnder
+        granular: Plasmoid.configuration.granularProcesses
+        onGranularRequested: on => Plasmoid.configuration.granularProcesses = on
         visible: false
     }
 

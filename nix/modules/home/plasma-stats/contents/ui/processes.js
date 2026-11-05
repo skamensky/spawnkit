@@ -52,8 +52,9 @@ function bytes(n) {
     return Math.round(n / 1024) + " KiB"
 }
 
-function percent(value) {
-    return (value >= 10 ? Math.round(value) : value.toFixed(1)) + "%"
+// Whole percents, with a decimal only where rounding would hide the figure; granular always has one.
+function percent(value, granular) {
+    return (granular || value < 0.95 ? value.toFixed(1) : Math.round(value)) + "%"
 }
 
 function target(proc) {

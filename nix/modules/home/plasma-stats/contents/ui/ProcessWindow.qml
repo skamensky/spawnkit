@@ -21,6 +21,9 @@ Window {
     property string sort: "cpu"
     property bool descending: true
     property bool grouped: true
+    // One decimal on every CPU figure; main.qml persists it.
+    property bool granular: false
+    signal granularRequested(bool on)
     property var expanded: ({})
     property double rankedAt: 0
     readonly property bool holding: listHover.hovered
@@ -266,8 +269,10 @@ Window {
                 }
                 Text {
                     text: win.listing
-                        ? i18n("%1 processes in %2 apps and services · %3 CPU", win.processCount, win.listing.groups.length, P.percent(win.cpuTotal))
+                        ? i18n("%1 processes in %2 apps and services · %3 CPU", win.processCount, win.listing.groups.length, P.percent(win.cpuTotal, win.granular))
                         : i18n("Measuring…")
+                    Layout.fillWidth: true
+                    elide: Text.ElideRight
                     font.family: Theme.font
                     font.pointSize: Theme.metaSize
                     font.features: { "tnum": 1 }
@@ -316,6 +321,30 @@ Window {
                         }
                     }
                 }
+            }
+            Rectangle {
+                id: granularToggle
+                implicitWidth: granularText.implicitWidth + Theme.s4 * 2
+                implicitHeight: 34
+                radius: Theme.radiusMd
+                color: win.granular ? Theme.surface : granularHover.hovered ? Theme.hover : Theme.raised
+                border.width: win.granular ? 1 : 0
+                border.color: Theme.edge
+                Behavior on color { ColorAnimation { duration: Theme.quick } }
+                Text {
+                    id: granularText
+                    anchors.centerIn: parent
+                    text: i18n("Granular")
+                    font.family: Theme.font
+                    font.pointSize: Theme.metaSize
+                    font.weight: Font.Medium
+                    color: win.granular ? Theme.text : Theme.textSecondary
+                }
+                HoverHandler { id: granularHover; cursorShape: Qt.PointingHandCursor }
+                TapHandler { onTapped: win.granularRequested(!win.granular) }
+                QQC2.ToolTip.visible: granularHover.hovered
+                QQC2.ToolTip.delay: 600
+                QQC2.ToolTip.text: i18n("Show a decimal on every CPU figure")
             }
             QQC2.TextField {
                 id: search
@@ -518,7 +547,7 @@ Window {
                         Layout.preferredWidth: 84
                         value: row.cpuShown
                         level: row.cpuShown / 25
-                        label: P.percent(row.cpuShown)
+                        label: P.percent(row.cpuShown, win.granular)
                     }
                     Heat {
                         Layout.preferredWidth: 104
