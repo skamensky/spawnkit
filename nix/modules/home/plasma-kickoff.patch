@@ -99,17 +99,17 @@
                      icon.name: "window-pin"
 --- a/NormalPage.qml
 +++ b/NormalPage.qml
-@@ -7,48 +7,35 @@
+@@ -7,48 +7,55 @@
  
  import QtQuick
  import QtQuick.Templates as T
 +import org.kde.kirigami as Kirigami
 +import org.kde.plasma.extras as PlasmaExtras
  
++// Spawnkit: before anything is typed, the menu lists recently used applications and files.
  EmptyPage {
      id: root
 -    property real preferredSideBarWidth: Math.max(footer.tabBar.implicitWidth, applicationsPage.implicitSideBarWidth)
-+    property real preferredSideBarWidth: applicationsPage.implicitSideBarWidth
  
 -    contentItem: HorizontalStackView {
 -        id: stackView
@@ -122,17 +122,17 @@
 -        Component {
 -            id: placesPage
 -            PlacesPage {
-+    // No applications or places, only a hint to type. The applications grid stays as an invisible,
-+    // inert spacer so that the popup keeps its size for search results.
++    property real preferredSideBarWidth: applicationsPage.implicitSideBarWidth
++
 +    contentItem: Item {
 +        implicitWidth: stackView.implicitWidth
 +        implicitHeight: stackView.implicitHeight
 +
++        // Hidden, it only sizes the menu as the stock layout would; hidden, its bindings stay off.
 +        HorizontalStackView {
 +            id: stackView
 +            anchors.fill: parent
-+            enabled: false
-+            opacity: 0
++            visible: false
 +            initialItem: ApplicationsPage {
 +                id: applicationsPage
                  preferredSideBarWidth: root.preferredSideBarWidth + kickoff.backgroundMetrics.leftPadding
@@ -148,7 +148,17 @@
 -                    stackView.replace(placesPage)
 -                }
 -            }
--        }
++
++        KickoffListView {
++            id: recentView
++            anchors.fill: parent
++            mainContentView: true
++            focus: true
++            objectName: "recentView"
++            model: kickoff.recentUsageModel
++            // The list moves up on its own; only Up from the first row reaches here.
++            Keys.onUpPressed: kickoff.searchField.forceActiveFocus(Qt.BacktabFocusReason)
+         }
 -    }
  
 -    footer: Footer {
@@ -162,10 +172,19 @@
 +        PlasmaExtras.PlaceholderMessage {
 +            anchors.centerIn: parent
 +            width: parent.width - Kirigami.Units.gridUnit * 4
++            visible: recentView.count === 0
 +            iconName: "search"
 +            text: i18nc("@info:status", "Type to search") // qmllint disable unqualified
          }
 -        // Eat down events to prevent them from reaching the contentArea or searchField
 -        Keys.onDownPressed: event => {}
++    }
++
++    Binding {
++        target: kickoff
++        property: "contentArea"
++        value: recentView
++        when: root.T.StackView.status === T.StackView.Active && root.visible
++        restoreMode: Binding.RestoreBinding
      }
  }

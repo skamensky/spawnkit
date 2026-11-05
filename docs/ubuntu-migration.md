@@ -663,15 +663,25 @@ GNOME stays installed, so the session is chosen at login and the trial is revers
   and the dialer both verified on the Redmi Note 12 Pro+, after granting the app's
   SMS and phone permissions).
   The launcher, `tech.shmuel.kickoff`, is Plasma 6.6.6's Kickoff reduced to the
-  search field and one Power menu holding every session and power action; it has no
+  search field, a list of recently used applications and files shown until you
+  type, and one Power menu holding every session and power action; it has no
   favourites, application tree, places or header buttons (2026-11-05: the open menu
-  showed only those two). It is pinned to Ubuntu's Plasma version, so rebuild it
-  from the new tarball after a Plasma upgrade. Search ranks an application by
-  averaging its matches across Name, GenericName and Keywords; Ubuntu's System
-  Settings repeats its name as GenericName and ranked below NVIDIA X Server
-  Settings for "settings", so an activation step writes a user copy of its desktop
-  entry without GenericName (2026-11-05: KRunner's services runner then scored
-  System Settings first). Title bars show Windows' minimize, maximize and close on the right. Icons
+  showed recent apps and folders, and Power). It is pinned to Ubuntu's Plasma
+  version, so rebuild it from the new tarball after a Plasma upgrade. Applications
+  are found by `spawnkit-search`, a user service that KRunner and the menu query
+  over D-Bus (runner `tech.shmuel.apps`); `krunnerrc` turns off Plasma's own
+  application runner and lists the new one as the favourite, so applications lead
+  every result list. It scores an app by how the query matches its name (whole name,
+  prefix, word prefix, initials, letters from a word start, substring, then
+  keywords and command), prefers shorter names on ties, and learns: apps launched
+  after typing a query, or one it extends or shortens, rank higher, and frequent
+  recent launches a little. Launches go through `kstart` and are recorded with the
+  activity manager, which keeps the recent list current. `spawnkit-search query
+  TEXT` prints the ranking as JSON, `launch` and `history` the rest; learning lives
+  in `~/.local/state/spawnkit/search.json`. Applications' jump-list actions (such as
+  New Window) are no longer offered in search. (2026-11-05: KRunner listed System
+  Settings first for "settings", WhatsApp first for "wa", and a launch through the
+  runner started Dolphin in its own app unit and recorded the pick.) Title bars show Windows' minimize, maximize and close on the right. Icons
   are Fluent-dark without its application set (`Fluent-dark-real-apps`), so apps such
   as Chrome keep their own icons. Windows are 30% and menus 15% see-through, Dolphin
   included; Ubuntu's Kvantum reads themes only from `~/.config/Kvantum`, so the

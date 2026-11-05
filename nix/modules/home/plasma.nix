@@ -183,6 +183,12 @@ let
     # dbus-next reads D-Bus signatures from annotations ("s"), which flake8 takes for names.
     flakeIgnore = [ "E501" "F821" "F722" ];
   } (builtins.readFile ./plasma-badges.py);
+  # Application search for the Start menu and KRunner, in place of Plasma's own: apps rank by
+  # how their name matches and by which app was launched after typing the same thing.
+  appSearch = pkgs.writers.writePython3Bin "spawnkit-search" {
+    libraries = [ pkgs.python3Packages.dbus-next ];
+    flakeIgnore = [ "E501" "F821" "F722" "W503" ];
+  } (builtins.readFile ./plasma-search.py);
   batteryWidget = plasmoid "tech.shmuel.battery" ./plasma-battery { };
   languageWidget = plasmoid "tech.shmuel.language" ./plasma-language { };
   # The Start menu's icon: a penguin on a rounded tile in Layan's colours. Fluent's start-here
@@ -350,6 +356,12 @@ in
       # task's right-click menu keeps only its own actions (pin, unpin, close). Panels stay
       # declared here; the plasma-manager scripts still apply them.
       configFile."plasma-org.kde.plasma.desktop-appletsrc".General.immutability = 2;
+      # Plasma's application runner gives way to spawnkit-search (krunner/dbusplugins below).
+      configFile.krunnerrc = {
+        Plugins.krunner_servicesEnabled = false;
+        Plugins."tech.shmuel.appsEnabled" = true;
+        "Plugins/Favorites".plugins = "tech.shmuel.apps";
+      };
       configFile.kdeglobals."KDE Action Restrictions"."plasma/allow_configure_when_locked" = false;
       # Spectacle announces nothing: no popup for a copied, saved or recorded capture.
       # The groups are named "Event/<id>"; KConfig escapes a "/" in a group name as "\/".
@@ -422,24 +434,43 @@ in
       kickoffWidget
       snapAssist
       appBadges
+      appSearch
       batteryWidget
       languageWidget
       startIcon
       clockWidget
       calendarSync
     ];
-    # Search scores an application by averaging its matches in Name, GenericName and Keywords, so
-    # System Settings, whose GenericName repeats its Name, ranked below "NVIDIA X Server Settings"
-    # for "settings". Ubuntu's entry, without that GenericName, takes its place.
-    home.activation.systemSettingsLauncher = lib.hm.dag.entryAfter [ "linkGeneration" ] ''
-      src=/usr/share/applications/systemsettings.desktop
-      dest=${config.xdg.dataHome}/applications/systemsettings.desktop
-      if [[ -f $src && ! -v DRY_RUN ]]; then
-        mkdir -p "$(dirname "$dest")"
-        ${pkgs.gnugrep}/bin/grep -v '^GenericName' "$src" > "$dest.tmp"
-        mv "$dest.tmp" "$dest"
-      fi
-    '';
+    # KRunner and the Start menu find applications through spawnkit-search, which they reach on
+    # D-Bus; Plasma's own application runner is off, and the new one's results lead the list.
+    xdg.dataFile."krunner/dbusplugins/spawnkit-search.desktop".text = lib.generators.toINI { } {
+      "Desktop Entry" = {
+        Type = "Service";
+        Name = "Spawnkit applications";
+        Comment = "Applications, ranked by what you launch";
+        Icon = "applications-all";
+        X-KDE-PluginInfo-Name = "tech.shmuel.apps";
+        X-KDE-PluginInfo-EnabledByDefault = true;
+        X-Plasma-API = "DBus";
+        X-Plasma-DBusRunner-Service = "tech.shmuel.apps";
+        X-Plasma-DBusRunner-Path = "/runner";
+        X-Plasma-Runner-Unique-Results = true;
+      };
+    };
+    systemd.user.services.spawnkit-search = {
+      Unit = {
+        Description = "Application search for the Start menu and KRunner";
+        PartOf = [ "graphical-session.target" ];
+        After = [ "graphical-session.target" ];
+      };
+      Service = {
+        Type = "dbus";
+        BusName = "tech.shmuel.apps";
+        ExecStart = "${appSearch}/bin/spawnkit-search serve";
+        Restart = "on-failure";
+      };
+      Install.WantedBy = [ "graphical-session.target" ];
+    };
     systemd.user.services.spawnkit-badges = {
       Unit = {
         Description = "Unread-count badges on task manager icons";
