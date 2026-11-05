@@ -39,7 +39,7 @@ def load_config(repo, profile, overrides=None):
     for key in ('gpu_devices', 'windows_usb_devices', 'ssh_listen_addresses', 'base_packages', 'host_packages'):
         if not isinstance(cfg[key], list):
             raise ValueError(f'{key} must be a list')
-    for key in ('windows_name', 'looking_glass_name', 'network_name', 'network_bridge', 'windows_disk', 'windows_iso', 'virtio_iso', 'nvidia_driver_package', 'nvidia_prime', 'desktop_session', 'default_session', 'windows_uuid', 'network_uuid', 'windows_mac', 'windows_address', 'windows_share', 'windows_unattend_iso', 'windows_edition', 'windows_computer_name', 'windows_timezone', 'windows_authorized_key', 'windows_display_gpu', 'windows_display_mode'):
+    for key in ('windows_name', 'looking_glass_name', 'network_name', 'network_bridge', 'windows_disk', 'windows_iso', 'virtio_iso', 'nvidia_driver_package', 'nvidia_prime', 'desktop_session', 'default_session', 'windows_uuid', 'network_uuid', 'windows_mac', 'windows_address', 'windows_share', 'windows_unattend_iso', 'windows_edition', 'windows_computer_name', 'windows_timezone', 'windows_authorized_key'):
         if not isinstance(cfg[key], str):
             raise ValueError(f'{key} must be a string')
     for key in ('base_packages', 'host_packages'):
@@ -126,10 +126,6 @@ def load_config(repo, profile, overrides=None):
         raise ValueError(f"windows_edition must be one of {', '.join(WINDOWS_EDITIONS)}")
     if not re.fullmatch(r'[a-zA-Z0-9][a-zA-Z0-9-]{0,14}', cfg['windows_computer_name']) or cfg['windows_computer_name'].isdigit():
         raise ValueError('windows_computer_name must be a NetBIOS name of at most 15 letters, digits or hyphens')
-    if not re.fullmatch(r'[1-9][0-9]{2,4}x[1-9][0-9]{2,4}@[1-9][0-9]{1,2}', cfg['windows_display_mode']):
-        raise ValueError('windows_display_mode must look like 2560x1600@60')
-    if any(c in cfg['windows_display_gpu'] for c in '<>&"\n\r\x00'):
-        raise ValueError('windows_display_gpu must be a plain device name')
     for key in ("windows_disk", "windows_iso", "virtio_iso", "windows_share", "windows_unattend_iso", "windows_authorized_key"):
         if cfg[key] and (not Path(cfg[key]).is_absolute() or any(c in cfg[key] for c in "\n\r\x00<>\"'&") or ".." in Path(cfg[key]).parts):
             raise ValueError(f"{key} must be an absolute local path")

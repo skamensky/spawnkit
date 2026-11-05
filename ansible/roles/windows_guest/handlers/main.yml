@@ -1,10 +1,10 @@
 ---
-- name: Restart the virtual display
+# The IDD binds its render adapter when its device starts, so a new RTX driver needs a restart of it.
+- name: Reload the Looking Glass display
   ansible.windows.win_powershell:
     script: |
-      Get-PnpDevice -PresentOnly | Where-Object { $_.HardwareID -contains 'Root\MttVDD' } | ForEach-Object { pnputil /restart-device $_.InstanceId | Out-Null }
-  notify: Restart Looking Glass
-- name: Restart Looking Glass
-  ansible.windows.win_service:
-    name: Looking Glass (host)
-    state: restarted
+      $ErrorActionPreference = 'Stop'
+      Get-PnpDevice -PresentOnly | Where-Object { $_.HardwareID -contains 'Root\LGIdd' } | ForEach-Object {
+          pnputil /restart-device $_.InstanceId | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw "pnputil /restart-device exited $LASTEXITCODE" }
+      }

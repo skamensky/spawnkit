@@ -32,7 +32,7 @@
           $Ansible.Changed = $true
           if (-not $Ansible.CheckMode) { Expand-Archive $Archive $destination }
       }
-  loop: [looking_glass, virtual_display]
+  loop: [looking_glass]
   check_mode: false
 
 - name: Install virtio drivers, the QEMU guest agent and the SPICE agent
@@ -96,7 +96,7 @@
       if (-not (Test-Path "$unpacked\$Inf")) { tar.exe -xf $Package -C (New-Item -ItemType Directory -Force $unpacked).FullName }
       pnputil /add-driver "$unpacked\$Inf" /install | Out-Null
       if ($LASTEXITCODE -notin 0, 3010) { throw "pnputil exited $LASTEXITCODE" }
-  notify: Restart Looking Glass
+  notify: Reload the Looking Glass display
 - name: Remove NVIDIA display drivers other than the pinned one from the driver store
   ansible.windows.win_powershell:
     parameters:
@@ -211,66 +211,20 @@
       }
   when: cfg.windows_share | length > 0
 
-- name: Install the Virtual Display Driver files
+# The IDD's driver catalogs carry the installer's signer, which Windows prompts about unless it
+# is trusted; the silent install has nobody to answer that prompt.
+- name: Trust the Looking Glass IDD's signer for driver installation
   ansible.windows.win_powershell:
     parameters:
-      Source: '{{ windows_guest_cache }}\{{ windows_guest_pins.virtual_display.file | regex_replace("\.zip$", "") }}\VirtualDisplayDriver'
+      Setup: '{{ windows_guest_cache }}\{{ windows_guest_pins.looking_glass.file | regex_replace("\.zip$", "") }}\looking-glass-idd-setup.exe'
     script: |
       [CmdletBinding(SupportsShouldProcess)]
-      param([string]$Source)
+      param([string]$Setup)
       $ErrorActionPreference = 'Stop'
       $WhatIfPreference = $false
       $Ansible.Changed = $false
-      $target = 'C:\VirtualDisplayDriver'
-      if (-not $Ansible.CheckMode) { New-Item -ItemType Directory $target -Force | Out-Null }
-      foreach ($name in 'mttvdd.cat', 'MttVDD.dll', 'MttVDD.inf') {
-          $installed = Join-Path $target $name
-          if (-not (Test-Path $installed) -or (Get-FileHash $installed).Hash -ne (Get-FileHash (Join-Path $Source $name)).Hash) {
-              $Ansible.Changed = $true
-              if (-not $Ansible.CheckMode) { Copy-Item (Join-Path $Source $name) $installed -Force }
-          }
-      }
-  notify: Restart the virtual display
-- name: Configure the virtual monitor
-  ansible.windows.win_powershell:
-    parameters:
-      Source: '{{ windows_guest_cache }}\{{ windows_guest_pins.virtual_display.file | regex_replace("\.zip$", "") }}\VirtualDisplayDriver\vdd_settings.xml'
-      Gpu: '{{ cfg.windows_display_gpu }}'
-      Mode: '{{ cfg.windows_display_mode }}'
-    script: |
-      [CmdletBinding(SupportsShouldProcess)]
-      param([string]$Source, [string]$Gpu, [string]$Mode)
-      $ErrorActionPreference = 'Stop'
-      $WhatIfPreference = $false
-      $Ansible.Changed = $false
-      $width, $rest = $Mode -split 'x'
-      $height, $rate = $rest -split '@'
-      [xml]$settings = Get-Content $Source
-      if ($Gpu) { $settings.vdd_settings.gpu.friendlyname = $Gpu }
-      $resolutions = $settings.vdd_settings.SelectSingleNode('resolutions')
-      $resolutions.RemoveAll()
-      $resolution = $resolutions.AppendChild($settings.CreateElement('resolution'))
-      foreach ($pair in ('width', $width), ('height', $height), ('refresh_rate', $rate)) {
-          $resolution.AppendChild($settings.CreateElement($pair[0])).InnerText = $pair[1]
-      }
-      $rendered = New-Object IO.MemoryStream
-      $settings.Save([IO.Stream]$rendered)
-      $installed = 'C:\VirtualDisplayDriver\vdd_settings.xml'
-      if (-not (Test-Path $installed) -or (Get-FileHash $installed).Hash -ne (Get-FileHash -InputStream ([IO.MemoryStream]::new($rendered.ToArray()))).Hash) {
-          $Ansible.Changed = $true
-          if (-not $Ansible.CheckMode) { [IO.File]::WriteAllBytes($installed, $rendered.ToArray()) }
-      }
-  notify: Restart the virtual display
-- name: Trust the Virtual Display Driver's signer for driver installation
-  ansible.windows.win_powershell:
-    script: |
-      [CmdletBinding(SupportsShouldProcess)]
-      param()
-      $ErrorActionPreference = 'Stop'
-      $WhatIfPreference = $false
-      $Ansible.Changed = $false
-      $signature = Get-AuthenticodeSignature 'C:\VirtualDisplayDriver\mttvdd.cat'
-      if ($signature.Status -ne 'Valid') { throw "Driver catalog signature is $($signature.Status)" }
+      $signature = Get-AuthenticodeSignature $Setup
+      if ($signature.Status -ne 'Valid') { throw "Looking Glass IDD setup signature is $($signature.Status)" }
       if (-not (Test-Path "Cert:\LocalMachine\TrustedPublisher\$($signature.SignerCertificate.Thumbprint)")) {
           $Ansible.Changed = $true
           if (-not $Ansible.CheckMode) {
@@ -278,71 +232,33 @@
               $store.Open('ReadWrite'); $store.Add($signature.SignerCertificate); $store.Close()
           }
       }
-- name: Create the virtual monitor device
-  ansible.windows.win_powershell:
-    script: "{{ lookup('ansible.builtin.file', 'virtual-display-device.ps1') }}"
-  notify: Restart Looking Glass
-- name: Install the display selection script
+# The IDD creates its own monitor on the first hardware render adapter (the RTX) and sizes it to
+# the client window (win:setGuestRes). Compare the registered version: setup has no product code.
+- name: Install the pinned Looking Glass IDD
   ansible.windows.win_powershell:
     parameters:
-      Content: "{{ lookup('ansible.builtin.file', 'display-select.ps1') }}"
-    script: |
-      [CmdletBinding(SupportsShouldProcess)]
-      param([string]$Content)
-      $ErrorActionPreference = 'Stop'
-      $WhatIfPreference = $false
-      $path = 'C:\ProgramData\spawnkit\display-select.ps1'
-      $Ansible.Changed = -not (Test-Path $path) -or [IO.File]::ReadAllText($path) -ne $Content
-      if ($Ansible.Changed -and -not $Ansible.CheckMode) {
-          New-Item -ItemType Directory -Force (Split-Path $path) | Out-Null
-          [IO.File]::WriteAllText($path, $Content)
-      }
-- name: Select the display at boot
-  ansible.windows.win_powershell:
-    parameters:
-      Arguments: -NoProfile -ExecutionPolicy Bypass -File C:\ProgramData\spawnkit\display-select.ps1
-    script: |
-      [CmdletBinding(SupportsShouldProcess)]
-      param([string]$Arguments)
-      $ErrorActionPreference = 'Stop'
-      $WhatIfPreference = $false
-      $task = Get-ScheduledTask -TaskName 'Spawnkit display' -ErrorAction SilentlyContinue
-      $Ansible.Changed = -not $task -or $task.Actions[0].Arguments -ne $Arguments
-      if ($Ansible.Changed -and -not $Ansible.CheckMode) {
-          $action = New-ScheduledTaskAction -Execute powershell.exe -Argument $Arguments
-          $trigger = New-ScheduledTaskTrigger -AtStartup
-          $principal = New-ScheduledTaskPrincipal -UserId SYSTEM -LogonType ServiceAccount -RunLevel Highest
-          $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Minutes 5)
-          Register-ScheduledTask -TaskName 'Spawnkit display' -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Force | Out-Null
-      }
-
-# win_package only checks that the product exists, so compare the registered version.
-- name: Install the pinned Looking Glass host
-  ansible.windows.win_powershell:
-    parameters:
-      Setup: '{{ windows_guest_cache }}\{{ windows_guest_pins.looking_glass.file | regex_replace("\.zip$", "") }}\looking-glass-host-setup.exe'
+      Setup: '{{ windows_guest_cache }}\{{ windows_guest_pins.looking_glass.file | regex_replace("\.zip$", "") }}\looking-glass-idd-setup.exe'
       Version: '{{ windows_guest_pins.looking_glass.version }}'
     script: |
       [CmdletBinding(SupportsShouldProcess)]
       param([string]$Setup, [string]$Version)
       $ErrorActionPreference = 'Stop'
       $WhatIfPreference = $false
-      $key = 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\Looking Glass (host)'
+      $key = 'HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\Looking Glass (IDD)'
       $installed = (Get-ItemProperty $key -ErrorAction SilentlyContinue).DisplayVersion
       $Ansible.Changed = $installed -ne $Version
       if ($Ansible.Changed -and -not $Ansible.CheckMode) {
           $process = Start-Process $Setup -ArgumentList '/S' -Wait -PassThru
-          if ($process.ExitCode -ne 0) { throw "Looking Glass host setup exited with $($process.ExitCode)" }
+          if ($process.ExitCode -ne 0) { throw "Looking Glass IDD setup exited with $($process.ExitCode)" }
           $installed = (Get-ItemProperty $key).DisplayVersion
-          if ($installed -ne $Version) { throw "Looking Glass host reports $installed after installing $Version" }
+          if ($installed -ne $Version) { throw "Looking Glass IDD reports $installed after installing $Version" }
       }
-  notify: Restart Looking Glass
 - name: Keep guest services running
   ansible.windows.win_service:
     name: '{{ item }}'
     start_mode: auto
     state: started
-  loop: [sshd, QEMU-GA, spice-agent, Looking Glass (host)]
+  loop: [sshd, QEMU-GA, spice-agent, LGIddHelper]
 
 - name: Set the time zone
   ansible.windows.win_powershell:

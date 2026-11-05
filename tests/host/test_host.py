@@ -112,8 +112,7 @@ class Configuration(unittest.TestCase):
                          {'windows_mac': '52:54:00:aa:00:01', 'windows_address': '192.168.123.50'},
                          {'windows_share': 'relative/share'}, {'windows_vcpus': 7},
                          {'windows_edition': 'Windows 11 Ultimate'}, {'windows_computer_name': 'name-longer-than-15'},
-                         {'windows_computer_name': 'bad name'}, {'windows_display_mode': '2560x1600'},
-                         {'windows_display_gpu': 'a<b'}, {'windows_authorized_key': 'id_rsa.pub'}):
+                         {'windows_computer_name': 'bad name'}, {'windows_authorized_key': 'id_rsa.pub'}):
             with self.subTest(settings=settings), self.assertRaises(ValueError):
                 load_config(ROOT, 'default', settings)
 

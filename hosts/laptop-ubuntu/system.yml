@@ -39,9 +39,6 @@ windows_usb_devices:
 windows_computer_name: ShmuelWIndows
 windows_timezone: Israel Standard Time
 windows_authorized_key: /home/shmuel/.ssh/id_rsa.pub
-# The laptop panel's native mode, rendered by the RTX for Looking Glass.
-windows_display_gpu: NVIDIA GeForce RTX 4060 Laptop GPU
-windows_display_mode: 2560x1600@60
 gpu_devices:
   - {address: "0000:01:00.0", driver: nvidia}
   - {address: "0000:01:00.1", driver: snd_hda_intel}

@@ -18,7 +18,7 @@
     home.packages = [
       pkgs.virt-manager
       # Looking Glass master (unreleased since B7) plus our fixes, from the fork's
-      # spawnkit branch; see docs/windows-vm.md. The Windows host pin must be the
+      # spawnkit branch; see docs/windows-vm.md. The Windows IDD pin must be the
       # bleeding-edge build of the same upstream commit.
       (pkgs.looking-glass-client.overrideAttrs (old: {
         version = "B7-829-cdba29f2-spawnkit";

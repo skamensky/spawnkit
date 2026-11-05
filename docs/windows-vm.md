@@ -135,7 +135,7 @@ bootstrap through the guest agent; `guest-media --output <iso>` renders the CD a
 through the guest agent) for that run. The role downloads pinned, SHA-256-verified
 installers to `C:\ProgramData\spawnkit\cache` and installs the VirtIO guest tools,
 WinFsp and the virtiofs service (when `windows_share` is set), Tailscale, Chrome,
-Webex (per machine, started at sign-in by an HKLM Run value), the Virtual Display Driver, the Looking Glass host and NVIDIA's display driver 621.01
+Webex (per machine, started at sign-in by an HKLM Run value), Looking Glass's indirect display driver and NVIDIA's display driver 621.01
 (driver package only, from `nvlti.inf`; when the RTX already runs another version
 it stops and points to the procedure below). It sets `windows_timezone`, keeps
 Windows Update from replacing drivers (`ExcludeWUDriversInQualityUpdate` and
@@ -152,25 +152,31 @@ Chrome, Webex and Tailscale update themselves; Google and Cisco replace the unve
 Chrome and Webex MSIs on each release, so a fresh install fails its hash check until
 the pin is refreshed.
 
-Looking Glass host and Nix client must come from the same upstream commit. B7 is
-the last release and lacks many Wayland fixes, so both run master: the client builds
-from the `spawnkit` branch of `skamensky/LookingGlass` (upstream `cdba29f2` plus our
-fixes, which point PureSpice at the `spawnkit` branch of `skamensky/PureSpice`), and
-the guest installs upstream's bleeding-edge host build of that commit, pinned by
-hash and checked against its registered `DisplayVersion` (`B7-829-cdba29f2`). To
-move forward, rebase the fork branch onto the new upstream commit, update the client
-`rev`/`hash` in `nix/modules/home/virtualization.nix`, and pin the matching host from
-`https://looking-glass.io/artifact/bleeding/host` (its redirect is content-addressed). Windows
-needs an active display on the RTX; the laptop's panel is wired only to Intel, so
-the role installs the signed Virtual Display Driver
-(`VirtualDrivers/Virtual-Display-Driver` 25.7.23, hardware ID `Root\MttVDD`):
-`windows_display_gpu` selects the adapter by name and `windows_display_mode` is the
-only listed mode. Driver installation trusts the catalog signer in the machine
-TrustedPublisher store. Looking Glass's own indirect display driver (`/artifact/bleeding/idd`) could
-replace it; that is untested. After the PCI
-layout changes (for example removing VGA), Windows re-enumerates the RTX and needs a
-minute to reinstall it; restart the virtual display device and the Looking Glass
-service if capture then reports no output device. The SPICE VGA console alone does
+Looking Glass's Windows side and the Nix client must come from the same upstream
+commit. B7 is the last release and lacks many Wayland fixes, so both run master: the
+client builds from the `spawnkit` branch of `skamensky/LookingGlass` (upstream
+`cdba29f2` plus our fixes, which point PureSpice at the `spawnkit` branch of
+`skamensky/PureSpice`), and the guest installs upstream's bleeding-edge build of
+the indirect display driver (IDD) of that commit, pinned by hash and checked against
+the `DisplayVersion` its installer registers under `WOW6432Node`
+(`B7-829-gcdba29f2f6`). Master's IDD replaces the legacy host app: it is a virtual
+monitor rendered on the first non-emulated adapter (the RTX; the laptop's panel is
+wired only to Intel, so Windows has no other RTX output), streams frames over
+IVSHMEM, and injects keyboard and mouse sent by the client over the same channel,
+so SPICE carries only audio, clipboard and the fallback. The client resizes that
+monitor to its window (`win:setGuestRes`, on by default; Escape+`=` requests it
+again), and the IDD's tray icon makes it the only monitor. Its driver catalogs are
+signed by the developer (HostFission) rather than attested by Microsoft, so the
+role adds the setup's Authenticode signer to the machine TrustedPublisher store
+before the silent install, which also installs the `LGIddHelper` service. To move
+forward, rebase the fork branch onto the new upstream commit, update the client
+`rev`/`hash` in `nix/modules/home/virtualization.nix`, and pin the matching driver
+from `https://looking-glass.io/artifact/bleeding/idd` (its redirect is
+content-addressed). After the PCI layout changes (for example removing VGA), Windows
+re-enumerates the RTX and needs a minute to reinstall it; the IDD binds its render
+adapter when its device starts, so restart the `Root\LGIdd` device (`pnputil
+/restart-device`) if the client then shows no picture; the role does this after
+installing an NVIDIA driver. The SPICE VGA console alone does
 not establish a captured NVIDIA desktop.
 
 The domain presents one socket of two-thread cores (`windows_vcpus` must be
@@ -274,10 +280,9 @@ Windows once from its definition minus the RTX functions and Looking Glass memor
 with a virtio display instead; the stored definition is unchanged. The RTX stays on
 Ubuntu, the guard reserves nothing, and the view opens the SPICE console in
 virt-manager because Looking Glass has nothing to capture. Expect basic graphics
-only; shut down and start normally to get the RTX back. At boot the guest's
-`Spawnkit display` task (`display-select.ps1`) disables the virtual monitor when no
-RTX is present, so the desktop moves to the virtio display, and re-enables it on the
-next RTX boot for Looking Glass. While Windows runs without the RTX, Ubuntu apps
+only; shut down and start normally to get the RTX back. Without the
+IVSHMEM device the IDD cannot open its transport, so Windows is expected to use the
+virtio display alone; this has not been tested since the switch to the IDD. While Windows runs without the RTX, Ubuntu apps
 such as Chrome's GPU process can open it, so a later normal start may ask to close
 them. The picker lists and closes the program that owns a holder: a helper such as
 Chrome's GPU process stands for its topmost ancestor running the same executable,
@@ -382,7 +387,7 @@ and recovery; routine automation can use SSH.
   for the Legion), set `HKLM\SYSTEM\CurrentControlSet\Services\nvlddmkm` `Start`
   to 4, start the guest again, then `pnputil /add-driver ... /install`; the INF
   restores `Start` to 3. 621.01 (32.0.16.2101) shut down cleanly. Afterwards
-  restart the virtual display device and the Looking Glass host service.
+  restart the `Root\LGIdd` device.
 - **Crash dumps:** the domain enables the host's Hyper-V enlightenments except
   crash notification. With it, Windows reported each bug check before writing its
   dump and libvirt destroyed the domain, leaving no evidence. Now Windows writes a
