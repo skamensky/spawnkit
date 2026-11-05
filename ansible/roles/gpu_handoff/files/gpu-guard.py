@@ -19,6 +19,10 @@ SEAT_RULE = Path('/run/udev/rules.d/72-spawnkit-gpu-handoff.rules')
 # ends them), started again once the RTX is back. The ones stopped here are remembered at runtime.
 GPU_SERVICES = ['nvidia-powerd.service', 'nvidia-persistenced.service']
 STOPPED_SERVICES = Path('/run/spawnkit/gpu-services.json')
+QEMU_RUN = Path('/run/libvirt/qemu')
+# A guest holds gigabytes, so the kernel's out-of-memory killer picks it first and the VM dies mid-session.
+# Builds and desktop apps should go first; the guest stays killable as a last resort.
+GUEST_OOM_SCORE_ADJ = -900
 # Holders that are not ordinary GPU jobs get specific advice instead of a bare PID.
 ADVICE = {
     'gnome-shell': 'the desktop compositor opened the RTX; drive all Linux displays from the Intel iGPU '
@@ -226,6 +230,11 @@ def release(cfg, state=STATE, sysfs=SYSFS, attempts=5, delay=2):
     desktop_seat(cfg, True, sysfs)
 
 
+def shield_guest(name, run=QEMU_RUN, proc=Path('/proc')):
+    pid = (run / f'{name}.pid').read_text().strip()
+    (proc / pid / 'oom_score_adj').write_text(str(GUEST_OOM_SCORE_ADJ))
+
+
 def main():
     if os.geteuid() != 0:
         raise RuntimeError('GPU inspection/handoff requires root')
@@ -272,6 +281,8 @@ def main():
     name, operation, phase = sys.argv[1:4]
     if operation == 'prepare' and phase == 'begin':
         prepare(cfg, sys.stdin.read())
+    elif operation == 'started' and phase == 'begin':
+        shield_guest(name)
     elif name == cfg['windows_name'] and operation == 'release' and phase == 'end':
         release(cfg)
 

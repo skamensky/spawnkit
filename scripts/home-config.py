@@ -2,6 +2,7 @@
 """Select a declared host profile, with a minimal default for unknown hosts."""
 
 import argparse
+import fcntl
 import json
 import os
 from pathlib import Path
@@ -57,6 +58,19 @@ def select_profile(registry, hostname, platform_kind, explicit=None):
     return "default"
 
 
+def hold_build_lock():
+    """Run one home-config at a time: each evaluation takes about 4 GB, and two at once beside a running
+    guest exhausted memory and swap. The lock lasts until the process exits."""
+    path = Path(os.environ.get("XDG_RUNTIME_DIR", "/tmp")) / "home-config.lock"
+    lock = path.open("w")
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        print(f"Waiting for another home-config run to finish ({path})", flush=True)
+        fcntl.flock(lock, fcntl.LOCK_EX)
+    globals()["_build_lock"] = lock
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("action", choices=["select", "build", "switch", "check", "repos", "update-agents"])
@@ -67,6 +81,7 @@ def main():
     parser.add_argument("--system", choices=sorted(SYSTEMS.values()), default=SYSTEMS.get(platform.machine()))
     parser.add_argument("--dry-run", action="store_true", help="Only valid with repos")
     args = parser.parse_args()
+    hold_build_lock()
     if not args.system:
         parser.error(f"Unsupported architecture: {platform.machine()}")
     if args.dry_run and args.action != "repos":
