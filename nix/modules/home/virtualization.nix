@@ -87,6 +87,13 @@
             icon = "utilities-terminal";
           };
         };
+    # Plasma reads launchers (and their right-click actions) from its sycoca cache,
+    # which does not notice a launcher symlink retargeted by a switch.
+    home.activation.refreshKdeServiceCache = lib.hm.dag.entryAfter [ "linkGeneration" ] ''
+      if [ -x /usr/bin/kbuildsycoca6 ] && [ -n "''${DBUS_SESSION_BUS_ADDRESS:-}" ]; then
+        run /usr/bin/kbuildsycoca6 --noincremental >/dev/null 2>&1 || true
+      fi
+    '';
     # Pin the Windows launchers to the dock without replacing the user's own pins.
     home.activation.pinWindowsLauncher = lib.hm.dag.entryAfter [ "dconfSettings" ] ''
       # gsettings, unlike dconf, also reports GNOME's default pins; without the dconf
