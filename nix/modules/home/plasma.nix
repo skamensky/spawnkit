@@ -170,6 +170,11 @@ let
   '';
   batteryWidget = plasmoid "tech.shmuel.battery" ./plasma-battery { };
   languageWidget = plasmoid "tech.shmuel.language" ./plasma-language { };
+  # The Start menu's icon: a terminal prompt on a rounded tile in Layan's colours. Fluent's
+  # start-here is the Windows logo, which reads as one more window button.
+  startIcon = pkgs.runCommand "spawnkit-start-icon" { } ''
+    install -Dm644 ${./plasma-start-icon.svg} $out/share/icons/hicolor/scalable/apps/spawnkit-start.svg
+  '';
   clockWidget = plasmoid "tech.shmuel.clock" ./plasma-clock { calendar = "${calendarSync}/bin/spawnkit-calendar"; };
   plasmaTheme = pkgs.writers.writePython3Bin "spawnkit-plasma-theme" {
     flakeIgnore = [ "E501" ];
@@ -247,6 +252,7 @@ in
               # No power buttons: sleep, restart, shut down and the session actions share
               # one Power menu.
               config.General = {
+                icon = "spawnkit-start";
                 primaryActions = 1;
                 systemFavorites = "";
               };
@@ -262,6 +268,8 @@ in
             "tech.shmuel.battery"
             # The current layout: a click switches between two, or opens a menu of more.
             "tech.shmuel.language"
+            # The paired phone (shown only while connected): battery, texts, ring, send a file.
+            "org.kde.kdeconnect"
             "tech.shmuel.clock"
             "org.kde.plasma.notifications"
           ];
@@ -290,9 +298,13 @@ in
       };
       shortcuts."KDE Keyboard Layout Switcher"."Switch to Next Keyboard Layout" = "Meta+Space";
       # Ditto's shortcut, as on GNOME (desktop.nix): Ctrl+` shows or hides CopyQ's history.
+      # KWin matches the typed symbol, not the key, and Hebrew puts ; on the ` key.
       hotkeys.commands.copyq-toggle = {
         name = "CopyQ";
-        key = "Ctrl+`";
+        keys = [
+          "Ctrl+`"
+          "Ctrl+;"
+        ];
         command = "${pkgs.copyq}/bin/copyq toggle";
       };
       # Windows' title bar buttons: the window menu on the left, minimize, maximize and
@@ -373,6 +385,7 @@ in
       snapAssist
       batteryWidget
       languageWidget
+      startIcon
       clockWidget
       calendarSync
     ];

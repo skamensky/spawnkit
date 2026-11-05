@@ -622,7 +622,19 @@ GNOME stays installed, so the session is chosen at login and the trial is revers
   set, since GNOME's `grp:win_space_toggle` would make Meta+Space switch twice. There is no system tray, so applications'
   tray icons (CopyQ, Claude) do not appear; volume and network have no indicator.
   Ctrl+` toggles CopyQ through a plasma-manager command (GNOME binds it in
-  `desktop.nix`); like any new global shortcut it needs a relogin to take effect.
+  `desktop.nix`). KWin matches the typed symbol, and the Hebrew layout types `;` on
+  that key, so Ctrl+; is bound too (2026-11-05: injected keypresses toggle CopyQ on
+  both layouts). A new global shortcut needs a relogin, or a live kglobalaccel
+  `setShortcut` call with flags 6. The Start button's icon, `spawnkit-start`, is a
+  terminal prompt on a rounded Layan-coloured tile, since Fluent's Windows logo read
+  as another window button.
+  KDE Connect (the `kdeconnect` package in the base role's Plasma list) stands in for
+  Windows' Phone Link: install the KDE Connect Android app, keep the phone on the same
+  network or tailnet, and pair from the panel's `org.kde.kdeconnect` widget (hidden
+  until a phone connects) or `kdeconnect-cli --pair -d ID`. Texts go through the
+  KDE Connect SMS app, the widget or `kdeconnect-cli --send-sms TEXT --destination
+  NUMBER -d ID`; calls only show notifications (and can mute media), as the call
+  audio stays on the phone.
   The launcher, `tech.shmuel.kickoff`, is Plasma 6.6.6's Kickoff with the Places
   tab removed and every session and power action under one Power menu; it is pinned
   to Ubuntu's Plasma version, so rebuild it from the new tarball after a Plasma
@@ -695,7 +707,7 @@ GNOME stays installed, so the session is chosen at login and the trial is revers
 - [x] Docker works (2026-11-04: Engine 29.1.3 reachable without sudo); the supa-crm local stack is not part of the migration
 - [ ] Before adopting the Windows VM: busy-GPU start refusal, Windows GPU acceleration and repeated return to Linux verified
 - [x] Citrix access works (2026-11-04: Workspace app 24.11 from the `citrix` role)
-- [ ] `.ica` files opened from Chrome start Citrix: the laptop profile makes `wfica.desktop` the default and replaces Ubuntu's launcher with one that drops the Nix Chrome wrapper's `LD_LIBRARY_PATH` (2026-11-05: with it, wfica exited on a Nix sqlite needing a newer glibc)
+- [x] `.ica` files opened from Chrome start Citrix: the laptop profile makes `wfica.desktop` the default and replaces Ubuntu's launcher with one that drops the Nix Chrome wrapper's `LD_LIBRARY_PATH` (2026-11-05: with it, wfica exited on a Nix sqlite needing a newer glibc; confirmed working by Shmuel the same day)
 - [ ] Windows Downloads/Documents/Desktop present in `~/windows-import` (2026-11-04: rsync dry run against read-only C: shows no differences except the deliberately skipped `Chrome Passwords.csv` and the portable `Desktop/Tor Browser`); all 51 Notepad++ backups imported, review by Shmuel pending
 - [x] CopyQ autostarts; the `Ditto/*` tabs exist; the import printed "verified per tab"; a Hebrew clip and an image paste correctly (2026-11-04)
 - [ ] log complete; summary given to Shmuel
