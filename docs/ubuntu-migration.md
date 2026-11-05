@@ -652,6 +652,13 @@ GNOME stays installed, so the session is chosen at login and the trial is revers
   launcher API, and the task manager draws that count on the icon's corner.
   `spawnkit-badges set APP N` and `list` drive it by hand (2026-11-05: a set count
   showed on the WhatsApp icon).
+  The fork also draws a pill under a launcher's icon from the service's `Tags`
+  D-Bus property (`spawnkit-badges tags` prints it as JSON). While the Windows VM
+  runs (`virsh domstate` of `windows_name` in `/etc/spawnkit/windows.json`), its
+  pinned icon reads a green "RTX" when the first `gpu_devices` address is bound to
+  vfio-pci and a grey "no RTX" otherwise; with the VM off there is no pill
+  (2026-11-05: both pills rendered from injected tags, and a shut-off VM gave no
+  tag; not yet observed through a real VM start).
   KDE Connect (the `kdeconnect` package in the base role's Plasma list) stands in for
   Windows' Phone Link: install the KDE Connect Android app, keep the phone on the same
   network or tailnet, and pair from the panel's `org.kde.kdeconnect` widget (hidden

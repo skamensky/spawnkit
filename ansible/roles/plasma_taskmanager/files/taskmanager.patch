@@ -1,6 +1,5 @@
-diff -ru a/qml/ContextMenu.qml b/qml/ContextMenu.qml
---- a/ContextMenu.qml	2026-11-05 13:02:34.291548927 +0200
-+++ b/ContextMenu.qml	2026-11-05 13:02:34.309723846 +0200
+--- a/ContextMenu.qml
++++ b/ContextMenu.qml
 @@ -70,7 +70,6 @@
      function show(): void {
          Plasmoid.contextualActionsAboutToShow();
@@ -90,9 +89,8 @@ diff -ru a/qml/ContextMenu.qml b/qml/ContextMenu.qml
  
      PlasmaExtras.MenuItem {
          id: closeWindowItem
-diff -ru a/qml/main.qml b/qml/main.qml
---- a/main.qml	2026-11-05 13:02:34.291872074 +0200
-+++ b/main.qml	2026-11-05 13:02:34.309783159 +0200
+--- a/main.qml
++++ b/main.qml
 @@ -32,7 +32,7 @@
  
      readonly property bool shouldShrinkToZero: tasksModel.count === 0
@@ -102,3 +100,80 @@ diff -ru a/qml/main.qml b/qml/main.qml
  
      property Task toolTipOpenedByClick
      property Task toolTipAreaItem
+@@ -245,6 +245,35 @@
+         watchedService: "org.kde.KWin.Effect.WindowView1"
+     }
+ 
++    // Spawnkit: text tags under launcher icons (such as whether the Windows VM holds the RTX),
++    // published by spawnkit-badges in its Tags property as {app: {text, tone}}.
++    readonly property var spawnkitTags: {
++        try {
++            return JSON.parse(spawnkitBadges.properties.Tags || "{}");
++        } catch (e) {
++            return {};
++        }
++    }
++
++    function spawnkitTag(launcherUrl: url): var {
++        const app = launcherUrl.toString().replace(/^.*[:\/]/, "").replace(/\.desktop$/, "");
++        return spawnkitTags[app];
++    }
++
++    DBus.Properties {
++        id: spawnkitBadges
++        busType: DBus.BusType.Session
++        service: spawnkitBadgesWatcher.registered ? "tech.shmuel.Badges" : ""
++        path: "/tech/shmuel/Badges"
++        iface: "tech.shmuel.Badges"
++    }
++
++    DBus.DBusServiceWatcher {
++        id: spawnkitBadgesWatcher
++        busType: DBus.BusType.Session
++        watchedService: "tech.shmuel.Badges"
++    }
++
+     readonly property Component taskInitComponent: Component {
+         Timer {
+             interval: 200
+--- a/Task.qml
++++ b/Task.qml
+@@ -569,6 +569,38 @@
+             source: task.model.decoration
+         }
+ 
++        // Spawnkit: the launcher's tag from spawnkit-badges, a pill across the icon's foot.
++        Rectangle {
++            id: spawnkitTag
++
++            readonly property var tag: task.inPopup ? undefined : task.tasksRoot.spawnkitTag(task.model.LauncherUrlWithoutIcon)
++            readonly property bool positive: tag?.tone === "positive"
++
++            visible: tag !== undefined
++            z: 1
++            anchors.horizontalCenter: parent.horizontalCenter
++            anchors.bottom: parent.bottom
++            anchors.bottomMargin: -Math.round(height / 4)
++            height: Math.max(Math.round(icon.paintedHeight * 0.38), 8)
++            width: Math.min(tagLabel.contentWidth + height, parent.width + Kirigami.Units.smallSpacing * 2)
++            radius: height / 2
++            color: positive ? Kirigami.Theme.positiveTextColor : Kirigami.Theme.backgroundColor
++            border.width: 1
++            border.color: positive ? Qt.darker(Kirigami.Theme.positiveTextColor, 1.3) : Kirigami.Theme.disabledTextColor
++
++            PlasmaComponents3.Label {
++                id: tagLabel
++                anchors.centerIn: parent
++                height: parent.height
++                verticalAlignment: Text.AlignVCenter
++                font.pixelSize: Math.round(parent.height * 0.72)
++                font.bold: true
++                color: spawnkitTag.positive ? "white" : Kirigami.Theme.disabledTextColor
++                text: spawnkitTag.tag?.text ?? ""
++                textFormat: Text.PlainText
++            }
++        }
++
+         states: [
+             // Using a state transition avoids a binding loop between label.visible and
+             // the text label margin, which derives from the icon width.
