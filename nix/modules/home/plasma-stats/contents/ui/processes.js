@@ -61,6 +61,11 @@ function target(proc) {
     return proc.pid + ":" + proc.start
 }
 
+// One shell word, for names going into a command line.
+function quoted(text) {
+    return "'" + text.replace(/'/g, "'\\''") + "'"
+}
+
 // Ascending user order puts root first, then the other users alphabetically.
 function userRank(user) {
     return (user === "root" ? "0" : "1") + user.toLowerCase()

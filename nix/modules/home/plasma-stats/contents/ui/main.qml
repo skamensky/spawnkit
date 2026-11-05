@@ -1,6 +1,6 @@
-// The machine's load in one popup: an icon in the panel that opens, on click, a Spawnkit card with
+// The machine's load in one popup: a live gauge (Gauge.qml) in the panel that opens, on click, a Spawnkit card with
 // processor, graphics, memory, swap and disk use. It polls `spawnkit-stats` (the same JSON agents
-// read) about once a second, only while the card is open. Every number and bar glides to its new
+// read) about once a second while the card is open; the gauge alone polls `spawnkit-stats load`. Every number and bar glides to its new
 // value over one poll, so updates read as motion rather than jumps. The processor row unfolds into
 // a map of its physical cores, one bar per hardware thread; pointing at a core names its threads
 // and clock. Below them, the busiest processes with End buttons, and a link to the process window
@@ -22,6 +22,8 @@ PlasmoidItem {
     // One poll: the CLI's 0.5 s measurement, its start-up and the pause below.
     readonly property int glide: 950
     property var stats: null
+    // Overall CPU use for the panel's gauge: from the card's polls while it is open, else `load`.
+    property real cpuLoad: 0
     property bool showCores: false
     property var hoveredCore: null
 
@@ -46,7 +48,7 @@ PlasmoidItem {
             own: p.own, critical: p.critical, target: P.target(p),
         })
         const now = Date.now()
-        if (!holdingTop && now - rankedAt >= 2000) {
+        if ((!holdingTop || !topModel.count) && now - rankedAt >= 2000) {
             rankedAt = now
             P.sync(topModel, procs.filter(p => p.cpu_percent >= 1).slice(0, topShown).map(row), true)
             return
@@ -70,10 +72,15 @@ PlasmoidItem {
         id: processEnder
         stats: root.statsPath
     }
+    Copier {
+        id: processCopier
+        stats: root.statsPath
+    }
     ProcessWindow {
         id: processWindow
         stats: root.statsPath
         ender: processEnder
+        copier: processCopier
         granular: Plasmoid.configuration.granularProcesses
         onGranularRequested: on => Plasmoid.configuration.granularProcesses = on
         visible: false
@@ -103,6 +110,7 @@ PlasmoidItem {
             disconnectSource(source)
             try {
                 root.stats = JSON.parse(data.stdout)
+                root.cpuLoad = root.stats.cpu.usage_percent
             } catch (err) {
                 // Keep the last snapshot rather than blanking the card.
             }
@@ -114,6 +122,26 @@ PlasmoidItem {
         id: next
         interval: 350
         onTriggered: root.poll()
+    }
+
+    P5Support.DataSource {
+        id: loadRunner
+        engine: "executable"
+        onNewData: (source, data) => {
+            disconnectSource(source)
+            try {
+                root.cpuLoad = JSON.parse(data.stdout).usage_percent
+            } catch (err) {
+                // The gauge holds its last reading.
+            }
+        }
+    }
+    Timer {
+        interval: 1500
+        repeat: true
+        running: !root.expanded
+        triggeredOnStart: true
+        onTriggered: if (!loadRunner.connectedSources.length) loadRunner.connectSource(root.statsPath + " load")
     }
 
     // [{kind, title, cores: [{core, threads: [index into stats.cpu.threads]}]}], performance
@@ -384,6 +412,25 @@ PlasmoidItem {
         }
     }
 
+    compactRepresentation: MouseArea {
+        id: compact
+        // A click that closes the card also takes its focus, so judge by the state at the press.
+        property bool wasExpanded: false
+        readonly property Glide shown: Glide { target: root.cpuLoad }
+        readonly property bool vertical: Plasmoid.formFactor === PlasmaCore.Types.Vertical
+        Layout.minimumWidth: vertical ? 0 : height
+        Layout.minimumHeight: vertical ? width : 0
+        hoverEnabled: true
+        onPressed: wasExpanded = root.expanded
+        onClicked: root.expanded = !wasExpanded
+        Gauge {
+            anchors.centerIn: parent
+            width: Kirigami.Units.iconSizes.roundedIconSize(Math.min(compact.width, compact.height))
+            height: width
+            percent: compact.shown.value
+        }
+    }
+
     fullRepresentation: Item {
         Layout.preferredWidth: Kirigami.Units.gridUnit * 21
         Layout.preferredHeight: card.implicitHeight + Theme.s5 * 2
@@ -630,6 +677,10 @@ PlasmoidItem {
                     width: ListView.view.width
                     height: 36
                     HoverHandler { id: topHover }
+                    TapHandler {
+                        acceptedButtons: Qt.RightButton
+                        onTapped: topMenu.show(topRow.target, topRow.name, "busiest")
+                    }
                     Rectangle {
                         anchors.fill: parent
                         anchors.leftMargin: -Theme.s2
@@ -686,10 +737,11 @@ PlasmoidItem {
                     }
                 }
             }
+            CopyMenu { id: topMenu; copier: processCopier }
             Text {
-                visible: processEnder.message.length > 0
+                visible: text.length > 0
                 Layout.fillWidth: true
-                text: processEnder.message
+                text: processCopier.message || processEnder.message
                 elide: Text.ElideRight
                 font.family: Theme.font
                 font.pointSize: Theme.microSize

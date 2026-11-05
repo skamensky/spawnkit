@@ -6,7 +6,9 @@ spawnkit-stats processes      every process, grouped by the app or service that 
 spawnkit-stats signal PID:START...  end processes with SIGTERM (--term) or SIGKILL (--kill) and report
                               which exited within --wait seconds
 spawnkit-stats details PID:START...  what each process is: executable, parent, unit, start time and
-                              memory, as JSON or (--text) as text to paste elsewhere
+                              memory, as JSON or (--text) as text to paste elsewhere, which --view
+                              and --row open with where it was copied from
+spawnkit-stats load           overall CPU use alone, a cheap reading for the panel's gauge
 
 CPU (overall and per hardware thread) and integrated-GPU load are measured over --interval seconds. The integrated GPU's load is the
 share of that time it spent out of its RC6 sleep state (i915's rc6_residency_ms). A discrete
@@ -476,6 +478,34 @@ def details_text(item):
     return "\n".join(lines)
 
 
+# The places a process is shown, for readers of copied details who have never seen them.
+VIEWS = {
+    "apps": "the process window's Apps view, which groups processes by the app or service that owns them",
+    "all": "the process window's All processes view, a flat list of every process",
+    "busiest": "the Busiest processes list on the stats card, the top CPU users at 1% or more",
+}
+
+
+def details_source(view, row, count):
+    """What a reader without Spawnkit's context needs to know about pasted details."""
+    copied = time.strftime("%Y-%m-%d %H:%M:%S %Z")
+    lines = [
+        f"Source: Spawnkit's process manager, part of the KDE Plasma panel stats widget on {os.uname().nodename}, copied {copied}.",
+        f"Viewed in: {VIEWS[view]}.",
+    ]
+    if row:
+        lines.append(f"Row: {row}" + (f" ({count} processes, all listed below)" if count > 1 else ""))
+    lines.append("Live data: `spawnkit-stats processes` lists every process as JSON and `spawnkit-stats details PID` "
+                 "describes one. These PIDs may have exited since.")
+    return "\n".join(lines)
+
+
+def load(interval):
+    before = cpu_times()
+    time.sleep(interval)
+    return {"usage_percent": busy(before["cpu"], cpu_times()["cpu"])}
+
+
 def snapshot(interval, disk_path, top=0):
     cards = rc6_cards()
     procs0 = proc_sample() if top else None
@@ -533,6 +563,10 @@ def main():
     describing.add_argument("targets", nargs="+", metavar="PID[:START]",
                             help="START (from the listing) guards against a reused PID")
     describing.add_argument("--text", action="store_true", help="Text to paste elsewhere, instead of JSON")
+    describing.add_argument("--view", choices=VIEWS, help="With --text, open with this view as the source")
+    describing.add_argument("--row", help="With --view, the row it was copied from")
+    gauge = commands.add_parser("load", help="Overall CPU use alone")
+    gauge.add_argument("--interval", type=float, default=1, help="Seconds over which CPU use is measured")
     args = parser.parse_args()
     if args.command in ("signal", "details") and not all(re.fullmatch(r"\d+(:\d+)?", t) for t in args.targets):
         parser.error("targets are PID or PID:START")
@@ -544,7 +578,13 @@ def main():
         sys.exit(0 if all(r["exited"] for r in results) else 1)
     elif args.command == "details":
         items = [details(t) for t in args.targets]
-        print("\n\n".join(map(details_text, items)) if args.text else json.dumps({"processes": items}))
+        if args.text:
+            source = [details_source(args.view, args.row, len(items))] if args.view else []
+            print("\n\n".join(source + [details_text(item) for item in items]))
+        else:
+            print(json.dumps({"processes": items}))
+    elif args.command == "load":
+        print(json.dumps(load(args.interval)))
     else:
         print(json.dumps(snapshot(args.interval, args.disk, args.top)))
 

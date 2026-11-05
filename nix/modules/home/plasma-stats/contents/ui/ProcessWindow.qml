@@ -17,6 +17,7 @@ Window {
     id: win
     property string stats
     property Item ender
+    property Item copier
     property var listing: null
     property string sort: "cpu"
     property bool descending: true
@@ -25,9 +26,6 @@ Window {
     property bool granular: false
     signal granularRequested(bool on)
     property var expanded: ({})
-    property var copying: ({})
-    // A passing confirmation for the footer.
-    property string notice
     property double rankedAt: 0
     readonly property bool holding: listHover.hovered
     readonly property int glide: 900
@@ -97,43 +95,7 @@ Window {
         refresh(true)
     }
 
-    // Copies `spawnkit-stats details` for a row: one process, or every process in a group.
-    function copyDetails(targets, label) {
-        const command = stats + " details --text " + targets
-        copying[command] = label
-        copier.connectSource(command)
-    }
-    P5Support.DataSource {
-        id: copier
-        engine: "executable"
-        onNewData: (source, data) => {
-            disconnectSource(source)
-            const label = win.copying[source]
-            delete win.copying[source]
-            clipboard.text = data.stdout.trim()
-            clipboard.selectAll()
-            clipboard.copy()
-            win.notice = i18n("Copied the details of %1", label)
-            noticeEnds.restart()
-        }
-    }
-    // Text items are QML's way to the clipboard.
-    TextEdit { id: clipboard; visible: false }
-    Timer {
-        id: noticeEnds
-        interval: 3000
-        onTriggered: win.notice = ""
-    }
-    QQC2.Menu {
-        id: rowMenu
-        property string targets
-        property string label
-        QQC2.MenuItem {
-            text: i18n("Copy details")
-            icon.name: "edit-copy"
-            onTriggered: win.copyDetails(rowMenu.targets, rowMenu.label)
-        }
-    }
+    CopyMenu { id: rowMenu; copier: win.copier }
 
     function processRow(proc, group, depth) {
         return {
@@ -502,9 +464,7 @@ Window {
                 TapHandler {
                     acceptedButtons: Qt.RightButton
                     onTapped: {
-                        rowMenu.targets = row.targets
-                        rowMenu.label = row.name
-                        rowMenu.popup()
+                        rowMenu.show(row.targets, row.name, win.grouped ? "apps" : "all")
                     }
                 }
 
@@ -659,7 +619,7 @@ Window {
             Layout.fillWidth: true
             Text {
                 Layout.fillWidth: true
-                text: win.notice || (win.ender ? win.ender.message : "")
+                text: win.copier.message || win.ender.message
                 elide: Text.ElideRight
                 font.family: Theme.font
                 font.pointSize: Theme.metaSize

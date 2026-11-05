@@ -615,7 +615,8 @@ GNOME stays installed, so the session is chosen at login and the trial is revers
   `tech.shmuel.battery` (visible only while on battery), `tech.shmuel.language`
   (the current layout, hidden with one; a click switches between two, opens a menu
   with three or more, and the wheel steps through them; Meta+Space also switches),
-  `tech.shmuel.stats` (a speedometer that opens, on click, a Spawnkit-styled card of
+  `tech.shmuel.stats` (a live gauge whose hand follows CPU use and whose colour runs
+  green through orange to red, opening on click a Spawnkit-styled card of
   processor, integrated and discrete graphics, memory, swap and root-disk use with
   temperatures. Numbers and bars ease to each reading over the roughly one-second
   poll, and the processor row unfolds into a map of physical cores (performance and
@@ -624,7 +625,8 @@ GNOME stays installed, so the session is chosen at login and the trial is revers
   hide button, persisted in the widget's `hideIntegratedGpu` setting, with a Show
   link to bring it back. It polls the `spawnkit-stats` JSON CLI (which also
   reports each thread under `cpu.threads`) only while open, since
-  ksystemstats reports 0% for the Intel iGPU and would wake the sleeping RTX.
+  ksystemstats reports 0% for the Intel iGPU and would wake the sleeping RTX; while
+  closed, the gauge polls `spawnkit-stats load`, which reads only `/proc/stat`.
   The card ends with up to five processes using at least 1% CPU (`spawnkit-stats --top N`), each
   with an End button on hover, and an All processes link that opens a process
   window: apps grouped by their systemd unit (`app-<desktop id>` scopes take the
@@ -638,8 +640,9 @@ GNOME stays installed, so the session is chosen at login and the trial is revers
   becomes Force kill (SIGKILL). Processes the desktop session needs (plasmashell,
   kwin, systemd, dbus and similar) ask for End anyway first, and other users'
   processes show a lock and report permission denied. Right-clicking a row in the
-  window copies `spawnkit-stats details --text` for it, or for every process in a
-  group. Both views are thin layers
+  window or the card's list copies `spawnkit-stats details --text` for it, or for
+  every process in a group, opening with `--view` and `--row` context (the machine,
+  time, view and row) so an agent reading the paste knows where it came from. Both views are thin layers
   over `spawnkit-stats processes [--sort cpu|memory|name|user] [--flat]` and
   `spawnkit-stats signal --term|--kill [--wait S] PID:START...`, which signals
   through a pidfd after checking the start time, so a reused PID is never hit, and
