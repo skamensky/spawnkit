@@ -176,6 +176,25 @@ in
         ] (_: "google-chrome.desktop")
       );
     };
+    # WhatsApp Desktop's replacement: web.whatsapp.com in its own Chrome app window. It runs a
+    # dedicated Chrome profile (its own login) with DevTools on a loopback port, from which
+    # spawnkit-badges reads the unread count for the task manager icon. The entry's name is the
+    # window's Wayland app id, so docks group the window with this launcher.
+    xdg.desktopEntries."chrome-web.whatsapp.com__-Default" = lib.mkIf pkgs.stdenv.hostPlatform.isx86_64 {
+      name = "WhatsApp";
+      comment = "WhatsApp Web in its own window";
+      exec = "google-chrome --user-data-dir=${config.home.homeDirectory}/.local/share/spawnkit/whatsapp-chrome --remote-debugging-port=9333 --no-first-run --app=https://web.whatsapp.com/";
+      icon = "${pkgs.tela-circle-icon-theme}/share/icons/Tela-circle/scalable/apps/whatsapp.svg";
+      categories = [
+        "Network"
+        "InstantMessaging"
+      ];
+      startupNotify = true;
+      settings = {
+        Keywords = "WhatsApp;Chat;Messages;";
+        StartupWMClass = "chrome-web.whatsapp.com__-Default";
+      };
+    };
     systemd.user.services.copyq = {
       Unit = {
         Description = "CopyQ clipboard history";
@@ -185,8 +204,13 @@ in
       Service = {
         ExecStart = "${pkgs.copyq}/bin/copyq";
         # GNOME's Wayland compositor lets no background app watch the clipboard; through
-        # XWayland, which GNOME keeps in sync with it, CopyQ can.
-        Environment = lib.optional (config.personal.desktop.session == "wayland") "QT_QPA_PLATFORM=xcb";
+        # XWayland, which GNOME keeps in sync with it, CopyQ can. KWin offers Wayland's data
+        # control protocol instead and syncs XWayland only while an X11 window has focus, so
+        # under Plasma CopyQ stays native (else Spectacle's and other Wayland apps' copies
+        # never reach it).
+        Environment = lib.optional (
+          config.personal.desktop.session == "wayland" && !config.personal.desktop.plasma
+        ) "QT_QPA_PLATFORM=xcb";
         Restart = "on-failure";
       }
       // lib.optionalAttrs (config.personal.desktop.copyqShare != null) {

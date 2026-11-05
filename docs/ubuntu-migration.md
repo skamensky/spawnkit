@@ -626,8 +626,23 @@ GNOME stays installed, so the session is chosen at login and the trial is revers
   that key, so Ctrl+; is bound too (2026-11-05: injected keypresses toggle CopyQ on
   both layouts). A new global shortcut needs a relogin, or a live kglobalaccel
   `setShortcut` call with flags 6. The Start button's icon, `spawnkit-start`, is a
-  terminal prompt on a rounded Layan-coloured tile, since Fluent's Windows logo read
-  as another window button.
+  penguin on a rounded Layan-coloured tile, since Fluent's Windows logo read as
+  another window button. CopyQ runs as a native Wayland client under Plasma (KWin
+  offers data control); the GNOME session's XWayland workaround missed Wayland copies
+  such as Spectacle screenshots (2026-11-05: an image copied with `wl-copy` reached
+  CopyQ). KWallet is disabled and `kde-portals.conf` routes the Secret portal to
+  GNOME Keyring, which GDM unlocks at login. Before that, each Chrome secret request
+  opened a KDE Wallet prompt, and a new Chrome profile hung on a blank page.
+  Widgets are locked (`immutability=2` with `plasma/allow_configure_when_locked`
+  off), so a task's right-click menu has no configure entries. Plasma's task
+  manager still lists its own window actions; it has no option to hide them.
+  WhatsApp is pinned to the panel. Its launcher opens web.whatsapp.com in a
+  dedicated Chrome profile (`~/.local/share/spawnkit/whatsapp-chrome`, logged in
+  once by QR code) with DevTools on 127.0.0.1:9333. The `spawnkit-badges` user
+  service reads the unread count from the page and publishes it through the Unity
+  launcher API, and the task manager draws that count on the icon's corner.
+  `spawnkit-badges set APP N` and `list` drive it by hand (2026-11-05: a set count
+  showed on the WhatsApp icon).
   KDE Connect (the `kdeconnect` package in the base role's Plasma list) stands in for
   Windows' Phone Link: install the KDE Connect Android app, keep the phone on the same
   network or tailnet, and pair from the panel's `org.kde.kdeconnect` widget (hidden

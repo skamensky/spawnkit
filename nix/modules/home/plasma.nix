@@ -56,8 +56,13 @@ let
   theme = id: name: tone: author: lookandfeel: kvantum: wallpaper: description: {
     inherit id name tone author lookandfeel kvantum wallpaper description;
   };
-  # The Windows VM start and shut-down launchers, pinned to every task manager.
-  windowsPins = [ "applications:spawnkit-windows.desktop" "applications:spawnkit-windows-shutdown.desktop" ];
+  # WhatsApp (desktop.nix) and the Windows VM start and shut-down launchers, pinned to every
+  # task manager.
+  panelPins = [
+    "applications:chrome-web.whatsapp.com__-Default.desktop"
+    "applications:spawnkit-windows.desktop"
+    "applications:spawnkit-windows-shutdown.desktop"
+  ];
   catalog = [
     (theme "breeze-dark" "Breeze Dark" "dark" "KDE" "org.kde.breezedark.desktop" null null "Plasma's stock dark theme.")
     (theme "breeze-twilight" "Breeze Twilight" "dark" "KDE" "org.kde.breezetwilight.desktop" null null "Dark panels with light application windows.")
@@ -168,10 +173,20 @@ let
     mkdir -p $out/share/kwin/scripts
     cp -r ${./kwin-snap-assist} $out/share/kwin/scripts/spawnkitsnapassist
   '';
+  # Unread counts on task manager icons for web apps that show them only inside the page
+  # (WhatsApp, read through its window's DevTools port).
+  appBadges = pkgs.writers.writePython3Bin "spawnkit-badges" {
+    libraries = [
+      pkgs.python3Packages.dbus-next
+      pkgs.python3Packages.websockets
+    ];
+    # dbus-next reads D-Bus signatures from annotations ("s"), which flake8 takes for names.
+    flakeIgnore = [ "E501" "F821" "F722" ];
+  } (builtins.readFile ./plasma-badges.py);
   batteryWidget = plasmoid "tech.shmuel.battery" ./plasma-battery { };
   languageWidget = plasmoid "tech.shmuel.language" ./plasma-language { };
-  # The Start menu's icon: a terminal prompt on a rounded tile in Layan's colours. Fluent's
-  # start-here is the Windows logo, which reads as one more window button.
+  # The Start menu's icon: a penguin on a rounded tile in Layan's colours. Fluent's start-here
+  # is the Windows logo, which reads as one more window button.
   startIcon = pkgs.runCommand "spawnkit-start-icon" { } ''
     install -Dm644 ${./plasma-start-icon.svg} $out/share/icons/hicolor/scalable/apps/spawnkit-start.svg
   '';
@@ -180,7 +195,7 @@ let
     flakeIgnore = [ "E501" ];
     makeWrapperArgs = [
       "--set" "SPAWNKIT_PLASMA_THEMES" (pkgs.writeText "plasma-themes.json" (builtins.toJSON catalog))
-      "--set" "SPAWNKIT_PANEL_PINS" (lib.concatStringsSep "," windowsPins)
+      "--set" "SPAWNKIT_PANEL_PINS" (lib.concatStringsSep "," panelPins)
     ];
   } (builtins.readFile ./plasma-theme.py);
 in
@@ -262,7 +277,7 @@ in
                 "preferred://filemanager"
                 "preferred://browser"
               ]
-              ++ windowsPins;
+              ++ panelPins;
             }
             "org.kde.plasma.marginsseparator"
             "tech.shmuel.battery"
@@ -321,6 +336,18 @@ in
         };
         GuiConfig.quitAfterSaveCopyExport = true;
       };
+      # GDM unlocks GNOME's keyring at login and it already owns org.freedesktop.secrets; KWallet
+      # has no wallet and nothing unlocks it, so every secret request (Chrome's, through the
+      # portal) opened a KDE Wallet prompt. KWallet stays off; the portal below uses the keyring.
+      configFile.kwalletrc.Wallet = {
+        Enabled = false;
+        "First Use" = false;
+      };
+      # Widgets are locked (immutability 2), and locked widgets offer no configure entries, so a
+      # task's right-click menu keeps only its own actions (pin, unpin, close). Panels stay
+      # declared here; the plasma-manager scripts still apply them.
+      configFile."plasma-org.kde.plasma.desktop-appletsrc".General.immutability = 2;
+      configFile.kdeglobals."KDE Action Restrictions"."plasma/allow_configure_when_locked" = false;
       # Spectacle announces nothing: no popup for a copied, saved or recorded capture.
       # The groups are named "Event/<id>"; KConfig escapes a "/" in a group name as "\/".
       configFile."spectacle.notifyrc" = lib.genAttrs [
@@ -328,6 +355,14 @@ in
         "Event\\/recordingSaved"
         "Event\\/ocrTextExtracted"
       ] (_: { Action = ""; });
+    };
+    # Ubuntu's kde-portals.conf with the Secret portal on GNOME's keyring instead of KWallet.
+    xdg.configFile."xdg-desktop-portal/kde-portals.conf".text = lib.generators.toINI { } {
+      preferred = {
+        default = "kde";
+        "org.freedesktop.impl.portal.Settings" = "kde;gtk;";
+        "org.freedesktop.impl.portal.Secret" = "gnome-keyring";
+      };
     };
     # GTK and Chromium apps draw their own title bars from this layout; Plasma's GTK sync
     # copies it from KWin's buttons, but it starts from whatever GNOME left.
@@ -383,12 +418,27 @@ in
       kdePackages.kzones
       kickoffWidget
       snapAssist
+      appBadges
       batteryWidget
       languageWidget
       startIcon
       clockWidget
       calendarSync
     ];
+    systemd.user.services.spawnkit-badges = {
+      Unit = {
+        Description = "Unread-count badges on task manager icons";
+        PartOf = [ "graphical-session.target" ];
+        After = [ "graphical-session.target" ];
+      };
+      Service = {
+        Type = "dbus";
+        BusName = "tech.shmuel.Badges";
+        ExecStart = "${appBadges}/bin/spawnkit-badges serve";
+        Restart = "on-failure";
+      };
+      Install.WantedBy = [ "graphical-session.target" ];
+    };
     systemd.user.services.spawnkit-calendar = {
       Unit.Description = "Copy Google Calendar events for the panel clock";
       Service = {
