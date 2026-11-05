@@ -18,7 +18,9 @@
     name:
       [extra-cmake-modules, qt6-base-dev, qt6-declarative-dev, gettext, libplasma-dev, plasma-workspace-dev,
        libplasmaactivities-dev, libplasmaactivitiesstats-dev, libksysguard-dev, libkf6kio-dev,
-       libkf6notifications-dev, libkf6service-dev, libkf6windowsystem-dev, libkf6config-dev, libkf6i18n-dev]
+       libkf6notifications-dev, libkf6service-dev, libkf6windowsystem-dev, libkf6config-dev, libkf6i18n-dev,
+       # the starting/stopping arc and greyed icon
+       qml6-module-qtquick-shapes, qml6-module-qtquick-effects]
     install_recommends: false
     state: present
   when: not ansible_check_mode

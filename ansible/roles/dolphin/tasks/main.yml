@@ -1,0 +1,108 @@
+---
+# Dolphin, patched: folder and item menus keep only Dolphin's own actions (no Open With for
+# folders, no Paste on items, no service menus or file item plugins, so no application can add
+# entries), and the Places panel widens to show every place's name in full. It is built from the
+# matching release into its own prefix; /usr/local/bin/dolphin, the FileManager1 D-Bus service
+# and plasma-dolphin.service run it instead of Ubuntu's /usr/bin/dolphin.
+- name: Inspect installed Ubuntu packages
+  ansible.builtin.package_facts:
+    manager: apt
+- name: Require the Dolphin release the fork is built from
+  ansible.builtin.assert:
+    that: (ansible_facts.packages['dolphin'] | first).version is search('^4:' ~ dolphin_version | regex_escape ~ '-')
+    fail_msg: >-
+      Ubuntu's dolphin is {{ (ansible_facts.packages['dolphin'] | first).version }}; set dolphin_version
+      and dolphin_sha256 to that release and recheck dolphin.patch.
+  when: not ansible_check_mode
+- name: Install Dolphin's build dependencies
+  ansible.builtin.apt:
+    name:
+      [extra-cmake-modules, ninja-build, qt6-base-dev, qt6-base-private-dev, qt6-multimedia-dev, gettext,
+       libkf6kcmutils-dev, libkf6newstuff-dev, libkf6coreaddons-dev, libkf6i18n-dev, libkf6dbusaddons-dev,
+       libkf6bookmarks-dev, libkf6config-dev, libkf6kio-dev, libkf6parts-dev, libkf6solid-dev,
+       libkf6iconthemes-dev, libkf6completion-dev, libkf6textwidgets-dev, libkf6notifications-dev,
+       libkf6crash-dev, libkf6windowsystem-dev, libkf6widgetsaddons-dev, libkf6codecs-dev,
+       libkf6guiaddons-dev, libkf6colorscheme-dev, libkf6filemetadata-dev, libkf6baloo-dev,
+       libbaloowidgets-dev, libkf6userfeedback-dev, libpackagekitqt6-dev]
+    install_recommends: false
+    state: present
+  when: not ansible_check_mode
+- name: Create the Dolphin build directory
+  ansible.builtin.file:
+    path: "{{ dolphin_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+- name: Download the pinned Dolphin source
+  ansible.builtin.get_url:
+    url: https://download.kde.org/stable/release-service/{{ dolphin_version }}/src/dolphin-{{ dolphin_version }}.tar.xz
+    dest: "{{ dolphin_dir }}/dolphin-{{ dolphin_version }}.tar.xz"
+    checksum: sha256:{{ dolphin_sha256 }}
+    owner: root
+    group: root
+    mode: '0644'
+  register: dolphin_source
+- name: Install the fork's build files
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "{{ dolphin_dir }}/{{ item }}"
+    owner: root
+    group: root
+    mode: "{{ '0755' if item == 'build.sh' else '0644' }}"
+  loop: [dolphin.patch, build.sh]
+  register: dolphin_files
+- name: Check for the installed Dolphin fork
+  ansible.builtin.stat:
+    path: "{{ dolphin_prefix }}/bin/dolphin"
+  register: dolphin_binary
+- name: Build and install the patched Dolphin
+  ansible.builtin.command:
+    argv: ["{{ dolphin_dir }}/build.sh", "{{ dolphin_dir }}", "{{ dolphin_version }}", "{{ dolphin_prefix }}"]
+  when: >-
+    not ansible_check_mode and (not dolphin_binary.stat.exists or dolphin_source is changed
+    or dolphin_files is changed)
+- name: Put the patched Dolphin first on PATH
+  ansible.builtin.file:
+    src: "{{ dolphin_prefix }}/bin/dolphin"
+    dest: /usr/local/bin/dolphin
+    state: link
+    force: true
+    owner: root
+    group: root
+- name: Create the local D-Bus services directory
+  ansible.builtin.file:
+    path: /usr/local/share/dbus-1/services
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+# /usr/local/share precedes /usr/share in XDG_DATA_DIRS, so this file shadows Ubuntu's.
+- name: Start the patched Dolphin for org.freedesktop.FileManager1
+  ansible.builtin.copy:
+    dest: /usr/local/share/dbus-1/services/org.kde.dolphin.FileManager1.service
+    owner: root
+    group: root
+    mode: '0644'
+    content: |
+      [D-BUS Service]
+      Name=org.freedesktop.FileManager1
+      Exec={{ dolphin_prefix }}/bin/dolphin --daemon
+      SystemdService=plasma-dolphin.service
+- name: Create the plasma-dolphin.service drop-in directory
+  ansible.builtin.file:
+    path: /etc/systemd/user/plasma-dolphin.service.d
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+- name: Run the patched Dolphin as plasma-dolphin.service
+  ansible.builtin.copy:
+    dest: /etc/systemd/user/plasma-dolphin.service.d/spawnkit.conf
+    owner: root
+    group: root
+    mode: '0644'
+    content: |
+      [Service]
+      ExecStart=
+      ExecStart={{ dolphin_prefix }}/bin/dolphin --daemon

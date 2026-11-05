@@ -41,6 +41,21 @@ let
       }
     '';
   };
+  # A CopyQ script command (replaced by name at every start): after each clipboard change that
+  # holds an image, CopyQ copies the image again so that it owns the clipboard.
+  copyqKeepImages = pkgs.writeText "copyq-keep-images.js" ''
+    var name = 'Keep copied images after their app exits'
+    var script = [
+      'var spawnkitClipboardChanged = onClipboardChanged',
+      'onClipboardChanged = function() {',
+      '  spawnkitClipboardChanged()',
+      '  var image = data("image/png")',
+      '  if (image.length) copy("image/png", image)',
+      '}',
+    ].join(String.fromCharCode(10))
+    setCommands(commands().filter(function(c) { return c.name !== name })
+      .concat([{name: name, isScript: true, cmd: script}]))
+  '';
 in
 {
   options.personal.desktop = {
@@ -212,17 +227,20 @@ in
           config.personal.desktop.session == "wayland" && !config.personal.desktop.plasma
         ) "QT_QPA_PLATFORM=xcb";
         Restart = "on-failure";
-      }
-      // lib.optionalAttrs (config.personal.desktop.copyqShare != null) {
-        # CopyQ saves new items after five minutes by default; save them within seconds so a
-        # Windows sign-in soon after a copy still loads it.
+        # Spectacle (and any app that exits right after copying) takes its clipboard with it, as
+        # nothing else owns Wayland's clipboard here; CopyQ re-offers a copied image as its own.
+        # CopyQ saves new items after five minutes by default; with a Windows share, save them
+        # within seconds so a Windows sign-in soon after a copy still loads it.
         ExecStartPost = toString (
-          pkgs.writeShellScript "copyq-save-delay" ''
+          pkgs.writeShellScript "copyq-setup" ''
+            ready=
             for _ in $(${pkgs.coreutils}/bin/seq 30); do
-              ${pkgs.copyq}/bin/copyq config save_delay_ms_on_item_added 10000 >/dev/null 2>&1 && exit 0
+              ${pkgs.copyq}/bin/copyq source ${copyqKeepImages} >/dev/null 2>&1 && { ready=1; break; }
               ${pkgs.coreutils}/bin/sleep 1
             done
-            exit 1
+            [ -n "$ready" ] || exit 1
+            ${lib.optionalString (config.personal.desktop.copyqShare != null)
+              "${pkgs.copyq}/bin/copyq config save_delay_ms_on_item_added 10000 >/dev/null"}
           ''
         );
       };

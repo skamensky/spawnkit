@@ -48,6 +48,8 @@
       when: cfg.nix_chrome
     - role: plasma_taskmanager
       when: cfg.plasma
+    - role: dolphin
+      when: cfg.plasma
   post_tasks:
     - name: Complete service handlers before marking the host managed
       ansible.builtin.meta: flush_handlers

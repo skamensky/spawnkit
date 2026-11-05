@@ -658,7 +658,19 @@ GNOME stays installed, so the session is chosen at login and the trial is revers
   pinned icon reads a green "RTX" when the first `gpu_devices` address is bound to
   vfio-pci and a grey "no RTX" otherwise; with the VM off there is no pill
   (2026-11-05: both pills rendered from injected tags, and a shut-off VM gave no
-  tag; not yet observed through a real VM start).
+  tag; not yet observed through a real VM start). While Windows boots or shuts down
+  the pill turns amber and pulses ("starting"/"stopping"), an amber arc circles the
+  icon (clockwise starting, the other way stopping) and the icon is grey, fading back
+  to colour once Windows runs. `host-config vm-start`/`vm-view` and `vm-stop` publish
+  their phase in `$XDG_RUNTIME_DIR/spawnkit/windows-phase.json` (with their pid, so a
+  killed run leaves no stale phase); after that the service polls every second:
+  a running domain whose QEMU guest agent has not yet answered is starting, one
+  whose agent went quiet (a shutdown from inside Windows) is stopping, and a shut-off
+  domain still holding `/run/spawnkit/gpu-owner.json` is stopping until the RTX is
+  back. The arc needs Ubuntu's `qml6-module-qtquick-shapes` and `-effects`, which
+  the role installs (2026-11-05: the pill, arc directions and pulse rendered from the
+  patched QML offscreen with `qmltestrunner`; the live RTX tag read "RTX"; the
+  transitions are not yet observed through a real VM start/stop).
   KDE Connect (the `kdeconnect` package in the base role's Plasma list) stands in for
   Windows' Phone Link: install the KDE Connect Android app, keep the phone on the same
   network or tailnet, and pair from the panel's `org.kde.kdeconnect` widget (hidden
@@ -669,6 +681,12 @@ GNOME stays installed, so the session is chosen at login and the trial is revers
   shows call notifications and pauses media (2026-11-05: an SMS to Shmuel's own number
   and the dialer both verified on the Redmi Note 12 Pro+, after granting the app's
   SMS and phone permissions).
+  The phone's app notifications never pop up and stay out of Plasma's history:
+  `kdeconnect.notifyrc` gives its `Event/notification` no action, and the KDE
+  Connect widget lists the phone's current notifications for a look when wanted.
+  Calls, pairing requests and low battery still pop up. Plasma's "N notifications
+  were received while Do Not Disturb was active" summary is off
+  (`libnotificationmanager.notifyrc`, `Event/inhibitionSummary`).
   The launcher, `tech.shmuel.kickoff`, is Plasma 6.6.6's Kickoff reduced to the
   search field, a list of recently used applications and files shown until you
   type, and one Power menu holding every session and power action; it has no
@@ -703,7 +721,26 @@ GNOME stays installed, so the session is chosen at login and the trial is revers
   Meta+Left/Right keep KWin's half tiling. `spawnkitsnapassist`, a KWin script, is
   Windows' Snap Assist: once a window fills half the screen, the other windows on
   that screen show as thumbnails over the free half; clicking one snaps it there,
-  Escape or a click outside dismisses them. Spectacle shows no notifications (its
+  Escape or a click outside dismisses them. Dolphin is forked as well: the `dolphin`
+  host role builds Ubuntu's version (25.12.3, sha256-pinned, failing when Ubuntu's
+  package moves) with `dolphin.patch` into `/opt/spawnkit/dolphin`, links
+  `/usr/local/bin/dolphin` and points the `plasma-dolphin` daemon and the
+  FileManager1 D-Bus service at it. The patch removes Open With on folders, Paste
+  on items, and every service-menu and plugin entry (other apps cannot add to the
+  context menu); `dolphinrc [ContextMenu]` hides the rest, leaving Open in New Tab,
+  Open With (files), Rename, Create New, Cut, Copy, Copy Location, Move to Trash,
+  Open Terminal Here and Properties. The patch also widens the Places panel to fit
+  its longest name, up to a third of the window; dragging it wider still works.
+  `spawnkit-places list` prints Places as JSON and `hide [--section S] [URL]` hides
+  entries; activation hides Desktop, Music and the Recent section (Recent Files,
+  Recent Locations, Modified Today and Yesterday). An already open Dolphin keeps the
+  old build until it is closed (2026-11-05: built and installed; not yet viewed).
+  CopyQ keeps a copied image after its app exits: Spectacle quits right after
+  copying, and without Klipper the Wayland clipboard would empty, so a CopyQ script
+  command (installed by the service's start step with `copyq source`) copies an
+  image/png it sees back so CopyQ owns it (2026-11-05: after Spectacle exited,
+  `wl-paste -l` still offered image/png, with no duplicate history item).
+  Spectacle shows no notifications (its
   `spectacle.notifyrc` groups are `Event/<name>`, so the slash is escaped in Nix), and
   cancelling the Windows VM's RTX handoff ends quietly. The screen never locks on idle or on
   waking from sleep, in Plasma and GNOME, and PowerDevil never suspends on idle. plasma-manager's layout scripts call

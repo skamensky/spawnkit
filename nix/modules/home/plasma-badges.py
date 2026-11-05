@@ -6,13 +6,15 @@ serve           own tech.shmuel.Badges, publish counts through the Unity launche
                 sources below
 set APP COUNT   set APP's badge (a desktop file id without .desktop); 0 clears it
 list            print the current counts as JSON
-tags            print the current tags as JSON: {app: {"text": ..., "tone": "positive"|"neutral"}}
+tags            print the current tags as JSON: {app: {"text": ..., "tone": ...}}, tone one of
+                "positive", "neutral", "starting" or "stopping"
 
 WhatsApp Web shows its unread count only inside the page, so its window runs a dedicated Chrome
 profile with DevTools on a local port, and serve reads the count from the page every few seconds.
 
-While the Windows VM runs, its launcher is tagged "RTX" when the VM holds the RTX (the GPU is
-bound to vfio-pci) and "no RTX" when it runs without it; with the VM off there is no tag.
+The Windows VM's launcher is tagged "starting" while it boots, "RTX" when the running VM holds the
+RTX (the GPU is bound to vfio-pci), "no RTX" when it runs without it and "stopping" while it shuts
+down and the RTX returns; with the VM off there is no tag.
 """
 import asyncio
 import json
@@ -20,6 +22,7 @@ import os
 import subprocess
 import sys
 import urllib.request
+from pathlib import Path
 
 import websockets
 from dbus_next import BusType, Variant
@@ -39,7 +42,12 @@ WEB_APPS = {
              .reduce((n, m) => n + (m ? Number(m[1]) : 0), 0)""",
     ),
 }
+WINDOWS_POLL_SECONDS = 1
 WINDOWS_CONFIG = "/etc/spawnkit/windows.json"
+WINDOWS_PHASE = Path(os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")) / "spawnkit/windows-phase.json"
+GPU_RESERVATION = Path("/run/spawnkit/gpu-owner.json")
+STARTING = {"text": "starting", "tone": "starting"}
+STOPPING = {"text": "stopping", "tone": "stopping"}
 WINDOWS_APP = "spawnkit-windows"
 
 
@@ -123,32 +131,88 @@ async def unread(port, prefix, expression):
         return 0
 
 
-def windows_tag():
-    """The Windows launcher's tag: whether the running VM holds the RTX, or None when it is off."""
-    try:
-        with open(WINDOWS_CONFIG) as f:
-            config = json.load(f)
+class WindowsTag:
+    """The Windows launcher's tag, from host-config's phase file, libvirt and the guest agent.
+
+    "starting" from vm-start until the guest agent first answers, "stopping" from vm-stop or from
+    the agent going quiet (a shutdown inside Windows) until the RTX is back on Linux; then "RTX"
+    or "no RTX" while it runs, and no tag while it is off.
+    """
+
+    def __init__(self):
+        self.up = None  # the domain id whose guest agent has answered
+        self.stopping = False
+
+    def __call__(self):
+        try:
+            with open(WINDOWS_CONFIG) as f:
+                config = json.load(f)
+        except (OSError, ValueError):
+            return None
         if not config.get("windows_vm"):
             return None
-        state = subprocess.run(["virsh", "-c", "qemu:///system", "domstate", config["windows_name"]],
-                               capture_output=True, text=True, timeout=5).stdout.strip()
-        if state != "running":
+        phase = host_config_phase()
+        name = config["windows_name"]
+        state = virsh("domstate", name)
+        if state == "running":
+            domain = virsh("domid", name)
+            if phase != "stopping" and virsh("qemu-agent-command", name, '{"execute":"guest-ping"}', "--timeout", "1") is not None:
+                self.up, self.stopping = domain, False
+            elif phase == "stopping" or self.up == domain:
+                self.stopping = True
+            if self.stopping:
+                return STOPPING
+            if self.up != domain:
+                return STARTING
+        elif phase:
+            return STOPPING if phase == "stopping" else STARTING
+        elif state == "shut off" and self.stopping and GPU_RESERVATION.exists():
+            return STOPPING  # the release hook is returning the RTX to Linux
+        else:
+            self.up, self.stopping = None, False
             return None
         gpu = config.get("gpu_devices", [{}])[0].get("address")
-        driver = gpu and os.path.basename(os.readlink(f"/sys/bus/pci/devices/{gpu}/driver"))
-    except (OSError, ValueError, KeyError, subprocess.SubprocessError):
+        try:
+            driver = gpu and os.path.basename(os.readlink(f"/sys/bus/pci/devices/{gpu}/driver"))
+        except OSError:
+            driver = None
+        if driver == "vfio-pci":
+            return {"text": "RTX", "tone": "positive"}
+        return {"text": "no RTX", "tone": "neutral"}
+
+
+def virsh(*args):
+    """virsh's output on the system connection, or None when it fails."""
+    try:
+        result = subprocess.run(["virsh", "-c", "qemu:///system", *args], capture_output=True, text=True, timeout=5)
+    except (OSError, subprocess.SubprocessError):
         return None
-    if driver == "vfio-pci":
-        return {"text": "RTX", "tone": "positive"}
-    return {"text": "no RTX", "tone": "neutral"}
+    return result.stdout.strip() if result.returncode == 0 else None
+
+
+def host_config_phase():
+    """The phase a running host-config vm-start or vm-stop published, or None."""
+    try:
+        with open(WINDOWS_PHASE) as f:
+            phase = json.load(f)
+        os.kill(phase["pid"], 0)
+        return phase["phase"]
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
 
 
 async def poll(badges):
     while True:
         for app, (port, prefix, expression) in WEB_APPS.items():
             badges.set(app, await unread(port, prefix, expression))
-        badges.set_tag(WINDOWS_APP, await asyncio.to_thread(windows_tag))
         await asyncio.sleep(POLL_SECONDS)
+
+
+async def poll_windows(badges):
+    tag = WindowsTag()
+    while True:
+        badges.set_tag(WINDOWS_APP, await asyncio.to_thread(tag))
+        await asyncio.sleep(WINDOWS_POLL_SECONDS)
 
 
 async def serve():
@@ -158,7 +222,7 @@ async def serve():
     bus.export(PATH + "/launcher", launcher)
     bus.export(PATH, badges)
     await bus.request_name(NAME)
-    await asyncio.gather(poll(badges), bus.wait_for_disconnect())
+    await asyncio.gather(poll(badges), poll_windows(badges), bus.wait_for_disconnect())
 
 
 async def call(member, *args):

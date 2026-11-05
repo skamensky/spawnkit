@@ -1,0 +1,114 @@
+--- a/src/dolphincontextmenu.cpp
++++ b/src/dolphincontextmenu.cpp
+@@ -212,9 +212,7 @@
+         addAction(m_mainWindow->actionCollection()->action(QStringLiteral("open_in_split_view")));
+     }
+ 
+-    // Insert 'Open With' entries
+-    addOpenWithActions();
+-
++    // spawnkit: no 'Open Folder With'
+     // set up 'Create New' menu
+     QAction *newDirAction = m_mainWindow->actionCollection()->action(QStringLiteral("create_dir"));
+     QAction *newFileAction = m_mainWindow->actionCollection()->action(QStringLiteral("create_file"));
+@@ -343,10 +341,7 @@
+     newFileMenu->setWorkingDirectory(m_baseUrl);
+     addMenu(newFileMenu->menu());
+ 
+-    // Show "open with" menu items even if the dir is empty, because there are legitimate
+-    // use cases for this, such as opening an empty dir in Kate or VSCode or something
+-    addOpenWithActions();
+-
++    // spawnkit: no 'Open Folder With'
+     QAction *pasteAction = createPasteAction();
+     if (pasteAction) {
+         addAction(pasteAction);
+@@ -389,10 +384,7 @@
+         copyPathAction->setEnabled(m_selectedItems.size() == 1);
+         addAction(copyPathAction);
+     }
+-    QAction *pasteAction = createPasteAction();
+-    if (pasteAction) {
+-        addAction(pasteAction);
+-    }
++    // spawnkit: no 'Paste' on items; paste into a folder from inside it
+ 
+     // Insert 'Duplicate Here'
+     if (ContextMenuSettings::showDuplicateHere()) {
+@@ -518,7 +510,8 @@
+     if (props.isLocal() && ContextMenuSettings::showOpenTerminal()) {
+         additionalActions << m_mainWindow->actionCollection()->action(QStringLiteral("open_terminal_here"));
+     }
+-    m_fileItemActions->addActionsTo(this, KFileItemActions::MenuActionSource::All, additionalActions);
++    // spawnkit: no service menus or file item plugins, so no application adds entries here
++    addActions(additionalActions);
+ 
+     const DolphinView *view = m_mainWindow->activeViewContainer()->view();
+     const QList<QAction *> versionControlActions = view->versionControlActions(m_selectedItems);
+--- a/src/dolphinmainwindow.cpp
++++ b/src/dolphinmainwindow.cpp
+@@ -2495,6 +2495,21 @@
+     createPanelAction(QIcon::fromTheme(QStringLiteral("compass")), Qt::Key_F9, placesDock, QStringLiteral("show_places_panel"));
+ 
+     addDockWidget(Qt::LeftDockWidgetArea, placesDock);
++    // spawnkit: widen the Places panel whenever a place's name would not fit, up to a third of
++    // the window; it can still be dragged wider.
++    const auto fitPlaces = [this, placesDock]() {
++        const int width = std::min(m_placesPanel->fittingWidth(), this->width() / 3);
++        if (placesDock->isVisible() && !placesDock->isFloating() && placesDock->widget()->width() < width) {
++            resizeDocks({placesDock}, {width + placesDock->width() - placesDock->widget()->width()}, Qt::Horizontal);
++        }
++    };
++    const auto fitPlacesSoon = [this, fitPlaces]() {
++        QTimer::singleShot(0, this, fitPlaces);
++    };
++    connect(placesDock, &QDockWidget::visibilityChanged, this, fitPlacesSoon);
++    connect(m_placesPanel->model(), &QAbstractItemModel::rowsInserted, this, fitPlacesSoon);
++    connect(m_placesPanel->model(), &QAbstractItemModel::dataChanged, this, fitPlacesSoon);
++    connect(m_placesPanel->model(), &QAbstractItemModel::layoutChanged, this, fitPlacesSoon);
+     connect(m_placesPanel, &PlacesPanel::placeActivated, this, &DolphinMainWindow::slotPlaceActivated);
+     connect(m_placesPanel, &PlacesPanel::tabRequested, this, &DolphinMainWindow::openNewTab);
+     connect(m_placesPanel, &PlacesPanel::activeTabRequested, this, &DolphinMainWindow::openNewTabAndActivate);
+--- a/src/panels/places/placespanel.cpp
++++ b/src/panels/places/placespanel.cpp
+@@ -26,8 +26,11 @@
+ #include <QIcon>
+ #include <QMenu>
+ #include <QMimeData>
++#include <QScrollBar>
+ #include <QShowEvent>
+ 
++#include <algorithm>
++
+ #include <Solid/StorageAccess>
+ 
+ PlacesPanel::PlacesPanel(QWidget *parent)
+@@ -278,4 +281,16 @@
+     connect(storageAccess, &Solid::StorageAccess::teardownRequested, this, &PlacesPanel::slotTearDownRequestedExternally);
+ }
+ 
++int PlacesPanel::fittingWidth() const
++{
++    const QFontMetrics metrics(font());
++    int widest = 0;
++    for (int row = 0; row < model()->rowCount(); ++row) {
++        if (!isRowHidden(row)) {
++            widest = std::max(widest, metrics.horizontalAdvance(model()->index(row, 0).data(Qt::DisplayRole).toString()));
++        }
++    }
++    return widest + iconSize().width() + 3 * metrics.height() + verticalScrollBar()->sizeHint().width() + 2 * frameWidth();
++}
++
+ #include "moc_placespanel.cpp"
+--- a/src/panels/places/placespanel.h
++++ b/src/panels/places/placespanel.h
+@@ -46,6 +46,9 @@
+ public Q_SLOTS:
+     void readSettings();
+ 
++    /** The width that shows every visible place's name in full (spawnkit). */
++    int fittingWidth() const;
++
+ Q_SIGNALS:
+     void errorMessage(const QString &error);
+     void storageTearDownRequested(const QString &mountPath);

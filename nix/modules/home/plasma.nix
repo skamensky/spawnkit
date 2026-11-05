@@ -189,6 +189,10 @@ let
     libraries = [ pkgs.python3Packages.dbus-next ];
     flakeIgnore = [ "E501" "F821" "F722" "W503" ];
   } (builtins.readFile ./plasma-search.py);
+  # Hides Places entries and sections (Dolphin's panel and KDE's file dialogs).
+  placesTool = pkgs.writers.writePython3Bin "spawnkit-places" {
+    flakeIgnore = [ "E501" ];
+  } (builtins.readFile ./plasma-places.py);
   batteryWidget = plasmoid "tech.shmuel.battery" ./plasma-battery { };
   languageWidget = plasmoid "tech.shmuel.language" ./plasma-language { };
   # The Start menu's icon: a penguin on a rounded tile in Layan's colours. Fluent's start-here
@@ -365,6 +369,21 @@ in
         "Plugins/Favorites".plugins = "tech.shmuel.apps";
       };
       configFile.kdeglobals."KDE Action Restrictions"."plasma/allow_configure_when_locked" = false;
+      # Dolphin's right-click menu: Open in New Tab, Create New, Cut, Copy, Copy Location, Rename,
+      # Move to Trash, Open Terminal Here and Properties. The Dolphin host role patches out the
+      # entries these settings cannot remove (Open Folder With, Paste on items, service menus).
+      configFile.dolphinrc.ContextMenu = {
+        ShowOpenInNewTab = true;
+        ShowOpenInNewWindow = false;
+        ShowOpenInSplitView = false;
+        ShowAddToPlaces = false;
+        ShowDuplicateHere = false;
+        ShowCopyLocation = true;
+        ShowCopyMoveMenu = false;
+        ShowOpenTerminal = true;
+        ShowCopyToOtherSplitView = false;
+        ShowMoveToOtherSplitView = false;
+      };
       # Spectacle announces nothing: no popup for a copied, saved or recorded capture.
       # The groups are named "Event/<id>"; KConfig escapes a "/" in a group name as "\/".
       configFile."spectacle.notifyrc" = lib.genAttrs [
@@ -372,6 +391,11 @@ in
         "Event\\/recordingSaved"
         "Event\\/ocrTextExtracted"
       ] (_: { Action = ""; });
+      # No "N notifications were received while Do Not Disturb was active" summary.
+      configFile."libnotificationmanager.notifyrc"."Event\\/inhibitionSummary".Action = "";
+      # The phone's app notifications never pop up: the KDE Connect tray applet lists them
+      # (the phone's current notifications) for a look when wanted. Calls and pairing still pop up.
+      configFile."kdeconnect.notifyrc"."Event\\/notification".Action = "";
     };
     # Ubuntu's kde-portals.conf with the Secret portal on GNOME's keyring instead of KWallet.
     xdg.configFile."xdg-desktop-portal/kde-portals.conf".text = lib.generators.toINI { } {
@@ -437,6 +461,7 @@ in
       snapAssist
       appBadges
       appSearch
+      placesTool
       batteryWidget
       languageWidget
       startIcon
@@ -459,6 +484,12 @@ in
         X-Plasma-Runner-Unique-Results = true;
       };
     };
+    # Places without Desktop, Music or the Recent section (recent files and locations, modified
+    # today and yesterday); everything else in Places stays as edited in Dolphin.
+    home.activation.spawnkitPlaces = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+      run ${placesTool}/bin/spawnkit-places hide --section RecentlySaved \
+        file://${config.home.homeDirectory}/Desktop file://${config.home.homeDirectory}/Music
+    '';
     systemd.user.services.spawnkit-search = {
       Unit = {
         Description = "Application search for the Start menu and KRunner";

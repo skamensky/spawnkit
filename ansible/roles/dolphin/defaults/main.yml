@@ -1,0 +1,6 @@
+---
+# Must match Ubuntu's dolphin package: the fork reuses its plugins and data files.
+dolphin_version: 25.12.3
+dolphin_sha256: 9961de7cc076d9d7d598bb7f53afdebcfba20567093231f42ba72e031e089a3b
+dolphin_dir: /var/cache/spawnkit/dolphin
+dolphin_prefix: /opt/spawnkit/dolphin

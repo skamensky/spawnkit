@@ -3,6 +3,7 @@
 
 import argparse
 import base64
+import contextlib
 import json
 import os
 from pathlib import Path
@@ -25,6 +26,18 @@ GPU_RESERVATION = Path("/run/spawnkit/gpu-owner.json")
 GUARD = ["sudo", "/usr/bin/python3", "-I", "/usr/local/libexec/spawnkit/gpu-guard.py"]
 # Holders only a logout releases; the picker never offers to kill them.
 SESSION_HOLDERS = {"Xorg", "gnome-shell", "Xwayland", "kwin_wayland"}
+
+
+@contextlib.contextmanager
+def windows_phase(phase):
+    """Publish "starting" or "stopping" while the block runs; spawnkit-badges tags the Windows launcher with it."""
+    path = Path(os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")) / "spawnkit/windows-phase.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"phase": phase, "pid": os.getpid()}))
+    try:
+        yield
+    finally:
+        path.unlink(missing_ok=True)
 
 
 def run(args, **kwargs):
@@ -552,22 +565,25 @@ def main():
             state = subprocess.check_output(["/usr/bin/virsh", "-c", "qemu:///system", "domstate", name], text=True, env=os.environ | {'LC_ALL': 'C'}).strip()
             if args.action == "vm-stop":
                 notify = args.notify and shutil.which("notify-send")
-                if state != "shut off":
-                    if notify:
-                        subprocess.run(["notify-send", "Spawnkit Windows VM", "Shutting down Windows…"], check=False)
-                    run(["/usr/bin/virsh", "-c", "qemu:///system", "shutdown", name])
-                wait_for_gpu_return(name, args.timeout)
+                with windows_phase("stopping"):
+                    if state != "shut off":
+                        if notify:
+                            subprocess.run(["notify-send", "Spawnkit Windows VM", "Shutting down Windows…"], check=False)
+                        run(["/usr/bin/virsh", "-c", "qemu:///system", "shutdown", name])
+                    wait_for_gpu_return(name, args.timeout)
                 if notify:
                     subprocess.run(["notify-send", "Spawnkit Windows VM", "Windows is off and the RTX is back on Ubuntu."], check=False)
             elif state == "shut off":
-                network = active['network_name']
-                info = subprocess.check_output(['/usr/bin/virsh', '-c', 'qemu:///system', 'net-info', network], text=True, env=os.environ | {'LC_ALL': 'C'})
-                if not any(line.split(':', 1)[0].strip() == 'Active' and line.split(':', 1)[1].strip() == 'yes' for line in info.splitlines()):
-                    run(['/usr/bin/virsh', '-c', 'qemu:///system', 'net-start', network])
-                if args.without_rtx:
-                    start_without_rtx(name)
-                elif not start_windows(name, args.notify, args.gui):
-                    return
+                # Once the domain runs, spawnkit-badges keeps the tag on "starting" until the guest agent answers.
+                with windows_phase("starting"):
+                    network = active['network_name']
+                    info = subprocess.check_output(['/usr/bin/virsh', '-c', 'qemu:///system', 'net-info', network], text=True, env=os.environ | {'LC_ALL': 'C'})
+                    if not any(line.split(':', 1)[0].strip() == 'Active' and line.split(':', 1)[1].strip() == 'yes' for line in info.splitlines()):
+                        run(['/usr/bin/virsh', '-c', 'qemu:///system', 'net-start', network])
+                    if args.without_rtx:
+                        start_without_rtx(name)
+                    elif not start_windows(name, args.notify, args.gui):
+                        return
             elif state != "running":
                 raise ValueError(f"VM is {state}; inspect it explicitly rather than forcing a reset")
             if args.action == "vm-view":
