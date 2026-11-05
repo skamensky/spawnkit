@@ -222,11 +222,13 @@ its output. Launch failures also produce a desktop
 notification. The console entry opens the console; start first if the VM is off.
 Closing Looking Glass leaves Windows running.
 
-When memory runs out, the kernel's out-of-memory killer picks the largest process,
-which is the guest. The libvirt `started` hook therefore sets the QEMU process's
-`oom_score_adj` to -900, so builds and desktop apps are killed first. `home-config`
-holds `$XDG_RUNTIME_DIR/home-config.lock` for its whole run: one evaluation takes
-about 4 GB, and two at once beside a 12 GB guest exhausted RAM and swap.
+The domain's `memtune` hard limit caps the whole QEMU process at guest RAM plus
+Looking Glass memory plus 2 GiB. QEMU once grew by about 170 MB/s while Looking Glass
+flooded its SPICE connections; uncapped, that exhausted RAM and swap and the kernel
+killed desktop apps. With the cap, only the guest dies. Do not lower the guest's
+`oom_score_adj` instead: that protects the runaway process and sacrifices the desktop.
+`home-config` holds `$XDG_RUNTIME_DIR/home-config.lock` for its whole run so two
+evaluations (about 4 GB each) never overlap.
 
 **Windows (no RTX)** (`vm-view --without-rtx`, also accepted by `vm-start`) starts
 Windows once from its definition minus the RTX functions and Looking Glass memory,

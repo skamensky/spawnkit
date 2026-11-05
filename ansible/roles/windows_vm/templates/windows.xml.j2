@@ -3,6 +3,10 @@
   <uuid>{{ cfg.windows_uuid }}</uuid>
   <metadata><spawnkit:managed xmlns:spawnkit='https://github.com/skamensky/spawnkit'/></metadata>
   <memory unit='MiB'>{{ cfg.windows_memory_mib }}</memory>
+  {# A cap on the whole QEMU process: guest RAM, Looking Glass memory and 2 GiB of overhead. A runaway
+     QEMU then dies alone inside its cgroup instead of exhausting the host. With VFIO, libvirt also uses
+     it as the locked-memory limit, which must cover all guest RAM. #}
+  <memtune><hard_limit unit='MiB'>{{ cfg.windows_memory_mib + cfg.looking_glass_mib + 2048 }}</hard_limit></memtune>
 {% if cfg.windows_share %}
   <memoryBacking><source type='memfd'/><access mode='shared'/></memoryBacking>
 {% endif %}

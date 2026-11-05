@@ -544,17 +544,6 @@ class GPUHandoff(unittest.TestCase):
             self.assertFalse(stopped.exists())
             self.assertTrue(all(c.args[0][1] == 'is-active' for c in run.call_args_list))
 
-    def test_a_started_guest_is_the_out_of_memory_killers_last_choice(self):
-        with tempfile.TemporaryDirectory() as directory:
-            run, proc = Path(directory) / 'run', Path(directory) / 'proc'
-            (proc / '4242').mkdir(parents=True)
-            run.mkdir()
-            (run / 'windows.pid').write_text('4242\n')
-            (proc / '4242' / 'oom_score_adj').write_text('0')
-            guard.shield_guest('windows', run, proc)
-            self.assertEqual((proc / '4242' / 'oom_score_adj').read_text(), str(guard.GUEST_OOM_SCORE_ADJ))
-            self.assertLess(guard.GUEST_OOM_SCORE_ADJ, -500)
-
     def test_start_logs_out_when_the_dialog_asked_for_it(self):
         shell = holder(10, name='kwin_wayland', closable=False)
         with patch.object(cli.subprocess, 'run', return_value=subprocess.CompletedProcess([], 3)) as run, \
