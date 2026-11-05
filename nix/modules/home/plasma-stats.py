@@ -5,6 +5,8 @@ spawnkit-stats [--top N]      one snapshot of processor, graphics, memory, swap 
 spawnkit-stats processes      every process, grouped by the app or service that owns it
 spawnkit-stats signal PID:START...  end processes with SIGTERM (--term) or SIGKILL (--kill) and report
                               which exited within --wait seconds
+spawnkit-stats details PID:START...  what each process is: executable, parent, unit, start time and
+                              memory, as JSON or (--text) as text to paste elsewhere
 
 CPU (overall and per hardware thread) and integrated-GPU load are measured over --interval seconds. The integrated GPU's load is the
 share of that time it spent out of its RC6 sleep state (i915's rc6_residency_ms). A discrete
@@ -189,12 +191,12 @@ def proc_sample():
 
 
 def status(pid):
-    """Uid, private memory (anonymous resident pages) and name from /proc/PID/status."""
+    """The fields of /proc/PID/status that describe a process."""
     values = {}
     with open(f"/proc/{pid}/status") as f:
         for line in f:
             key, _, value = line.partition(":")
-            if key in ("Name", "Uid", "RssAnon", "Kthread"):
+            if key in ("Name", "State", "PPid", "Uid", "Threads", "VmRSS", "RssAnon", "Kthread"):
                 values[key] = value.strip()
     return values
 
@@ -400,6 +402,80 @@ def send(targets, sig, wait):
     return results
 
 
+def link(path):
+    try:
+        return os.readlink(path)
+    except OSError:
+        return None  # another user's process, or gone
+
+
+def boot_time():
+    for line in Path("/proc/stat").read_text().splitlines():
+        if line.startswith("btime "):
+            return int(line.split()[1])
+    raise RuntimeError("/proc/stat has no btime")
+
+
+def details(target):
+    """Everything worth knowing about one PID[:START], or an error when it has gone."""
+    pid, _, start = target.partition(":")
+    pid = int(pid)
+    started = start_time(pid)
+    if started is None or (start and started != int(start)):
+        return {"pid": pid, "error": "no such process"}
+    try:
+        info = status(pid)
+        command = Path(f"/proc/{pid}/cmdline").read_bytes().replace(b"\0", b" ").decode(errors="replace").strip()
+    except OSError:
+        return {"pid": pid, "error": "no such process"}
+    ppid = int(info.get("PPid", "0"))
+    try:
+        parent = status(ppid).get("Name") if ppid else None
+    except OSError:
+        parent = None
+    uid = int(info.get("Uid", "0").split()[0])
+    try:
+        user = pwd.getpwuid(uid).pw_name
+    except KeyError:
+        user = str(uid)
+    return {
+        "pid": pid,
+        "name": info.get("Name", str(pid)),
+        "command": command,
+        "executable": link(f"/proc/{pid}/exe"),
+        "working_directory": link(f"/proc/{pid}/cwd"),
+        "ppid": ppid,
+        "parent": parent,
+        "user": user,
+        "unit": unit_of(pid),
+        "started": time.strftime("%Y-%m-%d %H:%M:%S %z", time.localtime(boot_time() + started / TICKS)),
+        "state": info.get("State"),
+        "threads": int(info.get("Threads", "0")),
+        "memory_bytes": int(info.get("RssAnon", "0 kB").split()[0]) * 1024,
+        "resident_bytes": int(info.get("VmRSS", "0 kB").split()[0]) * 1024,
+    }
+
+
+def details_text(item):
+    if "error" in item:
+        return f"PID {item['pid']}: {item['error']}"
+    fields = [
+        ("Command", item["command"]),
+        ("Executable", item["executable"]),
+        ("Working directory", item["working_directory"]),
+        ("Parent", f"{item['parent']} (PID {item['ppid']})" if item["parent"] else None),
+        ("User", item["user"]),
+        ("Systemd unit", item["unit"]),
+        ("Started", item["started"]),
+        ("State", item["state"]),
+        ("Threads", item["threads"]),
+        ("Memory", f"{item['memory_bytes'] // 1048576} MiB private, {item['resident_bytes'] // 1048576} MiB resident"),
+    ]
+    lines = [f"{item['name']} (PID {item['pid']})"]
+    lines += [f"  {label}: {value}" for label, value in fields if value]
+    return "\n".join(lines)
+
+
 def snapshot(interval, disk_path, top=0):
     cards = rc6_cards()
     procs0 = proc_sample() if top else None
@@ -453,15 +529,22 @@ def main():
     kind.add_argument("--term", dest="sig", action="store_const", const=signals.SIGTERM, help="Ask to exit (SIGTERM)")
     kind.add_argument("--kill", dest="sig", action="store_const", const=signals.SIGKILL, help="Force exit (SIGKILL)")
     ending.add_argument("--wait", type=float, default=3, help="Seconds to wait for the processes to exit")
+    describing = commands.add_parser("details", help="Describe processes")
+    describing.add_argument("targets", nargs="+", metavar="PID[:START]",
+                            help="START (from the listing) guards against a reused PID")
+    describing.add_argument("--text", action="store_true", help="Text to paste elsewhere, instead of JSON")
     args = parser.parse_args()
+    if args.command in ("signal", "details") and not all(re.fullmatch(r"\d+(:\d+)?", t) for t in args.targets):
+        parser.error("targets are PID or PID:START")
     if args.command == "processes":
         print(json.dumps(measure_processes(args.interval, args.sort, args.flat)))
     elif args.command == "signal":
-        if not all(re.fullmatch(r"\d+(:\d+)?", t) for t in args.targets):
-            parser.error("targets are PID or PID:START")
         results = send(args.targets, args.sig, args.wait)
         print(json.dumps({"results": results}))
         sys.exit(0 if all(r["exited"] for r in results) else 1)
+    elif args.command == "details":
+        items = [details(t) for t in args.targets]
+        print("\n\n".join(map(details_text, items)) if args.text else json.dumps({"processes": items}))
     else:
         print(json.dumps(snapshot(args.interval, args.disk, args.top)))
 

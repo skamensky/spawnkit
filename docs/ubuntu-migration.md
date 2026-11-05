@@ -637,7 +637,9 @@ GNOME stays installed, so the session is chosen at login and the trial is revers
   process or the whole group and waits 3 seconds; if anything survives the button
   becomes Force kill (SIGKILL). Processes the desktop session needs (plasmashell,
   kwin, systemd, dbus and similar) ask for End anyway first, and other users'
-  processes show a lock and report permission denied. Both views are thin layers
+  processes show a lock and report permission denied. Right-clicking a row in the
+  window copies `spawnkit-stats details --text` for it, or for every process in a
+  group. Both views are thin layers
   over `spawnkit-stats processes [--sort cpu|memory|name|user] [--flat]` and
   `spawnkit-stats signal --term|--kill [--wait S] PID:START...`, which signals
   through a pidfd after checking the start time, so a reused PID is never hit, and
