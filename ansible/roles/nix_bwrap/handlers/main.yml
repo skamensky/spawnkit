@@ -1,0 +1,5 @@
+---
+- name: Load Nix bubblewrap AppArmor profile
+  ansible.builtin.command:
+    argv: [apparmor_parser, --replace, /etc/apparmor.d/nix-bwrap]
+  changed_when: true

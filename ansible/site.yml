@@ -46,6 +46,8 @@
       when: cfg.citrix
     - role: nix_chrome
       when: cfg.nix_chrome
+    - role: nix_bwrap
+      when: cfg.nix_bwrap
     - role: plasma_taskmanager
       when: cfg.plasma
     - role: dolphin

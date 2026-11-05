@@ -1,0 +1,11 @@
+# Ubuntu restricts unprivileged user namespaces, and its bwrap profile only covers
+# /usr/bin/bwrap. Nix's buildFHSEnv apps (Zoom) start through the store's bubblewrap,
+# which aborts with "setting up uid map: Permission denied" without this.
+abi <abi/4.0>,
+include <tunables/global>
+
+profile nix-bwrap /nix/store/*-bubblewrap-*/bin/bwrap flags=(unconfined) {
+  userns,
+
+  include if exists <local/nix-bwrap>
+}

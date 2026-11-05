@@ -20,6 +20,7 @@ webex: true
 # Work's Citrix desktop runs from Ubuntu; Windows keeps the camera for calls.
 citrix: true
 nix_chrome: true
+nix_bwrap: true
 # Same tailnet identity and listener as the WSL node (migration C4); key-only.
 ssh: true
 ssh_listen_addresses: [100.86.106.55]

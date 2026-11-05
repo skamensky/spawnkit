@@ -1,0 +1,9 @@
+---
+- name: Allow Nix's bubblewrap to create user namespaces
+  ansible.builtin.copy:
+    src: nix-bwrap.apparmor
+    dest: /etc/apparmor.d/nix-bwrap
+    owner: root
+    group: root
+    mode: '0644'
+  notify: Load Nix bubblewrap AppArmor profile

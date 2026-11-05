@@ -20,6 +20,7 @@ webex: false
 citrix: false
 # AppArmor userns exception for Home Manager's Chrome (desktop hosts on Ubuntu 24.04+).
 nix_chrome: false
+nix_bwrap: false
 nvidia_driver_package: ""
 # Hybrid laptops: "on-demand" keeps the desktop on the iGPU. Empty leaves PRIME alone.
 nvidia_prime: ""

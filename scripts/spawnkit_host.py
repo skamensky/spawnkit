@@ -53,7 +53,7 @@ def load_config(repo, profile, overrides=None):
         raise ValueError('desktop_session must be empty, x11 or wayland')
     if not re.fullmatch(r'[a-z0-9-]*', cfg['default_session']):
         raise ValueError('default_session must name a session file such as plasma or ubuntu')
-    for key in ("docker", "tailscale", "ssh", "nvidia", "virtualization", "iommu", "gpu_handoff", "windows_vm", "webex", "citrix", "nix_chrome", "plasma"):
+    for key in ("docker", "tailscale", "ssh", "nvidia", "virtualization", "iommu", "gpu_handoff", "windows_vm", "webex", "citrix", "nix_chrome", "nix_bwrap", "plasma"):
         if not isinstance(cfg[key], bool):
             raise ValueError(f"{key} must be a boolean")
     if cfg["user"] != "shmuel":
