@@ -121,6 +121,7 @@ in
       ++ lib.optionals pkgs.stdenv.hostPlatform.isx86_64 [
         # Linux Chrome lists the Vulkan adapters but hands WebGPU none without this.
         (google-chrome.override { commandLineArgs = "--enable-features=Vulkan"; })
+        zoom-us
       ];
     # GNOME Shell never notices launchers added to a profile directory that a switch
     # replaces, so link every profile app into ~/.local/share/applications, which stays
