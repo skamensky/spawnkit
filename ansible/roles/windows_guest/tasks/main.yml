@@ -316,11 +316,27 @@
           Register-ScheduledTask -TaskName 'Spawnkit display' -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Force | Out-Null
       }
 
-- name: Install the Looking Glass host
-  ansible.windows.win_package:
-    path: '{{ windows_guest_cache }}\{{ windows_guest_pins.looking_glass.file | regex_replace("\.zip$", "") }}\looking-glass-host-setup.exe'
-    product_id: Looking Glass (host)
-    arguments: /S
+# win_package only checks that the product exists, so compare the registered version.
+- name: Install the pinned Looking Glass host
+  ansible.windows.win_powershell:
+    parameters:
+      Setup: '{{ windows_guest_cache }}\{{ windows_guest_pins.looking_glass.file | regex_replace("\.zip$", "") }}\looking-glass-host-setup.exe'
+      Version: '{{ windows_guest_pins.looking_glass.version }}'
+    script: |
+      [CmdletBinding(SupportsShouldProcess)]
+      param([string]$Setup, [string]$Version)
+      $ErrorActionPreference = 'Stop'
+      $WhatIfPreference = $false
+      $key = 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\Looking Glass (host)'
+      $installed = (Get-ItemProperty $key -ErrorAction SilentlyContinue).DisplayVersion
+      $Ansible.Changed = $installed -ne $Version
+      if ($Ansible.Changed -and -not $Ansible.CheckMode) {
+          $process = Start-Process $Setup -ArgumentList '/S' -Wait -PassThru
+          if ($process.ExitCode -ne 0) { throw "Looking Glass host setup exited with $($process.ExitCode)" }
+          $installed = (Get-ItemProperty $key).DisplayVersion
+          if ($installed -ne $Version) { throw "Looking Glass host reports $installed after installing $Version" }
+      }
+  notify: Restart Looking Glass
 - name: Keep guest services running
   ansible.windows.win_service:
     name: '{{ item }}'

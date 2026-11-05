@@ -23,10 +23,13 @@ windows_guest_pins:
     url: https://github.com/winfsp/winfsp/releases/download/v2.1/winfsp-2.1.25156.msi
     file: winfsp-2.1.25156.msi
     sha256: 073a70e00f77423e34bed98b86e600def93393ba5822204fac57a29324db9f7a
+  # Upstream's bleeding-edge build of master cdba29f2; it must match the client's
+  # upstream commit (nix/modules/home/virtualization.nix). The file URL is content-addressed.
   looking_glass:
-    url: https://looking-glass.io/artifact/B7/host
-    file: looking-glass-host-B7.zip
-    sha256: c2415a5a0c405f1d6aa936986bdd4b806c50574b4521747e113c3be2be047b1b
+    url: https://looking-glass.io/artifact/file/host/32a16f1e64888bb1c60d6efb3b97c6e4f018fdd3b98c435d256d79d49526cbbf/fa4d444c55e577aa18160b2ac7387fed/download.bin?name=looking-glass-host-B7-829-cdba29f2.zip
+    file: looking-glass-host-B7-829-cdba29f2.zip
+    sha256: 32a16f1e64888bb1c60d6efb3b97c6e4f018fdd3b98c435d256d79d49526cbbf
+    version: B7-829-cdba29f2
   virtual_display:
     url: https://github.com/VirtualDrivers/Virtual-Display-Driver/releases/download/25.7.23/VirtualDisplayDriver-x86.Driver.Only.zip
     file: VirtualDisplayDriver-25.7.23.zip

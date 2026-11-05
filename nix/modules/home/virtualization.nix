@@ -17,47 +17,30 @@
   config = lib.mkIf config.personal.virtualization.enable {
     home.packages = [
       pkgs.virt-manager
-      # B7 ignores the pointer after Alt+Tab until it leaves and re-enters the window.
+      # Looking Glass master (unreleased since B7) plus our fixes, from the fork's
+      # spawnkit branch; see docs/windows-vm.md. The Windows host pin must be the
+      # bleeding-edge build of the same upstream commit.
       (pkgs.looking-glass-client.overrideAttrs (old: {
-        patches = old.patches or [ ] ++ [ ./looking-glass-enter-on-ungrab.patch ];
-        # A resize (Insert+F) can leave B7's cursor scale bogus for one event, and
-        # PureSpice then splits a ~2e9 px move into 127 px steps: one 270 MB send
-        # whose millions of motion events QEMU queues until it runs out of memory.
-        # No real pointer move exceeds a screen, so drop larger ones.
-        postPatch = (old.postPatch or "") + ''
-          substituteInPlace ../repos/PureSpice/src/channel_inputs.c --replace-fail \
-            'const unsigned msgs  = (delta + 126) / 127;' \
-            'if (delta > 16384) { PS_LOG_ERROR("Dropping a bogus %u px mouse motion", delta); return true; }
-          const unsigned msgs  = (delta + 126) / 127;'
-          # The bogus motion's source: a resize that briefly leaves a 0 px output
-          # rectangle makes the cursor scale infinite, one move turns the fractional
-          # accumulator into NaN, and every later move converts to INT_MIN until a
-          # capture toggle resets it (the mouse goes dead in bursts). The client
-          # builds with -ffast-math, which folds isfinite() to true, so test the bits.
-          substituteInPlace src/core.c --replace-fail \
-            'g_cursor.scale.x  = (float)srcW / (float)g_state.dstRect.w;' \
-            'if (g_state.dstRect.w > 0 && g_state.dstRect.h > 0) {
-          g_cursor.scale.x  = (float)srcW / (float)g_state.dstRect.w;' \
-            --replace-fail \
-            'g_cursor.scale.y  = (float)srcH / (float)g_state.dstRect.h;' \
-            'g_cursor.scale.y  = (float)srcH / (float)g_state.dstRect.h; }'
-          substituteInPlace src/util.c --replace-fail \
-            'g_cursor.acc.y = modf(ey, &ey);' \
-            'g_cursor.acc.y = modf(ey, &ey);
-          unsigned long long bx, by; memcpy(&bx, &ex, 8); memcpy(&by, &ey, 8);
-          if ((bx & 0x7ff0000000000000ULL) == 0x7ff0000000000000ULL || (by & 0x7ff0000000000000ULL) == 0x7ff0000000000000ULL) { DEBUG_WARN("Dropping a non-finite mouse motion"); g_cursor.acc.x = g_cursor.acc.y = 0.0; ex = ey = 0.0; }'
-          # Leaving full screen (Insert+F), KWin configures 0x0, which xdg-shell
-          # means "choose your own size". B7 adopts 0x0 literally: its window has
-          # no size, it commits frames unthrottled (~900/s, the black flashing and
-          # stall) and the cursor scale goes infinite until a real configure
-          # arrives. Use the last windowed size instead, 1024x768 at first.
-          substituteInPlace displayservers/Wayland/desktops/xdg/xdg.c --replace-fail \
-            'state.width      = width;' \
-            'static int32_t floatW = 1024, floatH = 768;
-          if (state.floating && state.width > 0 && state.height > 0) { floatW = state.width; floatH = state.height; }
-          if (width <= 0 || height <= 0) { DEBUG_INFO("Compositor left the size to us, using %dx%d", floatW, floatH); width = floatW; height = floatH; }
-          state.width      = width;'
+        version = "B7-829-cdba29f2-spawnkit";
+        src = pkgs.fetchFromGitHub {
+          owner = "skamensky";
+          repo = "LookingGlass";
+          rev = "c174aa9b15bfe4cf4c5c48206583062c47f0212d";
+          hash = "sha256-91Y1aJGdbzoDzc0RcrpKKZdJMRiGMGSF01bBTxsbMFg=";
+          fetchSubmodules = true;
+        };
+        # nixpkgs unvendors nanosvg for B7; that patch no longer applies to master.
+        patches = [ ];
+        postUnpack = ''
+          echo B7-829-cdba29f2-spawnkit > source/VERSION
+          export sourceRoot="source/client"
         '';
+        buildInputs = old.buildInputs ++ [
+          pkgs.fuse3
+          pkgs.usbredir
+          pkgs.libunwind
+          pkgs.elfutils
+        ];
       }))
     ];
     # A desktop audio session holding the passthrough GPU's HDMI function makes the

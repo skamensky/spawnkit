@@ -152,14 +152,22 @@ Chrome, Webex and Tailscale update themselves; Google and Cisco replace the unve
 Chrome and Webex MSIs on each release, so a fresh install fails its hash check until
 the pin is refreshed.
 
-Looking Glass host and Nix client versions must match (currently **B7**). Windows
+Looking Glass host and Nix client must come from the same upstream commit. B7 is
+the last release and lacks many Wayland fixes, so both run master: the client builds
+from the `spawnkit` branch of `skamensky/LookingGlass` (upstream `cdba29f2` plus our
+fixes, which point PureSpice at the `spawnkit` branch of `skamensky/PureSpice`), and
+the guest installs upstream's bleeding-edge host build of that commit, pinned by
+hash and checked against its registered `DisplayVersion` (`B7-829-cdba29f2`). To
+move forward, rebase the fork branch onto the new upstream commit, update the client
+`rev`/`hash` in `nix/modules/home/virtualization.nix`, and pin the matching host from
+`https://looking-glass.io/artifact/bleeding/host` (its redirect is content-addressed). Windows
 needs an active display on the RTX; the laptop's panel is wired only to Intel, so
 the role installs the signed Virtual Display Driver
 (`VirtualDrivers/Virtual-Display-Driver` 25.7.23, hardware ID `Root\MttVDD`):
 `windows_display_gpu` selects the adapter by name and `windows_display_mode` is the
 only listed mode. Driver installation trusts the catalog signer in the machine
-TrustedPublisher store. Looking Glass's own indirect display driver ships only in
-builds newer than B7 and would also need a matching Linux client. After the PCI
+TrustedPublisher store. Looking Glass's own indirect display driver (`/artifact/bleeding/idd`) could
+replace it; that is untested. After the PCI
 layout changes (for example removing VGA), Windows re-enumerates the RTX and needs a
 minute to reinstall it; restart the virtual display device and the Looking Glass
 service if capture then reports no output device. The SPICE VGA console alone does
@@ -225,8 +233,8 @@ none while starting or stopping). Pause freezes the guest with its memory and th
 RTX and tags the icon "paused". There is no forced power-off entry; `vm-stop`
 resumes a paused guest before its graceful shutdown, whose progress the icon's
 pulsing stopping tag shows (only a failure produces a notification).
-The viewer opens fullscreen. Looking Glass B7 on Wayland requests fullscreen
-before its first configure, so KWin flags the window fullscreen at the default
+The viewer opens fullscreen. Looking Glass B7 on Wayland requested fullscreen
+before its first configure (upstream reworked this after B7; the workaround stays until re-tested), so KWin flags the window fullscreen at the default
 1024x768; host-config re-enters fullscreen through a one-shot KWin script
 (`scripts/lg-fullscreen.js`) for the first 15 s after each launch so the window fills
 its output. Launch failures also produce a desktop
@@ -239,22 +247,22 @@ flooded its SPICE connections; uncapped, that exhausted RAM and swap and the ker
 killed desktop apps. With the cap, only the guest dies, but it swaps guest memory
 first, so Windows (and call audio) stutters before the kill.
 
-The flood was one bogus pointer move: after a resize such as Insert+F, B7 can compute
+The flood was one bogus pointer move: after a resize such as Insert+F, B7 could compute
 a delta of about 2e9 px, and PureSpice splits every move into 127 px virtio-mouse
 steps, so it sent a single 270 MB message (`Only wrote ... of the expected ... bytes`
 in `~/.local/state/spawnkit/looking-glass.log`) whose millions of motion events QEMU
-queued. The Home Manager build patches PureSpice to drop any move over 16384 px and
-log `Dropping a bogus ... px mouse motion`. The move's source: a resize that briefly
+queued. Our PureSpice commit drops any move over 16384 px and logs
+`Dropping an implausible ... px mouse motion`. The move's source: a resize that briefly
 leaves a 0 px output rectangle makes the cursor scale infinite, the fractional
 accumulator becomes NaN, and every later move converts to INT_MIN (the mouse goes
-dead) until a capture toggle resets it. The build also skips a 0 px scale and resets
-a non-finite accumulator, logging `Dropping a non-finite mouse motion`; it tests the
+dead) until a capture toggle resets it. Our client commits keep the previous scale for a 0 px rectangle and reset
+a non-finite accumulator, logging `Dropping a non-finite mouse motion`; they test the
 float bits because the client builds with `-ffast-math`. The 0 px rectangle itself
 comes from leaving full screen: KWin then configures the window as 0x0, which
-xdg-shell means "choose your own size", and B7 adopts it literally, committing frames
+xdg-shell means "choose your own size", and B7 adopted it literally, committing frames
 unthrottled (about 900 a second: black flashing and a stalled desktop) until a real
-configure arrives. A `WAYLAND_DEBUG=1` run showed it. The build substitutes the last
-windowed size, 1024x768 at first, and logs `Compositor left the size to us`. To record a reproduction, run
+configure arrived. A `WAYLAND_DEBUG=1` run showed it; upstream master (`b397b7c6`)
+already keeps the previous size. To record a reproduction, run
 `scripts/vm-trace.py` (QEMU memory, CPU and cgroup, SPICE socket queues, Looking
 Glass log lines, twice a second) into `~/.local/state/spawnkit/vm-trace-*.jsonl`. Do not lower the guest's
 `oom_score_adj` instead: that protects the runaway process and sacrifices the desktop.
@@ -398,13 +406,9 @@ and recovery; routine automation can use SSH.
   speed to `windows_guest_mouse_sensitivity` (6 of 20).
   The VM has virtio mouse and keyboard devices and no USB tablet, as Looking Glass
   requires.
-- **Alt+Tab into the viewer:** B7 drops the pointer-enter event that arrives
+- **Alt+Tab into the viewer (X11):** B7 dropped the pointer-enter event that arrives
   when a window is raised under the pointer during a grab (GNOME's Alt+Tab switcher
-  sends it with the Ungrab mode), then ignores all mouse input until the pointer
-  leaves and re-enters. Home Manager builds the client with
-  `nix/modules/home/looking-glass-enter-on-ungrab.patch`, which accepts that event.
-  Tested with synthetic Alt+Tab and a uinput relative mouse: stock B7 froze in 8 of 8
-  switches, the patched client in none of 35 (with and without the keyboard grab).
+  sends it with the Ungrab mode). Master accepts that event (see gnif/LookingGlass#1350).
 - **Input stall watchdog:** `vm-view` runs `scripts/lg-watchdog.py` beside the
   viewer as a safety net. While the viewer is focused, the pointer is over it and X
   sees input, its SPICE input channels must send; the main channel (the client's
