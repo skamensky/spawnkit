@@ -307,6 +307,9 @@ def processes(before, after, elapsed, top=None, sort="cpu"):
 
 
 def sort_key(sort):
+    if sort == "user":
+        # root first, then the other users alphabetically; within a user the busiest first.
+        return lambda p: (p["user"] != "root", p["user"].lower(), -p["cpu_percent"], p["name"].lower())
     if sort == "name":
         return lambda p: (p["name"].lower(), p.get("pid", 0))
     field = "cpu_percent" if sort == "cpu" else "memory_bytes"
@@ -320,7 +323,7 @@ def grouped(procs, sort):
     for proc in procs:
         key, name, icon, kind = group_of(unit_of(proc["pid"]), proc["name"], entries)
         group = groups.setdefault(key, {"id": key, "name": name, "icon": icon, "kind": kind,
-                                        "cpu_percent": 0.0, "memory_bytes": 0, "own": True,
+                                        "user": proc["user"], "cpu_percent": 0.0, "memory_bytes": 0, "own": True,
                                         "critical": False, "processes": []})
         group["cpu_percent"] = round(group["cpu_percent"] + proc["cpu_percent"], 1)
         group["memory_bytes"] += proc["memory_bytes"]
@@ -441,7 +444,7 @@ def main():
     commands = parser.add_subparsers(dest="command")
     listing = commands.add_parser("processes", help="List every process, grouped by app or service")
     listing.add_argument("--interval", type=float, default=0.5, help="Seconds over which CPU use is measured")
-    listing.add_argument("--sort", choices=("cpu", "memory", "name"), default="cpu")
+    listing.add_argument("--sort", choices=("cpu", "memory", "name", "user"), default="cpu")
     listing.add_argument("--flat", action="store_true", help="One list of processes instead of groups")
     ending = commands.add_parser("signal", help="End processes; exits 1 unless every one exited")
     ending.add_argument("targets", nargs="+", metavar="PID[:START]",

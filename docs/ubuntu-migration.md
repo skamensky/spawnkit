@@ -629,14 +629,14 @@ GNOME stays installed, so the session is chosen at login and the trial is revers
   with an End button on hover, and an All processes link that opens a process
   window: apps grouped by their systemd unit (`app-<desktop id>` scopes take the
   desktop entry's name and icon, QEMU guests become "Virtual machine NAME", services
-  and sessions keep their unit name), sortable by name, CPU, memory, PID or user,
+  and sessions keep their unit name), sortable by name, CPU, memory, PID or user (root first),
   searchable by name or command, or flattened to All processes. Rows re-rank at
   most every 2 seconds and hold still while pointed at. End sends SIGTERM to the
   process or the whole group and waits 3 seconds; if anything survives the button
   becomes Force kill (SIGKILL). Processes the desktop session needs (plasmashell,
   kwin, systemd, dbus and similar) ask for End anyway first, and other users'
   processes show a lock and report permission denied. Both views are thin layers
-  over `spawnkit-stats processes [--sort cpu|memory|name] [--flat]` and
+  over `spawnkit-stats processes [--sort cpu|memory|name|user] [--flat]` and
   `spawnkit-stats signal --term|--kill [--wait S] PID:START...`, which signals
   through a pidfd after checking the start time, so a reused PID is never hit, and
   exits nonzero unless every target exited;

@@ -60,12 +60,22 @@ function target(proc) {
     return proc.pid + ":" + proc.start
 }
 
-// "desc" for usage, "asc" for name and PID.
+// Ascending user order puts root first, then the other users alphabetically.
+function userRank(user) {
+    return (user === "root" ? "0" : "1") + user.toLowerCase()
+}
+
+// "desc" for usage, "asc" for name, PID and user. Within one user, the busiest come first.
 function compare(sort, descending) {
     const sign = descending ? -1 : 1
     return (a, b) => {
         let d
-        if (sort === "name")
+        if (sort === "user") {
+            const ra = userRank(a.user), rb = userRank(b.user)
+            d = ra < rb ? -1 : ra > rb ? 1 : 0
+            if (d === 0)
+                return b.cpu - a.cpu || b.memory - a.memory || a.name.localeCompare(b.name)
+        } else if (sort === "name")
             d = a.name.toLowerCase().localeCompare(b.name.toLowerCase())
         else if (sort === "pid")
             d = a.pid - b.pid

@@ -357,7 +357,7 @@ Window {
             Column_ { label: i18n("CPU"); key: "cpu"; width: 84 }
             Column_ { label: i18n("Memory"); key: "memory"; width: 104 }
             Column_ { label: i18n("PID"); key: "pid"; width: 80 }
-            Column_ { label: i18n("User"); key: ""; width: 100; align: Text.AlignLeft; indent: Theme.s4 }
+            Column_ { label: i18n("User"); key: "user"; width: 100; align: Text.AlignLeft; indent: Theme.s4 }
             Item { Layout.preferredWidth: 112 }
         }
 
