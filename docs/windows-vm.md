@@ -230,13 +230,15 @@ Shell does not notice launchers added to the replaced profile directory until th
 next login. Activation pins **Windows** (four-pane icon; the viewer's window groups
 under it) to the dock and Plasma's panel, appended to the user's own pins. Its desktop
 actions are **Open in a window**, **Start without the RTX**, **Pause**, **Resume**,
-**Restart** and **Shut down** (`vm-view --windowed`, `vm-view --without-rtx`,
-`vm-pause`, `vm-resume`, `vm-restart` and `vm-stop`, all `--notify`). In Plasma's
+**Restart**, **Shut down** and **Force power off** (`vm-view --windowed`,
+`vm-view --without-rtx`, `vm-pause`, `vm-resume`, `vm-restart`, `vm-stop` and
+`vm-force-stop`, all `--notify`). In Plasma's
 forked task manager a right click shows only those valid now: `spawnkit-badges`
 lists them in the launcher's tag (off: open in a window, start without the RTX;
 running: open in a window, pause, restart, shut down; paused: resume, shut down;
-none while starting or stopping). Pause freezes the guest with its memory and the
-RTX and tags the icon "paused". There is no forced power-off entry; `vm-stop`
+stopping while the domain still runs: force power off; none while starting). Pause freezes the guest with its memory and the
+RTX and tags the icon "paused". Force power off cuts the guest like a held power
+button, losing unsaved data, and the release hook still returns the RTX. `vm-stop`
 resumes a paused guest before its graceful shutdown, whose progress the icon's
 pulsing stopping tag shows (only a failure produces a notification).
 The viewer opens fullscreen. Looking Glass B7 on Wayland requested fullscreen
@@ -388,6 +390,12 @@ and recovery; routine automation can use SSH.
   to 4, start the guest again, then `pnputil /add-driver ... /install`; the INF
   restores `Start` to 3. 621.01 (32.0.16.2101) shut down cleanly. Afterwards
   restart the `Root\LGIdd` device.
+- **Stuck shutdown:** since the switch to the IDD (2026-11-05), both shutdowns
+  observed hung with all vCPUs at 100% instead of taking 10 to 20 seconds. Each
+  ended, by the normal guest power-off path, within 6 ms of an HMP `info registers
+  -a`, which suggests a vCPU kick releases the guest; the cause is unknown. Sample a
+  hang from the host without touching the vCPUs (`perf` on `kvm:kvm_exit`), because
+  that query ends it.
 - **Crash dumps:** the domain enables the host's Hyper-V enlightenments except
   crash notification. With it, Windows reported each bug check before writing its
   dump and libvirt destroyed the domain, leaving no evidence. Now Windows writes a

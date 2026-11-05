@@ -114,6 +114,10 @@
                 name = "Shut down";
                 exec = "host-config vm-stop --notify";
               };
+              force-off = {
+                name = "Force power off";
+                exec = "host-config vm-force-stop --notify";
+              };
             };
           };
           spawnkit-windows-without-rtx = {

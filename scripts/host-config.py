@@ -206,7 +206,7 @@ def wait_for_gpu_return(name, timeout):
             return
         time.sleep(2)
     if state != "shut off":
-        raise ValueError(f"Windows is still {state} after {timeout}s; finish shutdown inside the guest (no forced power-off was sent)")
+        raise ValueError(f"Windows is still {state} after {timeout}s; finish shutdown inside the guest or run vm-force-stop (no forced power-off was sent)")
     raise ValueError("Windows is off but the GPU return was not verified; run host-config gpu-status, then gpu-guard.py reclaim once the Linux drivers are bound")
 
 
@@ -500,7 +500,7 @@ def start_detached(name, held, notify, gui):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=["select", "inventory", "check", "render", "plan", "apply", "facts", "vm-define", "vm-start", "vm-stop", "vm-pause", "vm-resume", "vm-restart", "vm-view", "vm-console", "vm-exec", "gpu-status", "gpu-holders", "gpu-release", "vm-install", "guest-media", "guest-bootstrap", "guest-plan", "guest-apply"])
+    parser.add_argument("action", choices=["select", "inventory", "check", "render", "plan", "apply", "facts", "vm-define", "vm-start", "vm-stop", "vm-force-stop", "vm-pause", "vm-resume", "vm-restart", "vm-view", "vm-console", "vm-exec", "gpu-status", "gpu-holders", "gpu-release", "vm-install", "guest-media", "guest-bootstrap", "guest-plan", "guest-apply"])
     parser.add_argument("--repo", type=Path, default=selector().default_repo(), help="Defaults to the enclosing checkout")
     parser.add_argument("--host", help="Explicit profile; normal selection shares the Home Manager registry")
     parser.add_argument("--hostname", default=socket.gethostname())
@@ -514,7 +514,7 @@ def main():
     parser.add_argument("--without-rtx", action="store_true", help="vm-start/vm-view: start Windows with a virtio display and leave the RTX on Ubuntu")
     parser.add_argument("--pid", type=int, action="append", default=[], help="gpu-release: holder to close (repeatable)")
     parser.add_argument("--force", action="store_true", help="gpu-release: SIGKILL holders still running after SIGTERM")
-    parser.add_argument("--timeout", type=int, default=300, help="vm-stop: seconds to wait for guest shutdown and GPU return")
+    parser.add_argument("--timeout", type=int, default=300, help="vm-stop, vm-force-stop: seconds to wait for guest shutdown and GPU return")
     parser.add_argument("--command", help="vm-exec: PowerShell to run as SYSTEM; read from stdin when omitted")
     parser.add_argument("--windows-iso", type=Path)
     parser.add_argument("--virtio-iso", type=Path)
@@ -573,7 +573,7 @@ def main():
             print(json.dumps(remaining, indent=2))
             if set(args.pid) & {h["pid"] for h in remaining}:
                 raise ValueError("Some chosen holders are still running; retry with --force")
-        elif args.action in ("vm-start", "vm-stop", "vm-pause", "vm-resume", "vm-restart", "vm-view", "vm-console", "vm-exec", "gpu-status"):
+        elif args.action in ("vm-start", "vm-stop", "vm-force-stop", "vm-pause", "vm-resume", "vm-restart", "vm-view", "vm-console", "vm-exec", "gpu-status"):
             native_only()
             installed = Path("/etc/spawnkit/windows.json")
             if not installed.is_file():
@@ -596,6 +596,15 @@ def main():
                     raise ValueError(f"Windows is {state}; {args.action} needs it {wanted}")
                 verb = {"vm-pause": "suspend", "vm-resume": "resume", "vm-restart": "reboot"}[args.action]
                 run(["/usr/bin/virsh", "-c", "qemu:///system", verb, name])
+                return
+            if args.action == "vm-force-stop":
+                if state == "shut off":
+                    raise ValueError("Windows is already shut off")
+                # Cuts the power like a held power button: unsaved guest data is lost. The release
+                # hook still returns the RTX.
+                with windows_phase("stopping"):
+                    run(["/usr/bin/virsh", "-c", "qemu:///system", "destroy", name])
+                    wait_for_gpu_return(name, args.timeout)
                 return
             if args.action == "vm-stop":
                 # Progress shows on the Windows launcher's stopping tag, not as notifications.

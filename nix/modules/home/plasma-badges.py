@@ -143,6 +143,7 @@ class WindowsTag:
     OFF = ["Open in a window", "Start without the RTX"]
     RUNNING = ["Open in a window", "Pause", "Restart", "Shut down"]
     PAUSED = ["Resume", "Shut down"]
+    STOPPING_RUNNING = ["Force power off"]  # the domain still runs, so a stuck shutdown can be cut
 
     def __init__(self):
         self.up = None  # the domain id whose guest agent has answered
@@ -168,7 +169,7 @@ class WindowsTag:
             elif phase == "stopping" or self.up == domain:
                 self.stopping = True
             if self.stopping:
-                return STOPPING
+                return STOPPING | {"actions": self.STOPPING_RUNNING}
             if self.up != domain:
                 return STARTING
         elif phase:
