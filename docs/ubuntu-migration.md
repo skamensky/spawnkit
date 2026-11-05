@@ -625,7 +625,7 @@ GNOME stays installed, so the session is chosen at login and the trial is revers
   link to bring it back. It polls the `spawnkit-stats` JSON CLI (which also
   reports each thread under `cpu.threads`) only while open, since
   ksystemstats reports 0% for the Intel iGPU and would wake the sleeping RTX.
-  The card ends with the five busiest processes (`spawnkit-stats --top N`), each
+  The card ends with up to five processes using at least 1% CPU (`spawnkit-stats --top N`), each
   with an End button on hover, and an All processes link that opens a process
   window: apps grouped by their systemd unit (`app-<desktop id>` scopes take the
   desktop entry's name and icon, QEMU guests become "Virtual machine NAME", services

@@ -48,7 +48,7 @@ PlasmoidItem {
         const now = Date.now()
         if (!holdingTop && now - rankedAt >= 2000) {
             rankedAt = now
-            P.sync(topModel, procs.slice(0, topShown).map(row), true)
+            P.sync(topModel, procs.filter(p => p.cpu_percent >= 1).slice(0, topShown).map(row), true)
             return
         }
         // Held: refresh the listed rows' figures where the new reading still has them.
@@ -584,9 +584,18 @@ PlasmoidItem {
             ListView {
                 id: topList
                 Layout.fillWidth: true
-                implicitHeight: count * 36
+                // Always room for a full list, so the card keeps its size as processes come and go.
+                implicitHeight: root.topShown * 36
                 interactive: false
                 model: topModel
+                Text {
+                    visible: topList.count === 0
+                    anchors.centerIn: parent
+                    text: i18n("Nothing above 1% CPU")
+                    font.family: Theme.font
+                    font.pointSize: Theme.microSize
+                    color: Theme.textTertiary
+                }
                 HoverHandler { onHoveredChanged: root.holdingTop = hovered }
                 move: Transition {
                     enabled: Theme.motion
@@ -663,7 +672,7 @@ PlasmoidItem {
                             critical: topRow.critical
                         }
                         Text {
-                            text: P.percent(topRow.cpuShown.value)
+                            text: Math.round(topRow.cpuShown.value) + "%"
                             horizontalAlignment: Text.AlignRight
                             Layout.minimumWidth: Theme.s7 + Theme.s4
                             font.family: Theme.font
