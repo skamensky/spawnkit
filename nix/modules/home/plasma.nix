@@ -169,6 +169,7 @@ let
     cp -r ${./kwin-snap-assist} $out/share/kwin/scripts/spawnkitsnapassist
   '';
   batteryWidget = plasmoid "tech.shmuel.battery" ./plasma-battery { };
+  languageWidget = plasmoid "tech.shmuel.language" ./plasma-language { };
   clockWidget = plasmoid "tech.shmuel.clock" ./plasma-clock { calendar = "${calendarSync}/bin/spawnkit-calendar"; };
   plasmaTheme = pkgs.writers.writePython3Bin "spawnkit-plasma-theme" {
     flakeIgnore = [ "E501" ];
@@ -191,6 +192,9 @@ in
         { layout = "us"; }
         { layout = "il"; }
       ];
+      # No XKB switching option: with GNOME's grp:win_space_toggle, Super+Space would switch
+      # twice, once in XKB and once through the shortcut below.
+      input.keyboard.options = [ ];
       # Print selects a region; nothing is taken until Enter, which copies it to the
       # clipboard and closes Spectacle without saving a file.
       spectacle.shortcuts = {
@@ -256,8 +260,8 @@ in
             }
             "org.kde.plasma.marginsseparator"
             "tech.shmuel.battery"
-            # The current layout; clicking it switches, and its menu picks one.
-            { keyboardLayout.displayStyle = "label"; }
+            # The current layout: a click switches between two, or opens a menu of more.
+            "tech.shmuel.language"
             "tech.shmuel.clock"
             "org.kde.plasma.notifications"
           ];
@@ -300,10 +304,11 @@ in
         GuiConfig.quitAfterSaveCopyExport = true;
       };
       # Spectacle announces nothing: no popup for a copied, saved or recorded capture.
+      # The groups are named "Event/<id>"; KConfig escapes a "/" in a group name as "\/".
       configFile."spectacle.notifyrc" = lib.genAttrs [
-        "Event/newScreenshotSaved"
-        "Event/recordingSaved"
-        "Event/ocrTextExtracted"
+        "Event\\/newScreenshotSaved"
+        "Event\\/recordingSaved"
+        "Event\\/ocrTextExtracted"
       ] (_: { Action = ""; });
     };
     # GTK and Chromium apps draw their own title bars from this layout; Plasma's GTK sync
@@ -311,6 +316,15 @@ in
     dconf.settings."org/gnome/desktop/wm/preferences".button-layout = "appmenu:minimize,maximize,close";
     # Theme trial (migration D7): spawnkit-plasma-theme gallery applies these live; pin the
     # winner here. Their Kvantum themes use Ubuntu's Kvantum, which matches Plasma's Qt.
+    # Ubuntu's Kvantum reads themes only from ~/.config/Kvantum, ~/.themes and /usr/share, never
+    # the profile; link every profile theme there (kvantum.kvconfig beside them stays a plain file).
+    xdg.configFile."Kvantum" = {
+      source = pkgs.runCommand "kvantum-themes" { } ''
+        mkdir $out
+        for d in ${config.home.path}/share/Kvantum/*/; do ln -s "$d" $out/; done
+      '';
+      recursive = true;
+    };
     home.packages = with pkgs; [
       plasmaTheme
       layan
@@ -352,6 +366,7 @@ in
       kickoffWidget
       snapAssist
       batteryWidget
+      languageWidget
       clockWidget
       calendarSync
     ];

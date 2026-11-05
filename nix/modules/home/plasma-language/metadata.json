@@ -1,0 +1,12 @@
+{
+  "KPackageStructure": "Plasma/Applet",
+  "X-Plasma-API-Minimum-Version": "6.0",
+  "KPlugin": {
+    "Id": "tech.shmuel.language",
+    "Name": "Keyboard language",
+    "Description": "The current keyboard layout; a click switches between two, or picks from a menu of more",
+    "Icon": "input-keyboard",
+    "Category": "System Information",
+    "License": "MIT"
+  }
+}

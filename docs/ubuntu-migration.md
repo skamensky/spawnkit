@@ -612,9 +612,14 @@ GNOME stays installed, so the session is chosen at login and the trial is revers
   from the Fluent icon theme's source. Inactive windows show at 92% opacity. One
   translucent bottom panel holds the launcher, the task manager (file manager,
   browser and the Windows launchers pinned) and, on the right, only three widgets:
-  `tech.shmuel.battery` (visible only while on battery), the keyboard layout as a
-  label (click or Meta+Space switches between English and Hebrew),
-  `tech.shmuel.clock` and notifications. There is no system tray, so applications'
+  `tech.shmuel.battery` (visible only while on battery), `tech.shmuel.language`
+  (the current layout, hidden with one; a click switches between two, opens a menu
+  with three or more, and the wheel steps through them; Meta+Space also switches),
+  `tech.shmuel.clock` and notifications. Both small widgets use Plasma's full
+  representation: without one the panel never shows them. A running KWin keeps the
+  old layout list when Home Manager rewrites `kxkbrc`; a relogin or
+  `kwriteconfig6 --notify` on that file loads the new one. No XKB toggle option is
+  set, since GNOME's `grp:win_space_toggle` would make Meta+Space switch twice. There is no system tray, so applications'
   tray icons (CopyQ, Claude) do not appear; volume and network have no indicator.
   The launcher, `tech.shmuel.kickoff`, is Plasma 6.6.6's Kickoff with the Places
   tab removed and every session and power action under one Power menu; it is pinned
@@ -622,7 +627,8 @@ GNOME stays installed, so the session is chosen at login and the trial is revers
   upgrade. Title bars show Windows' minimize, maximize and close on the right. Icons
   are Fluent-dark without its application set (`Fluent-dark-real-apps`), so apps such
   as Chrome keep their own icons. Windows are 30% and menus 15% see-through, Dolphin
-  included. The touchpad scrolls naturally; mice keep wheel scrolling. The clock's popup is a month view with event dots and the selected
+  included; Ubuntu's Kvantum reads themes only from `~/.config/Kvantum`, so the
+  profile links its Kvantum themes there. The touchpad scrolls naturally; mice keep wheel scrolling. The clock's popup is a month view with event dots and the selected
   day's Google Calendar events (click opens the event, a camera button joins its
   Meet). `spawnkit-calendar sync` copies the calendars Google Calendar shows,
   from a month back to three months ahead, through the personal-secrets Google
@@ -633,7 +639,8 @@ GNOME stays installed, so the session is chosen at login and the trial is revers
   Meta+Left/Right keep KWin's half tiling. `spawnkitsnapassist`, a KWin script, is
   Windows' Snap Assist: once a window fills half the screen, the other windows on
   that screen show as thumbnails over the free half; clicking one snaps it there,
-  Escape or a click outside dismisses them. Spectacle shows no notifications, and
+  Escape or a click outside dismisses them. Spectacle shows no notifications (its
+  `spectacle.notifyrc` groups are `Event/<name>`, so the slash is escaped in Nix), and
   cancelling the Windows VM's RTX handoff ends quietly. The screen never locks on idle or on
   waking from sleep, in Plasma and GNOME, and PowerDevil never suspends on idle. plasma-manager's layout scripts call
   `qdbus`, so the profile provides one that runs Ubuntu's `qdbus6`; the panel

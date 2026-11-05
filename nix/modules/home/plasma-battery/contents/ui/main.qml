@@ -18,29 +18,33 @@ PlasmoidItem {
     }
 
     readonly property var battery: power.data["Battery"] || {}
-    readonly property bool onBattery: battery["Has Battery"] === true
+    readonly property bool unplugged: battery["Has Battery"] === true
         && (power.data["AC Adapter"] || {})["Plugged in"] === false
     readonly property int percent: battery["Percent"] || 0
 
-    Plasmoid.status: onBattery ? PlasmaCore.Types.ActiveStatus : PlasmaCore.Types.HiddenStatus
+    Plasmoid.status: unplugged ? PlasmaCore.Types.ActiveStatus : PlasmaCore.Types.HiddenStatus
     Plasmoid.backgroundHints: PlasmaCore.Types.NoBackground
-    preferredRepresentation: compactRepresentation
+    // Without a full representation Plasma shows the bare root item and never the compact one.
+    preferredRepresentation: fullRepresentation
     toolTipMainText: i18n("On battery: %1%", percent)
 
-    compactRepresentation: RowLayout {
-        spacing: Kirigami.Units.smallSpacing
-        visible: root.onBattery
-        Layout.preferredWidth: root.onBattery ? implicitWidth : 0
-        Layout.minimumWidth: Layout.preferredWidth
-        Layout.maximumWidth: Layout.preferredWidth
+    fullRepresentation: Item {
+        Layout.minimumWidth: row.implicitWidth
+        Layout.preferredWidth: row.implicitWidth
 
-        Kirigami.Icon {
-            source: "battery-" + String(Math.round(root.percent / 10) * 10).padStart(3, "0")
-            Layout.preferredWidth: Kirigami.Units.iconSizes.smallMedium
-            Layout.preferredHeight: Kirigami.Units.iconSizes.smallMedium
-        }
-        PlasmaComponents.Label {
-            text: root.percent + "%"
+        RowLayout {
+            id: row
+            anchors.centerIn: parent
+            spacing: Kirigami.Units.smallSpacing
+
+            Kirigami.Icon {
+                source: "battery-" + String(Math.round(root.percent / 10) * 10).padStart(3, "0")
+                Layout.preferredWidth: Kirigami.Units.iconSizes.smallMedium
+                Layout.preferredHeight: Kirigami.Units.iconSizes.smallMedium
+            }
+            PlasmaComponents.Label {
+                text: root.percent + "%"
+            }
         }
     }
 }
