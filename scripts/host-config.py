@@ -389,7 +389,7 @@ def fill_looking_glass_screen(seconds=15):
         subprocess.run([*scripting, 'org.kde.kwin.Scripting.unloadScript', 'spawnkit-lg-fullscreen'], capture_output=True)
 
 
-def view_looking_glass(command, port):
+def view_looking_glass(command, port, fullscreen=True):
     """Run the viewer, restarting it when lg-watchdog finds it has stopped forwarding input."""
     state = Path(os.environ.get('XDG_STATE_HOME', Path.home() / '.local/state')) / 'spawnkit'
     state.mkdir(parents=True, exist_ok=True)
@@ -397,7 +397,8 @@ def view_looking_glass(command, port):
     while True:
         with (state / 'looking-glass.log').open('a') as log:
             client = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT)
-        threading.Thread(target=fill_looking_glass_screen, daemon=True).start()
+        if fullscreen:
+            threading.Thread(target=fill_looking_glass_screen, daemon=True).start()
         watchdog = subprocess.Popen(['/usr/bin/python3', '-I', str(Path(__file__).with_name('lg-watchdog.py')), '--pid', str(client.pid), '--port', str(port), '--log', str(state / 'looking-glass-stalls.jsonl')])
         client.wait()
         if watchdog.wait() != 75:
@@ -486,6 +487,7 @@ def main():
     parser.add_argument("--ask-become-pass", action="store_true")
     parser.add_argument("--notify", action="store_true", help="Also display desktop notifications for command failures and vm-stop progress")
     parser.add_argument("--gui", action="store_true", help="vm-start/vm-view/vm-install: offer to close programs holding the RTX")
+    parser.add_argument("--windowed", action="store_true", help="vm-view: open the viewer in a window instead of full screen")
     parser.add_argument("--without-rtx", action="store_true", help="vm-start/vm-view: start Windows with a virtio display and leave the RTX on Ubuntu")
     parser.add_argument("--pid", type=int, action="append", default=[], help="gpu-release: holder to close (repeatable)")
     parser.add_argument("--force", action="store_true", help="gpu-release: SIGKILL holders still running after SIGTERM")
@@ -596,7 +598,7 @@ def main():
                     raise ValueError('The running VM has no active local SPICE port')
                 # Calls in Windows open the microphone without a prompt; Looking Glass still shows its indicator.
                 # While focused, the keyboard belongs to Windows (Alt+Tab, Super); Insert is the escape key (the laptop has no Right Ctrl).
-                view_looking_glass(['looking-glass-client', '-f', f"/dev/shm/{active['looking_glass_name']}", 'spice:host=127.0.0.1', f"spice:port={spice.get('port')}", 'audio:micDefault=allow', 'input:grabKeyboardOnFocus=yes', 'input:escapeKey=KEY_INSERT', 'win:fullScreen=yes'], int(spice.get('port')))
+                view_looking_glass(['looking-glass-client', '-f', f"/dev/shm/{active['looking_glass_name']}", 'spice:host=127.0.0.1', f"spice:port={spice.get('port')}", 'audio:micDefault=allow', 'input:grabKeyboardOnFocus=yes', 'input:escapeKey=KEY_INSERT'] + ([] if args.windowed else ['win:fullScreen=yes']), int(spice.get('port')), fullscreen=not args.windowed)
         else:
             if args.action == "vm-define" or (args.action in ("plan", "apply") and any(cfg[k] for k in ("nvidia", "virtualization", "gpu_handoff", "windows_vm"))):
                 native_only()

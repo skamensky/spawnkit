@@ -66,6 +66,10 @@
             icon = "${./spawnkit-windows.svg}";
             # Groups the viewer's window under this launcher in the dock.
             startupWMClass = "looking-glass-client";
+            actions.windowed = {
+              name = "Open in a window";
+              exec = "host-config vm-view --notify --gui --windowed";
+            };
           };
           spawnkit-windows-without-rtx = {
             desktopName = "Windows (no RTX)";
