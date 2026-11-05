@@ -687,6 +687,9 @@ GNOME stays installed, so the session is chosen at login and the trial is revers
   Calls, pairing requests and low battery still pop up. Plasma's "N notifications
   were received while Do Not Disturb was active" summary is off
   (`libnotificationmanager.notifyrc`, `Event/inhibitionSummary`).
+  Running daemons cache these settings, so every activation sends KNotifications'
+  `/Config org.kde.knotification.reparseConfiguration` signal for each component
+  (2026-11-05: kdeconnectd kept popping phone notifications until it reread them).
   The launcher, `tech.shmuel.kickoff`, is Plasma 6.6.6's Kickoff reduced to the
   search field, a list of recently used applications and files shown until you
   type, and one Power menu holding every session and power action; it has no

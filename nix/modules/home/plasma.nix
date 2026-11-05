@@ -486,7 +486,17 @@ in
     };
     # Places without Desktop, Music or the Recent section (recent files and locations, modified
     # today and yesterday); everything else in Places stays as edited in Dolphin.
-    home.activation.spawnkitPlaces = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+    # Running programs (kdeconnectd, plasmashell) cache their notification settings; tell them to
+    # reread the notifyrc files plasma-manager just wrote, so a silenced event stops popping up.
+    home.activation.spawnkitNotifyReparse = lib.hm.dag.entryAfter [ "configure-plasma" ] ''
+      if [ -n "''${DBUS_SESSION_BUS_ADDRESS:-}" ]; then
+        for component in kdeconnect libnotificationmanager spectacle; do
+          run ${pkgs.dbus}/bin/dbus-send --session --type=signal /Config \
+            org.kde.knotification.reparseConfiguration string:$component || true
+        done
+      fi
+    '';
+    home.activation.spawnkitPlaces =lib.hm.dag.entryAfter [ "writeBoundary" ] ''
       run ${placesTool}/bin/spawnkit-places hide --section RecentlySaved \
         file://${config.home.homeDirectory}/Desktop file://${config.home.homeDirectory}/Music
     '';
