@@ -214,7 +214,11 @@ Shell does not notice launchers added to the replaced profile directory until th
 next login. Activation pins **Windows** (four-pane icon; the viewer's window groups
 under it) and **Shut down Windows** (`vm-stop --notify`, with notifications when
 shutdown starts and when the RTX is back) to the dock, appended to the user's own
-pins. The viewer opens fullscreen. Launch failures also produce a desktop
+pins. The viewer opens fullscreen. Looking Glass B7 on Wayland requests fullscreen
+before its first configure, so KWin flags the window fullscreen at the default
+1024x768; host-config re-enters fullscreen through a one-shot KWin script
+(`scripts/lg-fullscreen.js`) for the first 15 s after each launch so the window fills
+its output. Launch failures also produce a desktop
 notification. The console entry opens the console; start first if the VM is off.
 Closing Looking Glass leaves Windows running.
 
@@ -228,7 +232,9 @@ only; shut down and start normally to get the RTX back. At boot the guest's
 RTX is present, so the desktop moves to the virtio display, and re-enables it on the
 next RTX boot for Looking Glass. While Windows runs without the RTX, Ubuntu apps
 such as Chrome's GPU process can open it, so a later normal start may ask to close
-them. While Windows runs, either launcher opens the viewer that matches how it was
+them. The picker lists and closes the program that owns a holder: a helper such as
+Chrome's GPU process stands for its topmost ancestor running the same executable,
+because the browser respawns a killed helper. While Windows runs, either launcher opens the viewer that matches how it was
 started.
 
 `vm-stop` requests an ACPI shutdown and waits

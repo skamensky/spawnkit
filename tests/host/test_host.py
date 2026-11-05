@@ -293,6 +293,12 @@ class Selection(unittest.TestCase):
 
 
 class GPUHandoff(unittest.TestCase):
+    def setUp(self):
+        # The live machine may hold a reservation (Windows running); these tests never see it.
+        reservation = patch.object(cli, 'GPU_RESERVATION', Path('/nonexistent/spawnkit-gpu-owner.json'))
+        reservation.start()
+        self.addCleanup(reservation.stop)
+
     def test_busy_gpu_refuses_and_releases_its_reservation(self):
         cfg = gpu_config()
         with tempfile.TemporaryDirectory() as directory:
@@ -353,12 +359,12 @@ class GPUHandoff(unittest.TestCase):
             drm = root / cfg['gpu_devices'][0]['address'] / 'drm/card9'
             drm.mkdir(parents=True)
             with patch.object(guard.subprocess, 'run') as run:
-                guard.desktop_seat(cfg, False, sysfs=root, rule=rule)
+                guard.desktop_seat(cfg, False, sysfs=root, rule=rule, stopped=root / 'services.json')
                 lines = rule.read_text().splitlines()
                 self.assertEqual(len(lines), sum(d['driver'] == 'nvidia' for d in cfg['gpu_devices']))
                 self.assertIn('ENV{ID_SEAT}="spawnkit-gpu-handoff"', lines[0])
                 self.assertIn(str(drm), run.call_args.args[0])
-                guard.desktop_seat(cfg, True, sysfs=root, rule=rule)
+                guard.desktop_seat(cfg, True, sysfs=root, rule=rule, stopped=root / 'services.json')
             self.assertFalse(rule.exists())
 
     def test_awaiting_holders_returns_the_gpu_to_the_desktop_on_timeout(self):
@@ -374,6 +380,16 @@ class GPUHandoff(unittest.TestCase):
                 patch.object(guard.Path, 'read_text', return_value='nvidia-persistenced\n'):
             with self.assertRaisesRegex(RuntimeError, 'systemctl stop nvidia-persistenced'):
                 guard.require_idle(['/dev/nvidia0'])
+
+    def test_a_helper_process_stands_for_its_program(self):
+        exes = {'/proc/30/exe': '/opt/chrome', '/proc/31/exe': '/opt/chrome', '/proc/20/exe': '/opt/chrome',
+                '/proc/10/exe': '/usr/bin/plasmashell'}
+        parents = {30: 20, 31: 20, 20: 10}
+        raw = [{'pid': p, 'name': 'chrome', 'command': 'chrome --type=gpu-process', 'uid': os.getuid()} for p in (30, 31)]
+        with patch.object(cli.os, 'readlink', side_effect=exes.__getitem__), patch.object(cli, 'parent_pid', side_effect=parents.__getitem__), \
+                patch.object(cli.subprocess, 'check_output', return_value=json.dumps(raw)), \
+                patch.object(cli.Path, 'read_bytes', return_value=b'chrome\0--restore'):
+            self.assertEqual(cli.guard_holders(), [raw[0] | {'pid': 20, 'command': 'chrome --restore', 'closable': True}])
 
     def test_holders_mark_session_and_foreign_processes_unclosable(self):
         raw = [{'pid': 1, 'name': 'Xorg', 'command': 'Xorg', 'uid': os.getuid()},

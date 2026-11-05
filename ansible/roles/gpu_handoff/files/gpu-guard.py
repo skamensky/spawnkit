@@ -151,8 +151,12 @@ def await_idle(cfg, timeout, delay=2):
     deadline = time.monotonic() + timeout
     while holders(inspect_devices(cfg)):
         if time.monotonic() > deadline:
-            desktop_seat(cfg, True)
-            require_idle(inspect_devices(cfg))
+            # Report the holders before the reattach restarts the GPU services.
+            try:
+                require_idle(inspect_devices(cfg))
+            except RuntimeError:
+                desktop_seat(cfg, True)
+                raise
         time.sleep(delay)
 
 

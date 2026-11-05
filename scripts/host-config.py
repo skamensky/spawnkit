@@ -13,6 +13,7 @@ import shutil
 import signal
 import subprocess
 import tempfile
+import threading
 import time
 import xml.etree.ElementTree as ET
 
@@ -196,12 +197,43 @@ def wait_for_gpu_return(name, timeout):
     raise ValueError("Windows is off but the GPU return was not verified; run host-config gpu-status, then gpu-guard.py reclaim once the Linux drivers are bound")
 
 
+def parent_pid(pid):
+    return int(Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()[1])
+
+
+def app_root(pid):
+    """The program a process belongs to: its topmost ancestor running the same executable.
+
+    A browser keeps the GPU open from a helper process that it starts again when the helper
+    exits, so closing the program means closing that ancestor.
+    """
+    try:
+        exe = os.readlink(f"/proc/{pid}/exe")
+        while (parent := parent_pid(pid)) > 1 and os.readlink(f"/proc/{parent}/exe") == exe:
+            pid = parent
+    except OSError:
+        pass
+    return pid
+
+
 def guard_holders():
-    """RTX holders, each marked closable unless only a logout or another user can release it."""
+    """RTX holders, one per program, each marked closable unless only a logout or another user can release it.
+
+    A closable holder stands for its whole program: pid and command are the program's main process.
+    """
     if GPU_RESERVATION.exists():
         raise ValueError("The RTX is assigned to Windows; no Linux program holds it")
-    return [h | {"closable": h["name"] not in SESSION_HOLDERS and h["uid"] == os.getuid()}
-            for h in json.loads(subprocess.check_output([*GUARD, "holders"], text=True))]
+    programs = {}
+    for h in json.loads(subprocess.check_output([*GUARD, "holders"], text=True)):
+        h = h | {"closable": h["name"] not in SESSION_HOLDERS and h["uid"] == os.getuid()}
+        if h["closable"] and (root := app_root(h["pid"])) != h["pid"]:
+            try:
+                command = Path(f"/proc/{root}/cmdline").read_bytes().replace(b"\0", b" ").decode(errors="replace").strip()
+            except OSError:
+                command = h["command"]
+            h = h | {"pid": root, "command": command}
+        programs.setdefault(h["pid"], h)
+    return list(programs.values())
 
 
 def release_holders(pids, force, progress=None):
@@ -332,6 +364,18 @@ def close_holders(held, offer_without_rtx=False):
     return remaining, bool(answer) and answer["action"] == "logout"
 
 
+def fill_looking_glass_screen(seconds=15):
+    """Size the full-screen Looking Glass window to its output once it maps; see lg-fullscreen.js."""
+    script = str(Path(__file__).with_name('lg-fullscreen.js'))
+    scripting = ['qdbus6', 'org.kde.KWin', '/Scripting']
+    for _ in range(seconds):
+        time.sleep(1)
+        loaded = subprocess.run([*scripting, 'org.kde.kwin.Scripting.loadScript', script, 'spawnkit-lg-fullscreen'], capture_output=True, text=True)
+        if loaded.returncode == 0 and loaded.stdout.strip().lstrip('-').isdigit():
+            subprocess.run(['qdbus6', 'org.kde.KWin', f"/Scripting/Script{loaded.stdout.strip()}", 'org.kde.kwin.Script.run'], capture_output=True)
+        subprocess.run([*scripting, 'org.kde.kwin.Scripting.unloadScript', 'spawnkit-lg-fullscreen'], capture_output=True)
+
+
 def view_looking_glass(command, port):
     """Run the viewer, restarting it when lg-watchdog finds it has stopped forwarding input."""
     state = Path(os.environ.get('XDG_STATE_HOME', Path.home() / '.local/state')) / 'spawnkit'
@@ -340,6 +384,7 @@ def view_looking_glass(command, port):
     while True:
         with (state / 'looking-glass.log').open('a') as log:
             client = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT)
+        threading.Thread(target=fill_looking_glass_screen, daemon=True).start()
         watchdog = subprocess.Popen(['/usr/bin/python3', '-I', str(Path(__file__).with_name('lg-watchdog.py')), '--pid', str(client.pid), '--port', str(port), '--log', str(state / 'looking-glass-stalls.jsonl')])
         client.wait()
         if watchdog.wait() != 75:

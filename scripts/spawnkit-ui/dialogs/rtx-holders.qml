@@ -50,14 +50,15 @@ DialogWindow {
             : phase === "closing" ? "Closing " + names(closing.map(byPid)) + "…"
             : phase === "stuck" ? names(stubborn.map(byPid)) + " didn't close."
             : phase === "logout" ? names(left.filter(h => h.release === "logout")) + (left.filter(h => h.release === "logout").length === 1 ? " releases" : " release") + " the RTX when your session ends."
-            : phase === "waiting" ? "It starts as soon as " + names(left) + (left.length === 1 ? " closes." : " close.")
+            : phase === "waiting" ? "It starts as soon as " + names(left) + (distinct(left).length === 1 ? " closes." : " close.")
             : "The RTX is free; the VM is powering on."
     closable: phase !== "closing" && phase !== "starting"
 
     function byPid(pid) { return holders.find(h => h.pid === pid) }
     function toggle(pid, on) { chosen = on ? chosen.concat([pid]) : chosen.filter(p => p !== pid) }
+    function distinct(list) { return list.map(h => h.name).filter((v, i, a) => a.indexOf(v) === i) }
     function names(list) {
-        const n = list.map(h => h.name).filter((v, i, a) => a.indexOf(v) === i)
+        const n = distinct(list)
         return n.length < 2 ? n.join("") : n.slice(0, -1).join(", ") + " and " + n[n.length - 1]
     }
     function count(n, word) { return n + " " + word + (n === 1 ? "" : "s") }
