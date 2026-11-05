@@ -95,6 +95,22 @@
         "type": "github"
       }
     },
+    "ladybird": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1793909205,
+        "narHash": "sha256-d8w4UHUh1yy82Uir7KJXTxkNwglrUpJADbOovv0n5to=",
+        "owner": "LadybirdBrowser",
+        "repo": "ladybird",
+        "rev": "adadc10ce6ace9ddfea8258484d4572f20d6865b",
+        "type": "github"
+      },
+      "original": {
+        "owner": "LadybirdBrowser",
+        "repo": "ladybird",
+        "type": "github"
+      }
+    },
     "llm-agents": {
       "inputs": {
         "bun2nix": "bun2nix",
@@ -176,6 +192,7 @@
       "inputs": {
         "google-automation": "google-automation",
         "home-manager": "home-manager",
+        "ladybird": "ladybird",
         "llm-agents": "llm-agents",
         "nixpkgs": "nixpkgs_2",
         "plasma-manager": "plasma-manager"

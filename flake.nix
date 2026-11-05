@@ -16,6 +16,11 @@
     # within hours and is bumped on its own. It keeps its own nixpkgs on purpose:
     # following ours would miss its binary cache and compile Codex on every update.
     llm-agents.url = "github:numtide/llm-agents.nix";
+    # Ladybird's master branch, built by nix/modules/home/ladybird.nix; bumped on its own.
+    ladybird = {
+      url = "github:LadybirdBrowser/ladybird";
+      flake = false;
+    };
     # Declares KDE Plasma 6's settings; the Plasma packages themselves come from Ubuntu.
     plasma-manager = {
       url = "github:nix-community/plasma-manager";

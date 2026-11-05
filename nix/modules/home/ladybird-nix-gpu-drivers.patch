@@ -1,0 +1,14 @@
+Nix keeps the Vulkan and EGL drivers and everything they load in /nix/store, reached
+through /run/opengl-driver, so the Landlock rules for /usr/lib leave them unreadable
+and the Compositor falls back to software. The store is world-readable already.
+
+--- a/Libraries/LibSandbox/GpuDriverPaths.cpp
++++ b/Libraries/LibSandbox/GpuDriverPaths.cpp
+@@ -130,6 +130,7 @@ ErrorOr<void> add_gpu_driver_landlock_paths(Vector<LandlockPath>& paths)
+     TRY(add_landlock_path_if_exists(paths, "/lib64"sv, LandlockPath::Access::ReadOnly));
+     TRY(add_landlock_path_if_exists(paths, "/usr/lib"sv, LandlockPath::Access::ReadOnly));
+     TRY(add_landlock_path_if_exists(paths, "/usr/local/lib"sv, LandlockPath::Access::ReadOnly));
++    TRY(add_landlock_path_if_exists(paths, "/nix/store"sv, LandlockPath::Access::ReadOnly));
+     // The driver loads more libraries after Landlock is in place, and they must come from where the libraries that we
+     // already use came from. Otherwise the dynamic loader skips to another copy, such as the system's instead of our own.
+     TRY(add_loaded_library_directories(paths));
