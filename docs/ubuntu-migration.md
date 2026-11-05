@@ -633,8 +633,11 @@ GNOME stays installed, so the session is chosen at login and the trial is revers
   network or tailnet, and pair from the panel's `org.kde.kdeconnect` widget (hidden
   until a phone connects) or `kdeconnect-cli --pair -d ID`. Texts go through the
   KDE Connect SMS app, the widget or `kdeconnect-cli --send-sms TEXT --destination
-  NUMBER -d ID`; calls only show notifications (and can mute media), as the call
-  audio stays on the phone.
+  NUMBER -d ID`. `kdeconnect-cli --share tel:NUMBER -d ID` opens the phone's dialer
+  with the number; the call itself, and its audio, stay on the phone, and the laptop
+  shows call notifications and pauses media (2026-11-05: an SMS to Shmuel's own number
+  and the dialer both verified on the Redmi Note 12 Pro+, after granting the app's
+  SMS and phone permissions).
   The launcher, `tech.shmuel.kickoff`, is Plasma 6.6.6's Kickoff with the Places
   tab removed and every session and power action under one Power menu; it is pinned
   to Ubuntu's Plasma version, so rebuild it from the new tarball after a Plasma
