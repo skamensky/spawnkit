@@ -233,7 +233,12 @@ a delta of about 2e9 px, and PureSpice splits every move into 127 px virtio-mous
 steps, so it sent a single 270 MB message (`Only wrote ... of the expected ... bytes`
 in `~/.local/state/spawnkit/looking-glass.log`) whose millions of motion events QEMU
 queued. The Home Manager build patches PureSpice to drop any move over 16384 px and
-log `Dropping a bogus ... px mouse motion`. To record a reproduction, run
+log `Dropping a bogus ... px mouse motion`. The move's source: a resize that briefly
+leaves a 0 px output rectangle makes the cursor scale infinite, the fractional
+accumulator becomes NaN, and every later move converts to INT_MIN (the mouse goes
+dead) until a capture toggle resets it. The build also skips a 0 px scale and resets
+a non-finite accumulator, logging `Dropping a non-finite mouse motion`; it tests the
+float bits because the client builds with `-ffast-math`. To record a reproduction, run
 `scripts/vm-trace.py` (QEMU memory, CPU and cgroup, SPICE socket queues, Looking
 Glass log lines, twice a second) into `~/.local/state/spawnkit/vm-trace-*.jsonl`. Do not lower the guest's
 `oom_score_adj` instead: that protects the runaway process and sacrifices the desktop.

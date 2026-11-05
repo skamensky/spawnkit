@@ -29,6 +29,23 @@
             'const unsigned msgs  = (delta + 126) / 127;' \
             'if (delta > 16384) { PS_LOG_ERROR("Dropping a bogus %u px mouse motion", delta); return true; }
           const unsigned msgs  = (delta + 126) / 127;'
+          # The bogus motion's source: a resize that briefly leaves a 0 px output
+          # rectangle makes the cursor scale infinite, one move turns the fractional
+          # accumulator into NaN, and every later move converts to INT_MIN until a
+          # capture toggle resets it (the mouse goes dead in bursts). The client
+          # builds with -ffast-math, which folds isfinite() to true, so test the bits.
+          substituteInPlace src/core.c --replace-fail \
+            'g_cursor.scale.x  = (float)srcW / (float)g_state.dstRect.w;' \
+            'if (g_state.dstRect.w > 0 && g_state.dstRect.h > 0) {
+          g_cursor.scale.x  = (float)srcW / (float)g_state.dstRect.w;' \
+            --replace-fail \
+            'g_cursor.scale.y  = (float)srcH / (float)g_state.dstRect.h;' \
+            'g_cursor.scale.y  = (float)srcH / (float)g_state.dstRect.h; }'
+          substituteInPlace src/util.c --replace-fail \
+            'g_cursor.acc.y = modf(ey, &ey);' \
+            'g_cursor.acc.y = modf(ey, &ey);
+          unsigned long long bx, by; memcpy(&bx, &ex, 8); memcpy(&by, &ey, 8);
+          if ((bx & 0x7ff0000000000000ULL) == 0x7ff0000000000000ULL || (by & 0x7ff0000000000000ULL) == 0x7ff0000000000000ULL) { DEBUG_WARN("Dropping a non-finite mouse motion"); g_cursor.acc.x = g_cursor.acc.y = 0.0; ex = ey = 0.0; }'
         '';
       }))
     ];
