@@ -93,7 +93,9 @@ in
       with pkgs;
       [
         firefox
-        (callPackage ./ladybird.nix { src = inputs.ladybird; })
+        (callPackage ./ladybird-rtx.nix {
+          ladybird = callPackage ./ladybird.nix { src = inputs.ladybird; };
+        })
         vscode
         copyq
         (if config.personal.desktop.session == "x11" then xclip else wl-clipboard)
