@@ -356,6 +356,18 @@ in
         left = [ "more-window-actions" ];
         right = [ "minimize" "maximize" "close" ];
       };
+      # plasmashell has one app id for all its windows, so the stats widget's process window
+      # would otherwise show as Plasma Desktop Workspace in the task manager.
+      window-rules = [
+        {
+          description = "Stats widget process window";
+          match = {
+            window-class = { value = "plasmashell"; type = "substring"; };
+            title = "Processes";
+          };
+          apply.desktopfile = { value = "spawnkit-task-manager"; apply = "force"; };
+        }
+      ];
       configFile.spectaclerc = {
         General = {
           clipboardGroup = "PostScreenshotCopyImage";
@@ -592,6 +604,14 @@ in
         SingleMainWindow = "true";
         TryExec = "claude-desktop";
       };
+    };
+    # Names the process window (see window-rules above); it opens from the stats widget.
+    xdg.desktopEntries.spawnkit-task-manager = {
+      name = "Task Manager";
+      comment = "Processes, from the panel's stats widget";
+      exec = "spawnkit-stats processes";
+      icon = "utilities-system-monitor";
+      noDisplay = true;
     };
     xdg.desktopEntries.spawnkit-plasma-theme = {
       name = "Theme Gallery";

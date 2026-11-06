@@ -629,7 +629,8 @@ GNOME stays installed, so the session is chosen at login and the trial is revers
   closed, the gauge polls `spawnkit-stats load`, which reads only `/proc/stat`.
   The card ends with up to five processes using at least 1% CPU (`spawnkit-stats --top N`), each
   with an End button on hover, and an All processes link that opens a process
-  window: apps grouped by their systemd unit (`app-<desktop id>` scopes take the
+  window, named Task Manager in the task bar by a KWin `desktopfile` rule since it
+  otherwise shares plasmashell's identity: apps grouped by their systemd unit (`app-<desktop id>` scopes take the
   desktop entry's name and icon, QEMU guests become "Virtual machine NAME", services
   and sessions keep their unit name), sortable by name, CPU, memory, PID or user (root first),
   searchable by name or command, or flattened to All processes. CPU shows whole
