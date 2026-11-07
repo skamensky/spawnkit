@@ -8,6 +8,9 @@ set APP COUNT   set APP's badge (a desktop file id without .desktop); 0 clears i
 list            print the current counts as JSON
 tags            print the current tags as JSON: {app: {"text": ..., "tone": ...}}, tone one of
                 "positive", "neutral", "starting" or "stopping"
+chrome-profile TITLE
+                print whose Chrome profile the window titled TITLE belongs to, or nothing if
+                that can't be told
 
 WhatsApp Web shows its unread count only inside the page, so its window runs a dedicated Chrome
 profile with DevTools on a local port, and serve reads the count from the page every few seconds.
@@ -19,6 +22,7 @@ down and the RTX returns; with the VM off there is no tag.
 import asyncio
 import json
 import os
+import re
 import subprocess
 import sys
 import urllib.request
@@ -240,6 +244,24 @@ async def call(member, *args):
     return await getattr(proxy, member)(*args)
 
 
+def chrome_profile(window_title):
+    """Chrome keeps the profile out of a window's title, app id and process, so look for the
+    title among the tabs each open profile has saved. Two profiles with the tab give no answer."""
+    title = re.sub("[\u200e\u200f\u202a-\u202e]", "", window_title)
+    title = re.sub(r"\s*<\d+>$", "", title).removesuffix(" - Google Chrome").encode("utf-16-le")
+    root = Path.home() / ".config/google-chrome"
+    profiles = json.loads((root / "Local State").read_text())["profile"]
+    owners = []
+    for directory in profiles.get("last_active_profiles", []):
+        sessions = list((root / directory / "Sessions").glob("Session_*"))
+        if sessions and title in max(sessions, key=lambda path: path.stat().st_mtime).read_bytes():
+            owners.append(profiles["info_cache"][directory])
+    if len(owners) != 1:
+        return ""
+    owner = owners[0]
+    return (not owner.get("is_using_default_name") and owner.get("name")) or owner.get("gaia_name") or owner.get("user_name", "")
+
+
 def main(argv):
     if argv[:1] == ["serve"]:
         asyncio.run(serve())
@@ -249,6 +271,8 @@ def main(argv):
         print(asyncio.run(call("call_list")))
     elif argv[:1] == ["tags"]:
         print(asyncio.run(call("get_tags")))
+    elif argv[:1] == ["chrome-profile"] and len(argv) == 2:
+        print(chrome_profile(argv[1]))
     else:
         sys.exit(__doc__)
 

@@ -674,7 +674,12 @@ GNOME stays installed, so the session is chosen at login and the trial is revers
   manager is `tech.shmuel.taskmanager`, a fork of Plasma's icon-only task manager
   whose right-click menu offers only Pin/Unpin and Close, plus the launcher's desktop
   actions that its `spawnkit-badges` tag lists for the current state (the Windows
-  launcher's power actions; see `docs/windows-vm.md`). Its QML is compiled into
+  launcher's power actions; see `docs/windows-vm.md`). Its window tooltips ignore a
+  media player with no track, which upstream counts as matching every title (Chrome's
+  idle player hid all its titles and previews), and name each Chrome window's profile
+  through `spawnkit-badges chrome-profile TITLE`. Chrome exposes the profile nowhere in
+  a window, so that command looks for the title among each open profile's saved tabs
+  and prints nothing if no single profile has it. Its QML is compiled into
   a C++ plugin, so the `plasma_taskmanager` host role (Plasma hosts only) downloads
   the matching plasma-desktop tarball (sha256-pinned), builds the applet with
   `taskmanager.patch` against Ubuntu's -dev packages under
