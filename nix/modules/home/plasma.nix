@@ -395,6 +395,14 @@ in
         Plugins."tech.shmuel.appsEnabled" = true;
         "Plugins/Favorites".plugins = "tech.shmuel.apps";
       };
+      # Search finds files by name: Baloo ships off here, and then the file runner answers nothing.
+      configFile.baloofilerc = {
+        "Basic Settings".Indexing-Enabled = true;
+        General = {
+          "only basic indexing" = true;
+          "exclude folders" = "${config.home.homeDirectory}/native-pre-migration/";
+        };
+      };
       configFile.kdeglobals."KDE Action Restrictions"."plasma/allow_configure_when_locked" = false;
       # Konsole (installed by the host base role) opens for Ctrl+Alt+T and "Open Terminal Here".
       configFile.kdeglobals.General = {

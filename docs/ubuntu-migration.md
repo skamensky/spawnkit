@@ -751,7 +751,13 @@ GNOME stays installed, so the session is chosen at login and the trial is revers
   recent launches a little. Launches go through `kstart` and are recorded with the
   activity manager, which keeps the recent list current. `spawnkit-search query
   TEXT` prints the ranking as JSON, `launch` and `history` the rest; learning lives
-  in `~/.local/state/spawnkit/search.json`. Applications' jump-list actions (such as
+  in `~/.local/state/spawnkit/search.json`. Right-clicking an application, file or
+  folder in the menu offers Properties, and an application also Executable
+  Properties, the real file its `Exec` line runs; `spawnkit-search properties
+  [--executable] TARGET` is the same action, opening the file manager's dialog.
+  Baloo indexes file names only, so search finds files; it ships disabled here, and
+  a first login after enabling it indexes the home folder in the background.
+  Applications' jump-list actions (such as
   New Window) are no longer offered in search. (2026-11-05: KRunner listed System
   Settings first for "settings", WhatsApp first for "wa", and a launch through the
   runner started Dolphin in its own app unit and recorded the pick.) Title bars show Windows' minimize, maximize and close on the right. Icons

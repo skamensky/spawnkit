@@ -4,6 +4,9 @@ serve                   run the tech.shmuel.apps KRunner D-Bus runner
 query TEXT              print the ranked matches for TEXT as JSON
 launch APP [--query Q]  launch APP (a desktop file id) and, with Q, learn that Q led to it
 history                 print the learned launches as JSON
+properties [--executable] TARGET
+                        open the Properties dialog of TARGET (a path or file: URL) or, with
+                        --executable, of the program that TARGET (a desktop file) runs
 
 An application scores by how its name matches the query (whole name, name prefix, word prefix,
 initials, letters in order from a word's start, substring, then keywords, generic name and command, then a fuzzy subsequence), plus
@@ -14,11 +17,13 @@ import configparser
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
 import time
 from pathlib import Path
+from urllib.parse import unquote, urlsplit
 
 NAME = "tech.shmuel.apps"
 PATH = "/runner"
@@ -232,6 +237,38 @@ def launch(app_id, query, history, catalog):
     history.learn(" ".join(query.lower().split()), app_id)
 
 
+def local_path(target):
+    return unquote(urlsplit(target).path) if target.startswith("file:") else target
+
+
+def executable(desktop_file):
+    """The real file behind a desktop file's Exec line."""
+    command = shlex.split((read_entry(desktop_file) or {}).get("Exec", ""))
+    if command[:1] == ["env"]:
+        command = command[1:]
+    while command and "=" in command[0]:
+        command = command[1:]
+    if not command:
+        sys.exit(f"{desktop_file} names no program")
+    found = shutil.which(command[0])
+    if found is None:
+        sys.exit(f"{command[0]} is not installed or not on PATH")
+    return os.path.realpath(found)
+
+
+def properties(target, program):
+    path = local_path(target)
+    if program:
+        path = executable(path)
+    if not os.path.lexists(path):
+        sys.exit(f"{path} does not exist")
+    # The file manager owns this dialog. It answers only once the dialog closes, so don't wait.
+    subprocess.run(["dbus-send", "--session", "--type=method_call",
+                    "--dest=org.freedesktop.FileManager1", "/org/freedesktop/FileManager1",
+                    "org.freedesktop.FileManager1.ShowItemProperties",
+                    f"array:string:{Path(os.path.abspath(path)).as_uri()}", "string:"], check=True)
+
+
 def serve():
     import asyncio
 
@@ -256,7 +293,9 @@ def serve():
             matches = []
             for score, learned, app in search(catalog, history, query):
                 category = 100 if score >= 80 or learned else 70
-                properties = {"category": Variant("s", "Applications")}
+                # Kickoff offers Properties for anything with a local URL.
+                properties = {"category": Variant("s", "Applications"),
+                              "urls": Variant("as", [Path(app.path).as_uri()])}
                 if app.comment or app.generic:
                     properties["subtext"] = Variant("s", app.comment or app.generic)
                 matches.append([app.id, app.name, app.icon, category, min(score / 150, 1.0), properties])
@@ -288,6 +327,10 @@ def main(argv):
         launch(argv[1], argv[3] if len(argv) == 4 else "", History(), Catalog())
     elif argv == ["history"]:
         print(json.dumps(History().data, indent=1, sort_keys=True))
+    elif len(argv) == 2 and argv[0] == "properties":
+        properties(argv[1], False)
+    elif argv[:2] == ["properties", "--executable"] and len(argv) == 3:
+        properties(argv[2], True)
     else:
         sys.exit(__doc__)
 

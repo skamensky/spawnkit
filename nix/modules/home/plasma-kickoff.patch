@@ -188,3 +188,94 @@
 +        restoreMode: Binding.RestoreBinding
      }
  }
+--- a/AbstractKickoffItemDelegate.qml
++++ b/AbstractKickoffItemDelegate.qml
+@@ -40,7 +40,7 @@
+ 
+     readonly property Flickable view: ListView.view ?? GridView.view
+     property bool isCategoryListItem: false
+-    readonly property bool hasActionList: model && (model.favoriteId !== null || ("hasActionList" in model && model.hasActionList === true))
++    readonly property bool hasActionList: isLocal || (model && (model.favoriteId !== null || ("hasActionList" in model && model.hasActionList === true)))
+     property bool isSearchResult: false
+ 
+     readonly property bool isSeparator: model && (model.isSeparator === true)
+@@ -60,12 +60,24 @@
+ 
+     property Item dragIconItem: null
+ 
++    // Apps, files and folders all have a local URL, and all offer Properties.
++    readonly property bool isLocal: url.toString().startsWith("file:")
++
+     down: mouseArea.pressed || dragHandler.active
+ 
++    // Failures reach the user: the menu has already closed by the time the command ends.
++    function propertiesAction(text, icon, flags) {
++        const target = "'" + url.toString().replace(/'/g, "'\\''") + "'";
++        return {
++            text, icon,
++            command: `out=$(spawnkit-search properties ${flags}${target} 2>&1) || notify-send -a Launcher -i dialog-error '${text}' "$out"`,
++        };
++    }
++
+     function openActionMenu(x = undefined, y = undefined) {
+         if (!hasActionList) { return; }
+ 
+-        let actions = Array.from(model.actionList);
++        let actions = Array.from(model.actionList ?? []);
+         const favoriteActions = Tools.createFavoriteActions(
+             i18n, //i18n() function callback // qmllint disable unqualified
+             root.view.model.favoritesModel,
+@@ -90,6 +102,16 @@
+             }
+         }
+ 
++        if (isLocal) {
++            if (actions.length > 0) {
++                actions.push({ type: "separator" });
++            }
++            actions.push(propertiesAction(i18n("Properties"), "document-properties", ""));
++            if (url.toString().endsWith(".desktop")) {
++                actions.push(propertiesAction(i18n("Executable Properties"), "application-x-executable", "--executable "));
++            }
++        }
++
+         if (actions && actions.length > 0) {
+             ActionMenu.plasmoid = kickoff;
+             ActionMenu.menu.visualParent = root;
+--- a/ActionMenu.qml
++++ b/ActionMenu.qml
+@@ -14,6 +14,7 @@
+ import QtQuick
+ import org.kde.plasma.plasmoid
+ import org.kde.plasma.extras as PlasmaExtras
++import org.kde.plasma.plasma5support as P5Support
+ import "code/tools.js" as Tools
+ 
+ Item {
+@@ -34,6 +35,12 @@
+ 
+     visible: false
+ 
++    P5Support.DataSource {
++        id: runner
++        engine: "executable"
++        onNewData: source => disconnectSource(source)
++    }
++
+     Instantiator {
+         active: root.actionList !== null
+         model: root.actionList
+@@ -76,6 +83,13 @@
+             }
+ 
+             onClicked: {
++                if (modelData.command) {
++                    runner.connectSource(modelData.command)
++                    if (root.plasmoid.hideOnWindowDeactivate) {
++                        root.plasmoid.expanded = false
++                    }
++                    return
++                }
+                 const modelActionTriggered = Tools.triggerAction(
+                     menu.visualParent.view.model,
+                     menu.visualParent.index,
