@@ -271,7 +271,14 @@
          states: [
 --- a/ToolTipDelegate.qml
 +++ b/ToolTipDelegate.qml
-@@ -129,7 +129,7 @@
+@@ -123,13 +123,13 @@
+                 reuseItems: true
+ 
+                 // Lots of spacing with no thumbnails looks bad
+-                spacing: Plasmoid.configuration.showToolTips ? Kirigami.Units.gridUnit : 0
++                spacing: Plasmoid.configuration.showToolTips ? Kirigami.Units.smallSpacing * 2 : 0
+ 
+                 // Required to know whether to display the media player buttons on the first window or not
                  property bool hasTrackInATitle: {
                      var found = false
                      for (var i=0; i<model.items.count && !found; i++) {
@@ -280,6 +287,15 @@
                      }
                      return found
                  }
+@@ -143,7 +143,7 @@
+                 id: delegateModel
+ 
+                 // On Wayland, a tooltip has a significant resizing process, so estimate the size first.
+-                readonly property real estimatedWidth: (toolTipDelegate.isVerticalPanel || !Plasmoid.configuration.showToolTips ? 1 : count) * (toolTipDelegate.tooltipInstanceMaximumWidth + Kirigami.Units.gridUnit) - Kirigami.Units.gridUnit
++                readonly property real estimatedWidth: (toolTipDelegate.isVerticalPanel || !Plasmoid.configuration.showToolTips ? 1 : count) * (toolTipDelegate.tooltipInstanceMaximumWidth + groupToolTipListView.spacing) - groupToolTipListView.spacing
+                 readonly property real estimatedHeight: (toolTipDelegate.isVerticalPanel || !Plasmoid.configuration.showToolTips ? count : 1) * (Plasmoid.configuration.showToolTips ? (toolTipDelegate.tooltipInstanceMaximumWidth / 2 + Kirigami.Units.gridUnit) : Kirigami.Units.gridUnit * 2) - Kirigami.Units.gridUnit
+ 
+                 model: tasksModel
 --- a/ToolTipInstance.qml
 +++ b/ToolTipInstance.qml
 @@ -18,6 +18,7 @@
@@ -324,7 +340,80 @@
  
      // Lots of spacing with no thumbnails looks bad
      spacing: Plasmoid.configuration.showToolTips ? Kirigami.Units.smallSpacing : 0
-@@ -409,7 +435,7 @@
+@@ -120,26 +146,21 @@
+                     elide: Text.ElideRight
+                     text: toolTipDelegate.appName
+                     color: (headerHoverHandler.visible && headerHoverHighlight.pressed) ? Kirigami.Theme.highlightedTextColor : Kirigami.Theme.textColor
+-                    opacity: root.index === 0 ? 1 : 0
+-                    visible: (text.length !== 0) && (root.orientation === ListView.Horizontal || root.index === 0)
++                    // Spawnkit: a horizontal group's icon already names the app.
++                    visible: text.length !== 0 && root.orientation !== ListView.Horizontal && root.index === 0
+                     textFormat: Text.PlainText
+                 }
+                 // window title
+                 PlasmaComponents3.Label {
+                     id: winTitle
+                     Layout.fillWidth: true
+-                    // For horizontal grouped tasks, leave room for two lines so thumbnails align
+-                    Layout.preferredHeight: root.orientation === ListView.Horizontal && lineCount === 1
+-                        ? implicitHeight * 2
+-                        : implicitHeight
+-                    maximumLineCount: 2
++                    // Spawnkit: one line in a horizontal group, so thumbnails align without reserved space.
++                    maximumLineCount: root.orientation === ListView.Horizontal ? 1 : 2
+                     wrapMode: Text.Wrap
+                     elide: Text.ElideRight
+                     verticalAlignment: Text.AlignVCenter
+-                    property bool somethingVisible: (thumbnailSourceItem.visible ||
+-                        appNameHeading.visible || subtext.visible)
+                     text: ((root.titleIncludesTrack && playerController.active) ||
+-                           (root.title === appNameHeading.text && somethingVisible))
++                           (root.title === appNameHeading.text && appNameHeading.visible))
+                           ? "" : root.title
+                     color: (headerHoverHandler.visible && headerHoverHighlight.pressed) ? Kirigami.Theme.highlightedTextColor : Kirigami.Theme.textColor
+                     opacity: 0.75
+@@ -150,18 +171,15 @@
+                 PlasmaComponents3.Label {
+                     id: subtext
+                     Layout.fillWidth: true
+-                    // For horizontal grouped tasks, leave room for two lines so thumbnails align
+-                    Layout.preferredHeight: root.orientation === ListView.Horizontal && lineCount === 1
+-                        ? implicitHeight * 2
+-                        : implicitHeight
+-                    maximumLineCount: 2
++                    // Spawnkit: one line in a horizontal group, so thumbnails align without reserved space.
++                    maximumLineCount: root.orientation === ListView.Horizontal ? 1 : 2
+                     wrapMode: Text.Wrap
+                     elide: Text.ElideRight
+                     verticalAlignment: Text.AlignVCenter
+                     text: toolTipDelegate.isWin ? root.generateSubText() : ""
+                     color: (headerHoverHandler.visible && headerHoverHighlight.pressed) ? Kirigami.Theme.highlightedTextColor : Kirigami.Theme.textColor
+                     opacity: 0.75
+-                    visible: text.length !== 0 && text !== appNameHeading.text
++                    visible: root.orientation === ListView.Horizontal || (text.length !== 0 && text !== appNameHeading.text)
+                     textFormat: Text.PlainText
+                 }
+             }
+@@ -235,7 +253,8 @@
+         id: thumbnailSourceItem
+ 
+         Layout.fillWidth: true
+-        Layout.preferredHeight: Kirigami.Units.gridUnit * 8
++        // Spawnkit: tall enough for a 16:10 window to fill the width.
++        Layout.preferredHeight: Kirigami.Units.gridUnit * 9.5
+ 
+         clip: true
+         visible: Plasmoid.configuration.showToolTips && toolTipDelegate.isWin
+@@ -263,7 +282,7 @@
+             anchors.fill: hoverHandler
+             // Indent a little bit so that neither the thumbnail nor the drop
+             // shadow can cover up the highlight
+-            anchors.margins: Kirigami.Units.smallSpacing * 2
++            anchors.margins: Kirigami.Units.smallSpacing
+ 
+             sourceComponent: root.isMinimized || pipeWireLoader.active ? iconItem : x11Thumbnail
+ 
+@@ -409,7 +428,7 @@
          // If this is changed in the future, test for index != -1 to avoid loading
          // when the instance is going to be destroyed
          active: (toolTipDelegate.parentTask?.tooltipControlsEnabled
@@ -333,7 +422,7 @@
               && ((root.hasTrackInATitle && albumArtImage.available) || (!root.hasTrackInATitle && root.index == 0))) ?? false
  
          asynchronous: true
-@@ -516,6 +542,10 @@
+@@ -516,6 +535,10 @@
      function generateSubText(): string {
          const subTextEntries = [];
  

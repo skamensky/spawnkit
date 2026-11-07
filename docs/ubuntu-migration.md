@@ -679,7 +679,9 @@ GNOME stays installed, so the session is chosen at login and the trial is revers
   idle player hid all its titles and previews), and name each Chrome window's profile
   through `spawnkit-badges chrome-profile TITLE`. Chrome exposes the profile nowhere in
   a window, so that command looks for the title among each open profile's saved tabs
-  and prints nothing if no single profile has it. Its QML is compiled into
+  and prints nothing if no single profile has it. A group's tooltips drop the app
+  name and keep the title and subtext to one line each, so previews align without
+  reserved blank lines. Its QML is compiled into
   a C++ plugin, so the `plasma_taskmanager` host role (Plasma hosts only) downloads
   the matching plasma-desktop tarball (sha256-pinned), builds the applet with
   `taskmanager.patch` against Ubuntu's -dev packages under

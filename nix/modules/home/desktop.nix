@@ -139,7 +139,12 @@ in
       ]
       ++ lib.optionals pkgs.stdenv.hostPlatform.isx86_64 [
         # Linux Chrome lists the Vulkan adapters but hands WebGPU none without this.
-        (google-chrome.override { commandLineArgs = "--enable-features=Vulkan"; })
+        # Without dconf its Nix GTK reads default settings, whose title bar has only a close button.
+        ((google-chrome.override { commandLineArgs = "--enable-features=Vulkan"; }).overrideAttrs (old: {
+          installPhase = old.installPhase + ''
+            wrapProgram $out/bin/google-chrome-stable --prefix GIO_EXTRA_MODULES : ${dconf.lib}/lib/gio/modules
+          '';
+        }))
         zoom-us
       ];
     # GNOME Shell never notices launchers added to a profile directory that a switch
