@@ -378,7 +378,13 @@ in
         # Home Manager switch, after which the window opens once at the values declared here.
         {
           description = "WhatsApp window geometry";
-          match.window-class = { value = "chrome-web.whatsapp.com__-Default"; type = "exact"; };
+          # match-whole compares against "<resource name> <class>" ("chrome chrome-web..."),
+          # which an exact class never equals, so match the class alone.
+          match.window-class = {
+            value = "chrome-web.whatsapp.com__-Default";
+            type = "exact";
+            match-whole = false;
+          };
           apply = {
             position = { value = "100,60"; apply = "remember"; };
             size = { value = "1280,900"; apply = "remember"; };
