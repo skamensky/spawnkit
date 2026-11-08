@@ -823,8 +823,11 @@ GNOME stays installed, so the session is chosen at login and the trial is revers
   fills it, and it follows the selection after 100 ms instead of 300 for arrowing
   through files, and stays on the clicked item rather than following the mouse
   (`InformationPanel showHovered=false`). KIO's image plugins preview pictures, and
-  `textthumbnail` previews Markdown, source code and other text with syntax
-  highlighting; a MIME package in `desktop.nix` makes shell, awk and sed scripts
+  `textthumbnail` previews source code and other text with syntax highlighting.
+  `markdown-thumbnailer.nix` renders Markdown as a GitHub-style page (tables, task
+  lists, strikethrough, images beside the file, highlighted fenced code) through a
+  `.thumbnailer` running `spawnkit-markdown-thumbnail SIZE INPUT OUTPUT`, a small Qt
+  program over md4c and KSyntaxHighlighting, about 0.2 s a file; a MIME package in `desktop.nix` makes shell, awk and sed scripts
   plain text again, which shared-mime-info 2.5 dropped. PDFs come from
   `gsthumbnail` (`kdegraphics-thumbnailers`, base role): Ubuntu's `papers.thumbnailer`
   fails under its AppArmor profile, which lets it write only to GNOME's temporary

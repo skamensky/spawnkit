@@ -166,6 +166,7 @@ in
         # desktop's fonts; without them Hebrew and other scripts draw as empty boxes.
         onlyoffice
         (pkgs.callPackage ./office-thumbnailer.nix { inherit onlyoffice; })
+        (pkgs.callPackage ./markdown-thumbnailer.nix { })
         # Shell, awk and sed scripts are plain text again: shared-mime-info 2.5 declares them
         # only executables, so Dolphin had no text preview for them and editors were not
         # offered to open them. Home Manager merges this into the profile's MIME database.

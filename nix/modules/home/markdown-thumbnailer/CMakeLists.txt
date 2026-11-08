@@ -1,0 +1,8 @@
+cmake_minimum_required(VERSION 3.16)
+project(spawnkit-markdown-thumbnail LANGUAGES CXX)
+set(CMAKE_CXX_STANDARD 17)
+find_package(Qt6 REQUIRED COMPONENTS Gui)
+find_package(KF6SyntaxHighlighting REQUIRED)
+add_executable(spawnkit-markdown-thumbnail main.cpp)
+target_link_libraries(spawnkit-markdown-thumbnail Qt6::Gui KF6::SyntaxHighlighting)
+install(TARGETS spawnkit-markdown-thumbnail)

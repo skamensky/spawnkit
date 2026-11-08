@@ -604,7 +604,8 @@ in
       # outside ODF). Ubuntu's papers.thumbnailer cannot write where KIO asks under its AppArmor
       # profile; gsthumbnail (kdegraphics-thumbnailers, host base role) renders PDFs instead.
       configFile.dolphinrc.PreviewSettings.Plugins = lib.concatStringsSep "," [
-        # Markdown, source code and other text, with syntax highlighting.
+        # Source code and other text, with syntax highlighting; spawnkit-markdown renders
+        # Markdown, as KIO prefers a plugin for the exact type over one for its parent.
         "textthumbnail"
         "directorythumbnail"
         "imagethumbnail"
@@ -626,6 +627,7 @@ in
         "blenderthumbnail"
         "gsthumbnail"
         "spawnkit-office"
+        "spawnkit-markdown"
         "glycin-image-rs"
         "glycin-heif"
         "glycin-jxl"
