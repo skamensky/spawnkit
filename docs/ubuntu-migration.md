@@ -425,7 +425,7 @@ Home Manager module, build/check the flake, then commit and push.
 
 ### D3. Graphics, assistants and language tools
 
-- The native laptop profile declares Firefox, Chrome on x86_64, VS Code, CopyQ,
+- The native laptop profile declares Firefox, Brave, Chrome on x86_64, VS Code, CopyQ,
   ONLYOFFICE 10 on x86_64 (the default for Word, Excel, PowerPoint, OpenDocument, RTF
   and CSV files; PDFs stay in Chrome. It bundles its own Qt and runs through XWayland.
   It reads fonts only from its sandbox, not fontconfig, so it gets copies of the profile's

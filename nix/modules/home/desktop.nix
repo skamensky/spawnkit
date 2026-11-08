@@ -134,6 +134,9 @@ in
       with pkgs;
       [
         firefox
+        # Its nixpkgs wrapper already adds dconf's GIO module; Vulkan stays off because upstream
+        # finds it breaks VA-API video decoding.
+        brave
         (plasmaQt (
           callPackage ./ladybird-rtx.nix {
             ladybird = callPackage ./ladybird.nix { src = inputs.ladybird; };
