@@ -598,12 +598,14 @@ in
       };
       # The Information panel stays on the clicked item; hovering another does not replace it.
       configFile.dolphinrc.InformationPanel.showHovered = false;
-      # Dolphin's previews: KIO's default plugins, less two. opendocumentthumbnail claims Word,
-      # Excel and PowerPoint files and, as KIO prefers compiled plugins, would shadow
+      # Dolphin's previews: KIO's default plugins plus its text one, less two.
+      # opendocumentthumbnail claims Word, Excel and PowerPoint files and, as KIO prefers compiled plugins, would shadow
       # spawnkit-office, though it only shows a thumbnail already embedded in the file (rare
       # outside ODF). Ubuntu's papers.thumbnailer cannot write where KIO asks under its AppArmor
       # profile; gsthumbnail (kdegraphics-thumbnailers, host base role) renders PDFs instead.
       configFile.dolphinrc.PreviewSettings.Plugins = lib.concatStringsSep "," [
+        # Markdown, source code and other text, with syntax highlighting.
+        "textthumbnail"
         "directorythumbnail"
         "imagethumbnail"
         "jpegthumbnail"

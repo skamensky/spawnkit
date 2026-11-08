@@ -166,6 +166,17 @@ in
         # desktop's fonts; without them Hebrew and other scripts draw as empty boxes.
         onlyoffice
         (pkgs.callPackage ./office-thumbnailer.nix { inherit onlyoffice; })
+        # Shell, awk and sed scripts are plain text again: shared-mime-info 2.5 declares them
+        # only executables, so Dolphin had no text preview for them and editors were not
+        # offered to open them. Home Manager merges this into the profile's MIME database.
+        (pkgs.writeTextDir "share/mime/packages/spawnkit-scripts-are-text.xml" ''
+          <?xml version="1.0" encoding="UTF-8"?>
+          <mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
+            <mime-type type="text/x-shellscript"><sub-class-of type="text/plain"/></mime-type>
+            <mime-type type="text/x-awk"><sub-class-of type="text/plain"/></mime-type>
+            <mime-type type="text/x-sed"><sub-class-of type="text/plain"/></mime-type>
+          </mime-info>
+        '')
       ];
     # GNOME Shell never notices launchers added to a profile directory that a switch
     # replaces, so link every profile app into ~/.local/share/applications, which stays
