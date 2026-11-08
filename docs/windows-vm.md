@@ -407,9 +407,14 @@ and recovery; routine automation can use SSH.
   through Looking Glass's SPICE connection while the viewer runs. Text and images
   copied in Windows reach the Ubuntu clipboard, so CopyQ keeps them in its history;
   images also go from Ubuntu to Windows.
-- **Audio:** the ICH9 HDA device uses the `micro` codec, so Windows sees Speakers
-  and a Microphone (not line out/in). Looking Glass carries both over SPICE to
-  PipeWire; `vm-view` passes `audio:micDefault=allow`, so calls open the microphone
+- **Audio:** Looking Glass presents an emulated "Looking Glass USB Audio" device
+  (speakers and microphone) through the domain's SPICE USB redirection channel
+  (`redirdev type='spicevmc'`) and carries it to PipeWire. While that device is
+  active the client leaves SPICE's classic playback and record channels closed, so
+  without the channel Windows has no working audio at all. The ICH9 HDA device
+  (`micro` codec: Speakers and a Microphone) remains as the classic path for
+  `spice:usbAudio=no`. Windows apps must use the Looking Glass USB Audio
+  endpoints. A viewer only sees a hot-plugged channel after it reconnects. `vm-view` passes `audio:micDefault=allow`, so calls open the microphone
   without a prompt (Looking Glass still shows its recording indicator). The desktop
   launcher picks up launcher changes only after a Home Manager switch.
 - **Keyboard and mouse:** while focused, Looking Glass grabs the keyboard

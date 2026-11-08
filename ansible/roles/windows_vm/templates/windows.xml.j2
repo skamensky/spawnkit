@@ -54,8 +54,12 @@
     <filesystem type='mount' accessmode='passthrough'><driver type='virtiofs'/><source dir='{{ cfg.windows_share }}'/><target dir='spawnkit-share'/></filesystem>
 {% endif %}
     <video><model type='{{ cfg.windows_video }}'/></video>
-    <!-- The micro codec presents a speaker and a microphone rather than line out and line in; Looking
-         Glass carries both over SPICE. -->
+    <!-- Looking Glass presents its emulated USB audio device (speakers and microphone) through this
+         SPICE USB redirection channel; while that device is active it leaves SPICE's classic playback
+         and record channels closed, so without the channel Windows has no working audio. -->
+    <redirdev bus='usb' type='spicevmc'/>
+    <!-- The classic SPICE audio fallback (spice:usbAudio=no). The micro codec presents a speaker and
+         a microphone rather than line out and line in. -->
     <sound model='ich9'><codec type='micro'/></sound><audio id='1' type='spice'/>
     <tpm model='tpm-crb'><backend type='emulator' version='2.0'/></tpm>
 {% for device in cfg.gpu_devices %}
