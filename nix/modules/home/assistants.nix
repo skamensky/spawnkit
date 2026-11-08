@@ -37,7 +37,9 @@ let
     text = ''
       if [ "''${1:-}" = --window ]; then
         shift
-        if pgrep -u "$(id -u)" -f -- "--class=${agentClass}" >/dev/null; then
+        # Anchor on Ghostty's own argv[0] so a shell whose command line merely mentions the
+        # class does not count as the window.
+        if pgrep -u "$(id -u)" -f -- "^[^ ]*ghostty[^ ]* .*--class=${agentClass}" >/dev/null; then
           # A loaded KWin script runs once; unload it so the next focus can load it again.
           id=$(qdbus6 org.kde.KWin /Scripting org.kde.kwin.Scripting.loadScript ${focusAgent} spawnkit-agent-focus)
           qdbus6 org.kde.KWin "/Scripting/Script$id" org.kde.kwin.Script.run >/dev/null
