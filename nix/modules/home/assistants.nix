@@ -17,7 +17,7 @@ let
     runtimeInputs = [ pkgs.xdg-utils ];
     text = ''
       if [ "''${1-}" = --desktop ]; then
-        exec xdg-open ${lib.escapeShellArg "claude://code/new?folder=${lib.escapeURL spawnkit}&q=${lib.escapeURL "${marker} "}"}
+        exec xdg-open ${lib.escapeShellArg "claude://code/new?folder=${lib.escapeURL spawnkit}&q=${lib.escapeURL "${marker}\n\n"}"}
       fi
       cd ${lib.escapeShellArg spawnkit}
       exec claude --name Spawnkit --add-dir ${lib.escapeShellArg repo} \
