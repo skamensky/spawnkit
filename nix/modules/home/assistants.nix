@@ -8,17 +8,16 @@ let
   repo = "${config.home.homeDirectory}/repos/skamensky/personal-agent-customizations";
   link = path: config.lib.file.mkOutOfStoreSymlink "${repo}/${path}";
   spawnkit = "${config.home.homeDirectory}/repos/skamensky/spawnkit";
-  # Claude Code in the Spawnkit checkout in agent mode, in this terminal, with the brief
-  # (docs/agent.md) appended to the system prompt. It is read at launch, so editing it needs no
-  # switch. Arguments pass through to claude.
+  # Claude Code in the Spawnkit checkout in agent mode, in this terminal. The brief is the
+  # personal `spawnkit` skill, which any session also loads on its own for machine changes;
+  # agent mode only pins it for the whole session. Arguments pass through to claude.
   spawnkitAgent = pkgs.writeShellApplication {
     name = "spawnkit-agent";
     text = ''
       cd ${lib.escapeShellArg spawnkit}
       exec claude --name Spawnkit --add-dir ${lib.escapeShellArg repo} \
         --permission-mode bypassPermissions \
-        --append-system-prompt "Spawnkit agent mode. docs/agent.md follows.
-      $(cat docs/agent.md)" "$@"
+        --append-system-prompt "Spawnkit agent mode. Every request in this session is a change to, or a question about, Shmuel's machines: load the spawnkit skill before anything else and follow it for the whole session." "$@"
     '';
   };
 in

@@ -5,10 +5,12 @@ including the user environment, host setup and migration procedures. The shared 
 instructions live in ~/repos/skamensky/personal-agent-customizations/AGENTS.md.
 Read them before changing this repository. Follow the RTK shell convention.
 
-**Agent mode.** When the first message or the system prompt says "Spawnkit agent
-mode" (the Spawnkit Agent launcher and `spawnkit-agent` start sessions that way),
-read `docs/agent.md` before anything else and follow it for the whole session:
-every request is a change to, or a question about, Shmuel's machines.
+**Machine changes.** The personal `spawnkit` skill (canonical in
+personal-agent-customizations) is the brief for changing or explaining Shmuel's
+machines: where each change belongs, validation, commit and apply. Load it for
+any such request. When the first message or the system prompt says "Spawnkit
+agent mode" (the Spawnkit Agent launcher and `spawnkit-agent` start sessions that
+way), load it before anything else and follow it for the whole session.
 
 Use `nix/modules/home/` Home Manager modules for user packages, shell configuration, dotfiles,
 repository bootstrap and user services. Use `nix/modules/nixos/` only on
