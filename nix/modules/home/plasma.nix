@@ -561,6 +561,8 @@ in
         ShowCopyToOtherSplitView = false;
         ShowMoveToOtherSplitView = false;
       };
+      # The Information panel stays on the clicked item; hovering another does not replace it.
+      configFile.dolphinrc.InformationPanel.showHovered = false;
       # Dolphin's previews: KIO's default plugins, less two. opendocumentthumbnail claims Word,
       # Excel and PowerPoint files and, as KIO prefers compiled plugins, would shadow
       # spawnkit-office, though it only shows a thumbnail already embedded in the file (rare

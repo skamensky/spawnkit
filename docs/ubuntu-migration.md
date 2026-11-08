@@ -821,7 +821,8 @@ GNOME stays installed, so the session is chosen at login and the trial is revers
   In the Information panel (F11) the preview takes all the height the name and
   details leave rather than a square as wide as the panel, so a tall page or receipt
   fills it, and it follows the selection after 100 ms instead of 300 for arrowing
-  through files. KIO's image plugins preview pictures. PDFs come from
+  through files, and stays on the clicked item rather than following the mouse
+  (`InformationPanel showHovered=false`). KIO's image plugins preview pictures. PDFs come from
   `gsthumbnail` (`kdegraphics-thumbnailers`, base role): Ubuntu's `papers.thumbnailer`
   fails under its AppArmor profile, which lets it write only to GNOME's temporary
   paths. `office-thumbnailer.nix` adds Word, PowerPoint, Excel, RTF and OpenDocument
