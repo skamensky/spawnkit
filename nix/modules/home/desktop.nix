@@ -210,6 +210,12 @@ in
     dconf.settings."org/gnome/shell".enabled-extensions = [ quietAttentionUuid ];
     # Encodes through /run/opengl-driver: VA-API on the Intel iGPU, NVENC on the RTX
     # whenever the Windows VM is not holding it.
+    # GPU-rendered terminal beside Konsole, which stays the default terminal. Its shell
+    # integration (prompt marks, cwd for new tabs) is injected automatically for bash.
+    programs.ghostty = {
+      enable = true;
+      settings.font-family = "Hack";
+    };
     programs.obs-studio.enable = true;
     # nixpkgs adds the driver path only to OBS's libraries; its NVENC probe in bin/ (behind the
     # Qt wrapper) needs it too.
