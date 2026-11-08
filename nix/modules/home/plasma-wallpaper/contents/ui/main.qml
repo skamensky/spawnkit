@@ -1,9 +1,11 @@
 // The wallpaper's controls on the desktop: a smoked-glass pill with previous and next buttons
-// (spawnkit-wallpaper previous|next). Hovering it slides out the photo's title and credit.
+// (spawnkit-wallpaper previous|next). Hovering it slides out the photo's title and credit;
+// clicking that searches Google for the photo.
 // Built from the Spawnkit UI kit (Theme's glass tokens, IconButton), copied in as ./Spawnkit.
 import QtQuick
 import QtQuick.Effects
 import QtQuick.Layouts
+import QtQuick.Controls as QQC2
 import org.kde.plasma.plasmoid
 import org.kde.plasma.core as PlasmaCore
 import org.kde.plasma.plasma5support as P5Support
@@ -14,7 +16,7 @@ PlasmoidItem {
     id: root
 
     readonly property string command: "@wallpaper@"
-    property var photo: ({ title: "", author: "", license: "" })
+    property var photo: ({ title: "", author: "", license: "", url: "" })
     property bool busy: false
 
     Plasmoid.backgroundHints: PlasmaCore.Types.NoBackground
@@ -90,6 +92,16 @@ PlasmoidItem {
                     enabled: Theme.motion
                     NumberAnimation { duration: Theme.quick }
                 }
+                // Clicking the credit looks the photo itself up with Google Lens in the default
+                // browser, which names the place and finds similar shots.
+                HoverHandler { id: captionHover; cursorShape: Qt.PointingHandCursor }
+                TapHandler {
+                    onTapped: Qt.openUrlExternally("https://lens.google.com/uploadbyurl?url="
+                        + encodeURIComponent(root.photo.url))
+                }
+                QQC2.ToolTip.visible: captionHover.hovered
+                QQC2.ToolTip.delay: 500
+                QQC2.ToolTip.text: i18n("Search Google for this photo")
                 Text {
                     width: Math.min(implicitWidth, 200)
                     text: root.photo.title

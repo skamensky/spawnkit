@@ -4,7 +4,7 @@ daily    shows the next photo once per day, and otherwise reapplies today's
 next     shows the next photo now (the desktop widget's buttons)
 previous shows the previous photo now
 current  prints today's photo
-Each command prints the photo shown as JSON: title, author, license, source.
+Each command prints the photo shown as JSON: title, author, license, source, url.
 """
 
 import datetime
@@ -47,7 +47,7 @@ def main():
     elif command != "current":
         sys.exit(f"usage: spawnkit-wallpaper daily|next|previous|current (not {command})")
     photo = PHOTOS[max(state["index"], 0) % len(PHOTOS)]
-    print(json.dumps({k: photo[k] for k in ("title", "author", "license", "source")}, ensure_ascii=False))
+    print(json.dumps({k: photo[k] for k in ("title", "author", "license", "source", "url")}, ensure_ascii=False))
 
 
 main()
