@@ -167,10 +167,12 @@ let
         $src/metadata.json > $dest/metadata.json
     '';
   # Windows' Snap Assist (kwin-snap-assist/contents/ui/main.qml): after a window snaps to half
-  # the screen, the other windows are offered for the free half.
+  # the screen, the other windows are offered for the free half. It is a declarative KWin
+  # effect, not a KWin script: on Wayland only the active surface gets keyboard input, so a
+  # script's own window never sees Escape or the arrows, while an active effect grabs them.
   snapAssist = pkgs.runCommand "kwin-snap-assist" { } ''
-    mkdir -p $out/share/kwin/scripts
-    cp -r ${./kwin-snap-assist} $out/share/kwin/scripts/spawnkitsnapassist
+    mkdir -p $out/share/kwin/effects
+    cp -r ${./kwin-snap-assist} $out/share/kwin/effects/tech.shmuel.snapassist
   '';
   # Unread counts on task manager icons for web apps that show them only inside the page
   # (WhatsApp, read through its window's DevTools port).
@@ -322,7 +324,7 @@ in
       configFile.kwinrc = {
         Plugins = {
           kzonesEnabled = true;
-          spawnkitsnapassistEnabled = true;
+          "tech.shmuel.snapassistEnabled" = true;
           # KWin's bundled script: Meta+D (below) minimizes every window, and again restores them.
           minimizeallEnabled = true;
         };
