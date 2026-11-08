@@ -18,6 +18,7 @@
     ./assistants.nix
     ./desktop.nix
     ./plasma.nix
+    ./wallpaper.nix
   ];
   options.personal = {
     profile = lib.mkOption { type = lib.types.str; };

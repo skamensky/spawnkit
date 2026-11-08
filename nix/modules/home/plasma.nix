@@ -258,7 +258,6 @@ in
           library = "org.kde.kwin.aurorae";
           theme = "__aurorae__svg__Layan";
         };
-        wallpaper = "${layan}/share/wallpapers/Layan/contents/images/2560x1440.png";
       };
       # The session stays unlocked until an explicit lock or log out: no idle lock and no lock on
       # waking from sleep. PowerDevil (brightness keys, power) never suspends on idle either;

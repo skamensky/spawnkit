@@ -1,0 +1,12 @@
+{
+  "KPackageStructure": "Plasma/Applet",
+  "X-Plasma-API-Minimum-Version": "6.0",
+  "KPlugin": {
+    "Id": "tech.shmuel.wallpaper",
+    "Name": "Next wallpaper",
+    "Description": "Skips to the next of the day's nature wallpapers; hover for the photo's credit",
+    "Icon": "preferences-desktop-wallpaper",
+    "Category": "Windows and Tasks",
+    "License": "MIT"
+  }
+}
