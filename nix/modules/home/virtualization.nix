@@ -60,6 +60,17 @@
             '') config.personal.virtualization.passthroughAudio}]
           '';
         };
+    # Looking Glass tags its streams media.role=Music, and WirePlumber restores volume and
+    # mute per role, so any muted Music stream (an older viewer synced Windows' mute into
+    # it) silenced Windows. The USB audio device leaves volume to Windows, so restore nothing.
+    xdg.configFile."wireplumber/wireplumber.conf.d/52-spawnkit-looking-glass.conf".text = ''
+      stream.rules = [
+        {
+          matches = [ { application.name = "Looking Glass" } ]
+          actions = { update-props = { state.restore-props = false } }
+        }
+      ]
+    '';
     # Launchers live in ~/.local/share/applications rather than the profile: GNOME
     # Shell never notices launchers added to a profile directory that a switch
     # replaces, so a new one stays out of the dock until the next login.

@@ -414,7 +414,10 @@ and recovery; routine automation can use SSH.
   without the channel Windows has no working audio at all. The ICH9 HDA device
   (`micro` codec: Speakers and a Microphone) remains as the classic path for
   `spice:usbAudio=no`. Windows apps must use the Looking Glass USB Audio
-  endpoints. A viewer only sees a hot-plugged channel after it reconnects. `vm-view` passes `audio:micDefault=allow`, so calls open the microphone
+  endpoints. A viewer only sees a hot-plugged channel after it reconnects. Looking
+  Glass tags its streams `media.role=Music`, which WirePlumber restores volume and
+  mute by, so a saved muted Music state once silenced Windows; a WirePlumber rule
+  (loaded when WirePlumber restarts) stops restoring Looking Glass streams. `vm-view` passes `audio:micDefault=allow`, so calls open the microphone
   without a prompt (Looking Glass still shows its recording indicator). The desktop
   launcher picks up launcher changes only after a Home Manager switch.
 - **Keyboard and mouse:** while focused, Looking Glass grabs the keyboard
