@@ -1,7 +1,8 @@
 """Rotates the Plasma wallpaper through the pinned nature photos (wallpapers.json).
 
 daily    shows the next photo once per day, and otherwise reapplies today's
-next     shows the next photo now (the desktop widget's button)
+next     shows the next photo now (the desktop widget's buttons)
+previous shows the previous photo now
 current  prints today's photo
 Each command prints the photo shown as JSON: title, author, license, source.
 """
@@ -37,15 +38,16 @@ def main():
     command = sys.argv[1] if len(sys.argv) > 1 else "current"
     state = load()
     today = datetime.date.today().isoformat()
-    if command == "next" or (command == "daily" and state["date"] != today):
-        show({"index": (state["index"] + 1) % len(PHOTOS), "date": today})
+    step = {"next": 1, "previous": -1}.get(command, 1 if command == "daily" and state["date"] != today else 0)
+    if step:
+        show({"index": (state["index"] + step) % len(PHOTOS), "date": today})
         state = load()
     elif command == "daily":
         show(state)
     elif command != "current":
-        sys.exit(f"usage: spawnkit-wallpaper daily|next|current (not {command})")
+        sys.exit(f"usage: spawnkit-wallpaper daily|next|previous|current (not {command})")
     photo = PHOTOS[max(state["index"], 0) % len(PHOTOS)]
-    print(json.dumps({k: photo[k] for k in ("title", "author", "license", "source")}))
+    print(json.dumps({k: photo[k] for k in ("title", "author", "license", "source")}, ensure_ascii=False))
 
 
 main()

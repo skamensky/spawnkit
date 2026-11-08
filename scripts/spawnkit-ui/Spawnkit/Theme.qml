@@ -27,6 +27,19 @@ QtObject {
     readonly property color hairline: Qt.alpha(text, dark ? 0.09 : 0.08)
     readonly property color outline: Qt.alpha(text, dark ? 0.28 : 0.26)
 
+    // Glass: smoked, translucent surfaces for chrome that floats straight on the wallpaper (desktop
+    // controls, overlays). They ignore the colour scheme, since what shows through is a photo,
+    // not a themed window: a dark tint keeps white content legible over bright and dark images.
+    readonly property color glass: Qt.rgba(0.06, 0.07, 0.10, 0.50)
+    readonly property color glassHover: Qt.rgba(0.06, 0.07, 0.10, 0.66)
+    readonly property color glassEdge: Qt.rgba(1, 1, 1, 0.22)
+    readonly property color glassRaised: Qt.rgba(1, 1, 1, 0.14)
+    readonly property color glassPressed: Qt.rgba(1, 1, 1, 0.24)
+    readonly property color glassShadow: Qt.rgba(0, 0, 0, 0.35)
+    readonly property color glassText: "#FFFFFF"
+    readonly property color glassTextSecondary: Qt.rgba(1, 1, 1, 0.82)
+    readonly property color glassTextTertiary: Qt.rgba(1, 1, 1, 0.55)
+
     // Text, in four steps of emphasis.
     readonly property color textSecondary: Qt.alpha(text, 0.64)
     readonly property color textTertiary: Qt.alpha(text, 0.44)

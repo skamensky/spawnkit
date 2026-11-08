@@ -28,29 +28,30 @@ let
     mkdir -p $(dirname $dest)
     cp -r --no-preserve=mode ${./plasma-wallpaper} $dest
     substituteInPlace $dest/contents/ui/main.qml --replace-fail @wallpaper@ ${wallpaperTool}/bin/spawnkit-wallpaper
+    # The Spawnkit UI kit as a local directory import, as the stats widget carries it.
+    cp -r --no-preserve=mode ${../../../scripts/spawnkit-ui/Spawnkit} $dest/contents/ui/Spawnkit
+    sed -i 's/^import Spawnkit$/import "."/' $dest/contents/ui/Spawnkit/*.qml
   '';
 in
 {
-  # A new nature wallpaper every day, with a small desktop button that skips to the next one.
+  # A new nature wallpaper every day, with small desktop controls for the previous and next one.
   config = lib.mkIf (config.personal.desktop.enable && config.personal.desktop.plasma) {
     home.packages = [
       wallpaperTool
       widget
     ];
-    # Top right of the 2048x1280 (scaled) laptop screen, clear of the bottom panel. plasma-manager's
-    # widget script cannot add widgets while the layout is locked (immutability 2 in plasma.nix), and
-    # scripts cannot unlock it: to apply a change here, stop plasmashell, set General/immutability=1
-    # in plasma-org.kde.plasma.desktop-appletsrc, start it, rerun the script, then set it back to 2.
+    # Top right of the 2048x1280 (scaled) laptop screen, clear of the bottom panel; the pill sits at
+    # the right of this area and widens leftwards on hover.
     programs.plasma.desktop.widgets = [
       {
         name = "tech.shmuel.wallpaper";
         position = {
-          horizontal = 1964;
-          vertical = 20;
+          horizontal = 1708;
+          vertical = 16;
         };
         size = {
-          width = 64;
-          height = 64;
+          width = 320;
+          height = 56;
         };
       }
     ];

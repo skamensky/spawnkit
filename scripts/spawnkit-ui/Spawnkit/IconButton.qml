@@ -1,4 +1,5 @@
-// A small round button holding one symbolic icon, for chrome such as close or copy.
+// A small round button holding one symbolic icon, for chrome such as close or copy. glass draws
+// it for a glass surface (Theme.glass), white on the wallpaper rather than on a themed card.
 import QtQuick
 import QtQuick.Templates as T
 import QtQuick.Controls as QQC2
@@ -10,6 +11,8 @@ T.AbstractButton {
     property string iconName
     property string tooltip
     property int size: 28
+    property real iconScale: 0.5
+    property bool glass: false
 
     implicitWidth: size
     implicitHeight: size
@@ -22,7 +25,8 @@ T.AbstractButton {
 
     background: Rectangle {
         radius: width / 2
-        color: root.pressed ? Theme.raisedPressed : root.hovered ? Theme.raised : "transparent"
+        color: root.pressed ? (root.glass ? Theme.glassPressed : Theme.raisedPressed)
+            : root.hovered ? (root.glass ? Theme.glassRaised : Theme.raised) : "transparent"
         Behavior on color { ColorAnimation { duration: Theme.quick } }
         Rectangle {
             anchors { fill: parent; margins: -2 }
@@ -37,11 +41,12 @@ T.AbstractButton {
     contentItem: Item {
         Kirigami.Icon {
             anchors.centerIn: parent
-            width: root.size * 0.5
+            width: root.size * root.iconScale
             height: width
             source: root.iconName
             isMask: true
-            color: root.hovered ? Theme.text : Theme.textTertiary
+            color: root.glass ? Theme.glassText
+                : root.hovered ? Theme.text : Theme.textTertiary
             Behavior on color { ColorAnimation { duration: Theme.quick } }
         }
     }

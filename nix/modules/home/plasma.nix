@@ -408,6 +408,22 @@ in
       # task's right-click menu keeps only its own actions (pin, unpin, close). Panels stay
       # declared here; the plasma-manager scripts still apply them.
       configFile."plasma-org.kde.plasma.desktop-appletsrc".General.immutability = 2;
+      # A locked shell refuses every widget a layout script adds, and plasma-manager's scripts run
+      # under dash, whose `trap ERR` is invalid, so a refused script still counts as applied and
+      # never reruns. Each login's scripts therefore run unlocked: lockCorona(false) before the
+      # layout scripts (priority 2 and up) and lockCorona(true) after them.
+      startup.startupScript = {
+        unlock_layout = {
+          priority = 1;
+          runAlways = true;
+          text = "qdbus org.kde.plasmashell /PlasmaShell org.kde.PlasmaShell.evaluateScript 'lockCorona(false)'";
+        };
+        relock_layout = {
+          priority = 8;
+          runAlways = true;
+          text = "qdbus org.kde.plasmashell /PlasmaShell org.kde.PlasmaShell.evaluateScript 'lockCorona(true)'";
+        };
+      };
       # Plasma's application runner gives way to spawnkit-search (krunner/dbusplugins below), and
       # search offers no Software Center installs.
       configFile.krunnerrc = {
