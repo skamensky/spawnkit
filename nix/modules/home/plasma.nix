@@ -372,6 +372,20 @@ in
           };
           apply.desktopfile = { value = "spawnkit-task-manager"; apply = "force"; };
         }
+        # WhatsApp's Chrome app window runs on native Wayland, where Chrome cannot place its
+        # windows and opens at a fixed size, so KWin remembers its geometry instead. KWin writes
+        # the remembered values back into kwinrulesrc; plasma-manager resets that file on each
+        # Home Manager switch, after which the window opens once at the values declared here.
+        {
+          description = "WhatsApp window geometry";
+          match.window-class = { value = "chrome-web.whatsapp.com__-Default"; type = "exact"; };
+          apply = {
+            position = { value = "100,60"; apply = "remember"; };
+            size = { value = "1280,900"; apply = "remember"; };
+            maximizehoriz = { value = false; apply = "remember"; };
+            maximizevert = { value = false; apply = "remember"; };
+          };
+        }
       ];
       configFile.spectaclerc = {
         General = {
