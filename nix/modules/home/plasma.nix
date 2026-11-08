@@ -379,6 +379,8 @@ in
       # GDM unlocks GNOME's keyring at login and it already owns org.freedesktop.secrets; KWallet
       # has no wallet and nothing unlocks it, so every secret request (Chrome's, through the
       # portal) opened a KDE Wallet prompt. KWallet stays off; the portal below uses the keyring.
+      # Enabled=false makes kwalletd6 and ksecretd exit at startup. A kwalletd6 that is already
+      # running keeps re-activating ksecretd in a loop until it is stopped.
       configFile.kwalletrc.Wallet = {
         Enabled = false;
         "First Use" = false;

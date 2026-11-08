@@ -674,6 +674,12 @@ GNOME stays installed, so the session is chosen at login and the trial is revers
   CopyQ). KWallet is disabled and `kde-portals.conf` routes the Secret portal to
   GNOME Keyring, which GDM unlocks at login. Before that, each Chrome secret request
   opened a KDE Wallet prompt, and a new Chrome profile hung on a blank page.
+  kwalletd6 and ksecretd both exit at startup while the wallet is disabled, but a
+  kwalletd6 started before the first activation keeps running. It D-Bus-activates
+  ksecretd several times a second, and ksecretd exits each time at about 100% CPU.
+  After the first activation, log out or `kill` that kwalletd6 (2026-11-08: once
+  the stale daemon was stopped, the journal showed no `org.kde.secretservicecompat`
+  activations and GNOME Keyring still owned `org.freedesktop.secrets`).
   Widgets are locked (`immutability=2` with `plasma/allow_configure_when_locked`
   off), so a task's right-click menu has no configure entries. The panel's task
   manager is `tech.shmuel.taskmanager`, a fork of Plasma's icon-only task manager
