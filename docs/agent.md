@@ -1,14 +1,12 @@
 # Spawnkit agent
 
-The Spawnkit Agent launcher entry runs `spawnkit-agent --desktop`. It starts a
-headless agent-mode session in this checkout, which reads this file, and opens it
-in Claude Desktop through `claude://resume`, waiting for the request. (A
-`claude://code/new?folder=` link would make Desktop ask to trust the folder every
-time.) `spawnkit-agent` alone does the same in
-a terminal, and its other arguments pass through to `claude`, for example
+The Spawnkit Agent launcher entry runs `spawnkit-agent` in a terminal. It starts
+Claude Code in this checkout in bypassPermissions mode with this file appended to
+the system prompt, read at launch, so editing it takes effect in the next session
+without a switch. Arguments pass through to `claude`, for example
 `spawnkit-agent -p "why is Meta+D bound to MinimizeAll?"`. `CLAUDE.md` links to
-`AGENTS.md`, whose agent-mode rule sends the session here, so editing this file
-takes effect in the next session without a switch.
+`AGENTS.md`, whose agent-mode rule points other sessions that start with
+"Spawnkit agent mode" here too.
 
 Everything below is the agent's standing brief.
 
