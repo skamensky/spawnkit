@@ -396,13 +396,142 @@ in
         "Plugins/Favorites".plugins = "tech.shmuel.apps";
       };
       # Search finds files by name: Baloo ships off here, and then the file runner answers nothing.
-      configFile.baloofilerc = {
-        "Basic Settings".Indexing-Enabled = true;
-        General = {
-          "only basic indexing" = true;
-          "exclude folders" = "${config.home.homeDirectory}/native-pre-migration/";
+      # Generated data, caches, worktree copies and third-party trees made up three quarters of the
+      # index and buried real files. Setting the filters replaces Baloo's defaults, so they are
+      # listed first (KF 6.24); Baloo adds any defaults a later version introduces on its own.
+      configFile.baloofilerc =
+        let
+          home = config.home.homeDirectory;
+          defaultFilters = [
+            "*~"
+            "*.part"
+            "*.o"
+            "*.la"
+            "*.lo"
+            "*.loT"
+            "*.moc"
+            "moc_*.cpp"
+            "qrc_*.cpp"
+            "ui_*.h"
+            "cmake_install.cmake"
+            "CMakeCache.txt"
+            "CTestTestfile.cmake"
+            "libtool"
+            "config.status"
+            "confdefs.h"
+            "autom4te"
+            "conftest"
+            "confstat"
+            "Makefile.am"
+            "*.gcode"
+            ".ninja_deps"
+            ".ninja_log"
+            "build.ninja"
+            "*.csproj"
+            "*.m4"
+            "*.rej"
+            "*.gmo"
+            "*.pc"
+            "*.omf"
+            "*.aux"
+            "*.tmp"
+            "*.po"
+            "*.vm*"
+            "*.nvram"
+            "*.rcore"
+            "*.swp"
+            "*.swap"
+            "lzo"
+            "litmain.sh"
+            "*.orig"
+            ".histfile.*"
+            ".xsession-errors*"
+            "*.map"
+            "*.so"
+            "*.a"
+            "*.db"
+            "*.qrc"
+            "*.ini"
+            "*.init"
+            "*.img"
+            "*.vdi"
+            "*.vbox*"
+            "vbox.log"
+            "*.qcow2"
+            "*.vmdk"
+            "*.vhd"
+            "*.vhdx"
+            "*.sql"
+            "*.sql.gz"
+            "*.ytdl"
+            "*.tfstate*"
+            "*.class"
+            "*.pyc"
+            "*.pyo"
+            "*.elc"
+            "*.qmlc"
+            "*.jsc"
+            "*.fastq"
+            "*.fq"
+            "*.gb"
+            "*.fasta"
+            "*.fna"
+            "*.gbff"
+            "*.faa"
+            "*.fna"
+            "po"
+            "CVS"
+            ".svn"
+            ".git"
+            "_darcs"
+            ".bzr"
+            ".hg"
+            "CMakeFiles"
+            "CMakeTmp"
+            "CMakeTmpQmake"
+            ".moc"
+            ".obj"
+            ".pch"
+            ".uic"
+            ".npm"
+            ".yarn"
+            ".yarn-cache"
+            "__pycache__"
+            "node_modules"
+            "node_packages"
+            "nbproject"
+            ".terraform"
+            ".venv"
+            "venv"
+            "core-dumps"
+            "lost+found"
+          ];
+        in
+        {
+          "Basic Settings".Indexing-Enabled = true;
+          General = {
+            "only basic indexing" = true;
+            "exclude folders" = lib.concatMapStringsSep "," (dir: "${home}/${dir}/") [
+              "native-pre-migration"
+              "go/pkg"
+              "repos/microsoft/vcpkg"
+              "repos/skamensky/family-desk/records"
+              "repos/skamensky/image-training/docs/review"
+              "repos/skamensky/region-corteza/tmp"
+              "windows-import/ditto"
+              "windows-import/firefox-profiles"
+            ];
+            "exclude filters" = lib.concatStringsSep "," (
+              defaultFilters
+              ++ [
+                "*.worktrees"
+                "build"
+                "tmp_claude"
+                "playwright-report"
+              ]
+            );
+          };
         };
-      };
       configFile.kdeglobals."KDE Action Restrictions"."plasma/allow_configure_when_locked" = false;
       # Konsole (installed by the host base role) opens for Ctrl+Alt+T and "Open Terminal Here".
       configFile.kdeglobals.General = {
