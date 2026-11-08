@@ -334,8 +334,12 @@ in
         };
       };
       shortcuts.kwin = {
-        "Window Maximize" = "Meta+Up";
-        "Window Minimize" = "Meta+Down";
+        # Meta+Up and Meta+Down belong to Snap Assist (kwin-snap-assist), which maximizes and
+        # minimizes a free window and walks a snapped one between its half and its quarters.
+        "Window Maximize" = [ ];
+        "Window Minimize" = [ ];
+        "Snap Assist Up" = "Meta+Up";
+        "Snap Assist Down" = "Meta+Down";
         # As on Windows: Meta+D minimizes everything rather than peeking at the desktop, which
         # brings every window back as soon as anything is clicked.
         "Show Desktop" = [ ];

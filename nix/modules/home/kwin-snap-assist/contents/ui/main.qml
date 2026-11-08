@@ -1,9 +1,15 @@
-// Windows' Snap Assist for KWin: when a window is snapped to the left or right half of its
-// screen and nothing fills the other half, the other windows are offered there. Arrow keys,
-// Tab, Home and End move the highlight, Enter or a click picks a window, and the offer goes
-// away at the first sign it is not wanted: Escape or any other key, a click or tap anywhere
-// else, a window appearing or being activated, the snapped window leaving its half, or a
-// desktop switch.
+// Windows' Snap Assist for KWin: when a window is snapped to a half or a quarter of its
+// screen and the space beside it is free, the other windows are offered for that space (after a
+// quarter, first the other quarter of that side, then the other half). Arrow keys, Tab, Home
+// and End move the highlight, Enter or a click picks a window, and the offer goes away at the
+// first sign it is not wanted: Escape or any other key, a click or tap anywhere else, a window
+// appearing or being activated, the snapped window leaving its place, or a desktop switch.
+//
+// It also owns Meta+Up and Meta+Down, which walk the active window up and down its side of the
+// screen as on Windows: from a half to the top or bottom quarter and back, past the top to
+// maximized, past the bottom to free again; a free window maximizes or minimizes. KWin's own
+// Meta+Left and Meta+Right already turn a half into the corner on that side and carry a window
+// to the next screen when it is pressed toward a screen it already touches.
 //
 // This is a scene effect rather than a KWin script with a window of its own because KWin
 // delivers keyboard input only to the active Wayland surface; a window KWin creates for
@@ -19,10 +25,11 @@ import org.kde.plasma.components as PlasmaComponents
 KWinComponents.SceneEffect {
     id: effect
 
-    // The window that was snapped, the half it left free (in screen coordinates), the windows
-    // offered for it (topmost first) and which of them the keyboard highlights.
+    // The window that was snapped, the place left free beside it (one of the zone names below,
+    // and its rectangle in screen coordinates), the windows offered for it (topmost first) and
+    // which of them the keyboard highlights.
     property var snapped: null
-    property bool freeIsLeft: false
+    property string freeZone: ""
     property rect free: Qt.rect(0, 0, 0, 0)
     property var candidates: []
     property int current: 0
@@ -61,36 +68,63 @@ KWinComponents.SceneEffect {
         settle.restart();
     }
 
-    // The half of its screen that w fills, as {side, free}: side is "left" or "right" and free
-    // the other half in screen coordinates. Null when w fills neither.
-    function half(w) {
-        const area = KWinComponents.Workspace.clientArea(KWinComponents.Workspace.MaximizeArea, w);
-        const split = Math.round(area.width / 2);
-        const left = Qt.rect(area.x, area.y, split, area.height);
-        const right = Qt.rect(area.x + split, area.y, area.width - split, area.height);
-        if (fills(w, left)) {
-            return { side: "left", free: right };
-        }
-        if (fills(w, right)) {
-            return { side: "right", free: left };
-        }
-        return null;
+    // The halves and quarters of w's screen, by zone name.
+    function zones(w) {
+        const a = KWinComponents.Workspace.clientArea(KWinComponents.Workspace.MaximizeArea, w);
+        const xm = Math.round(a.width / 2);
+        const ym = Math.round(a.height / 2);
+        return {
+            full: a,
+            left: Qt.rect(a.x, a.y, xm, a.height),
+            right: Qt.rect(a.x + xm, a.y, a.width - xm, a.height),
+            topleft: Qt.rect(a.x, a.y, xm, ym),
+            bottomleft: Qt.rect(a.x, a.y + ym, xm, a.height - ym),
+            topright: Qt.rect(a.x + xm, a.y, a.width - xm, ym),
+            bottomright: Qt.rect(a.x + xm, a.y + ym, a.width - xm, a.height - ym)
+        };
     }
 
-    // Offers the other windows when w, the active window, has just come to fill half of its
-    // screen; withdraws an offer that w no longer justifies. A window that was already in its
-    // half and merely had its geometry restated (KWin does that when windows around it come
-    // and go) is not being snapped, so it gets no new offer.
+    // The zone w fills, or null when it fills none.
+    function zone(w) {
+        const r = zones(w);
+        return Object.keys(r).find(name => fills(w, r[name])) || null;
+    }
+
+    // What to fill once a window took a zone, most natural first: the rest of its side, then
+    // the other side.
+    readonly property var nextZones: ({
+        left: ["right"],
+        right: ["left"],
+        topleft: ["bottomleft", "right"],
+        bottomleft: ["topleft", "right"],
+        topright: ["bottomright", "left"],
+        bottomright: ["topright", "left"]
+    })
+
+    // KWin's quick-tile action that puts the active window in a zone.
+    readonly property var tileSlot: ({
+        left: "slotWindowQuickTileLeft",
+        right: "slotWindowQuickTileRight",
+        topleft: "slotWindowQuickTileTopLeft",
+        bottomleft: "slotWindowQuickTileBottomLeft",
+        topright: "slotWindowQuickTileTopRight",
+        bottomright: "slotWindowQuickTileBottomRight"
+    })
+
+    // Offers the other windows when w, the active window, has just come to fill a half or a
+    // quarter of its screen; withdraws an offer that w no longer justifies. A window that was
+    // already in its zone and merely had its geometry restated (KWin does that when windows
+    // around it come and go) is not being snapped, so it gets no new offer.
     property var filled: new Map()
     function consider(w) {
-        const now = eligible(w) ? half(w) : null;
-        const settled = now !== null && filled.get(w) === now.side;
+        const now = eligible(w) ? zone(w) : null;
+        const settled = now !== null && filled.get(w) === now;
         if (now) {
-            filled.set(w, now.side);
+            filled.set(w, now);
         } else {
             filled.delete(w);
         }
-        if (!now || w.minimized || w.move || w.resize || w !== KWinComponents.Workspace.activeWindow) {
+        if (!now || now === "full" || w.minimized || w.move || w.resize || w !== KWinComponents.Workspace.activeWindow) {
             if (w === snapped) {
                 dismiss();
             }
@@ -99,19 +133,25 @@ KWinComponents.SceneEffect {
         if (settled && !visible) {
             return;
         }
-        const other = now.free;
+        const r = zones(w);
         const others = KWinComponents.Workspace.stackingOrder.slice().reverse()
             .filter(c => c !== w && eligible(c) && c.output === w.output);
-        if (others.length === 0 || others.some(c => !c.minimized && fills(c, other))) {
+        const covered = name => others.some(c => !c.minimized && fills(c, r[name]));
+        const taken = name => covered(name)
+            || (name === "left" && covered("topleft") && covered("bottomleft"))
+            || (name === "right" && covered("topright") && covered("bottomright"));
+        const target = nextZones[now].find(name => !taken(name));
+        if (others.length === 0 || !target) {
             dismiss();
             return;
         }
+        const other = r[target];
         // The same offer again (the snapped window settled in a few steps): keep the highlight.
         if (!(visible && w === snapped && sameRect(other, free) && sameWindows(others, candidates))) {
             current = 0;
         }
         snapped = w;
-        freeIsLeft = now.side === "right";
+        freeZone = target;
         free = other;
         candidates = others;
         visible = true;
@@ -136,15 +176,77 @@ KWinComponents.SceneEffect {
             dismiss();
             return;
         }
-        const toLeft = freeIsLeft;
+        const slot = tileSlot[freeZone];
         dismiss();
         c.minimized = false;
         KWinComponents.Workspace.activeWindow = c;
-        if (toLeft) {
-            KWinComponents.Workspace.slotWindowQuickTileLeft();
-        } else {
-            KWinComponents.Workspace.slotWindowQuickTileRight();
+        KWinComponents.Workspace[slot]();
+    }
+
+    // Meta+Up and Meta+Down on the active window. KWin's quick-tile actions combine: Top on a
+    // half gives that side's top quarter, Top on a bottom quarter gives the half back, and the
+    // same direction again untiles (or moves to the screen in that direction, if any).
+    function up() {
+        const w = KWinComponents.Workspace.activeWindow;
+        if (!w || w.deleted) {
+            return;
         }
+        switch (zone(w)) {
+        case "full":
+            break;
+        case "left":
+        case "right":
+        case "bottomleft":
+        case "bottomright":
+            KWinComponents.Workspace.slotWindowQuickTileTop();
+            break;
+        case "topleft":
+        case "topright":
+            KWinComponents.Workspace.slotWindowMaximize();
+            break;
+        default:
+            if (w.maximizable) {
+                KWinComponents.Workspace.slotWindowMaximize();
+            }
+        }
+    }
+
+    function down() {
+        const w = KWinComponents.Workspace.activeWindow;
+        if (!w || w.deleted) {
+            return;
+        }
+        switch (zone(w)) {
+        case "full":
+            KWinComponents.Workspace.slotWindowMaximize();
+            break;
+        case "left":
+        case "right":
+        case "topleft":
+        case "topright":
+        case "bottomleft":
+        case "bottomright":
+            KWinComponents.Workspace.slotWindowQuickTileBottom();
+            break;
+        default:
+            if (w.minimizable) {
+                KWinComponents.Workspace.slotWindowMinimize();
+            }
+        }
+    }
+
+    KWinComponents.ShortcutHandler {
+        name: "Snap Assist Up"
+        text: "Snap Assist: window up (maximize, top quarter)"
+        sequence: "Meta+Up"
+        onActivated: effect.up()
+    }
+
+    KWinComponents.ShortcutHandler {
+        name: "Snap Assist Down"
+        text: "Snap Assist: window down (bottom quarter, restore, minimize)"
+        sequence: "Meta+Down"
+        onActivated: effect.down()
     }
 
     function move(delta, wrap) {
