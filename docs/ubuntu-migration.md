@@ -803,7 +803,9 @@ GNOME stays installed, so the session is chosen at login and the trial is revers
   it every 15 minutes, and `events --from --to` and `status` print JSON from that
   copy, which the clock reads. KZones adds Windows-style snap layouts while
   dragging a window to the top; Meta+Up maximizes, Meta+Down minimizes and
-  Meta+Left/Right keep KWin's half tiling. `spawnkitsnapassist`, a KWin script, is
+  Meta+Left/Right keep KWin's half tiling. Meta+D runs KWin's bundled Minimize All script, as on
+  Windows: it minimizes every window and pressing it again restores them (Show
+  Desktop, which brings them all back at the first click, is unbound). `spawnkitsnapassist`, a KWin script, is
   Windows' Snap Assist: once a window fills half the screen, the other windows on
   that screen show as thumbnails over the free half; clicking one snaps it there,
   Escape or a click outside dismisses them. Dolphin is forked as well: the `dolphin`
@@ -816,6 +818,18 @@ GNOME stays installed, so the session is chosen at login and the trial is revers
   Open With (files), Rename, Create New, Cut, Copy, Copy Location, Move to Trash,
   Open Terminal Here and Properties. The patch also widens the Places panel to fit
   its longest name, up to a third of the window; dragging it wider still works.
+  In the Information panel (F11) the preview takes all the height the name and
+  details leave rather than a square as wide as the panel, so a tall page or receipt
+  fills it, and it follows the selection after 100 ms instead of 300 for arrowing
+  through files. Images and PDFs (Ubuntu's `papers.thumbnailer`) already have
+  previews; `office-thumbnailer.nix` adds Word, PowerPoint, Excel and RTF through a
+  freedesktop `.thumbnailer` in the profile that KIO runs: `spawnkit-office-thumbnail
+  SIZE INPUT OUTPUT` renders the first page with ONLYOFFICE's x2t converter. x2t
+  needs the font list ONLYOFFICE writes on its first run, so until ONLYOFFICE has
+  been opened once these files keep their icons. Host builds of Dolphin and the
+  task manager run one compile job per 1.5 GB available (at most one per CPU):
+  unbounded, 32 compilers beside the Windows VM set off the OOM killer, which killed
+  the desktop Claude app on 2026-11-08.
   `spawnkit-places list` prints Places as JSON and `hide [--section S] [URL]` hides
   entries; activation hides Desktop, Music and the Recent section (Recent Files,
   Recent Locations, Modified Today and Yesterday). An already open Dolphin keeps the

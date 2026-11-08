@@ -59,6 +59,9 @@ let
     setCommands(commands().filter(function(c) { return c.name !== name })
       .concat([{name: name, isScript: true, cmd: script}]))
   '';
+  onlyoffice =
+    inputs.nixpkgs-unstable.legacyPackages.${pkgs.stdenv.hostPlatform.system}.onlyoffice-desktopeditors.override
+      { extraFontPackages = documentFonts; };
   # Common web and document fonts, so pages and documents that name Verdana, Arial,
   # Calibri and the like render as designed instead of a fallback.
   documentFonts = with pkgs; [
@@ -161,9 +164,8 @@ in
         # nixpkgs-unstable first; take it from nixpkgs once nixos-unstable has 10.0 or later.
         # It reads fonts only from its own sandbox, not fontconfig, so it gets copies of the
         # desktop's fonts; without them Hebrew and other scripts draw as empty boxes.
-        (inputs.nixpkgs-unstable.legacyPackages.${pkgs.stdenv.hostPlatform.system}.onlyoffice-desktopeditors.override {
-          extraFontPackages = documentFonts;
-        })
+        onlyoffice
+        (pkgs.callPackage ./office-thumbnailer.nix { inherit onlyoffice; })
       ];
     # GNOME Shell never notices launchers added to a profile directory that a switch
     # replaces, so link every profile app into ~/.local/share/applications, which stays

@@ -324,6 +324,8 @@ in
         Plugins = {
           kzonesEnabled = true;
           spawnkitsnapassistEnabled = true;
+          # KWin's bundled script: Meta+D (below) minimizes every window, and again restores them.
+          minimizeallEnabled = true;
         };
         Effect-translucency = {
           Inactive = 92;
@@ -333,6 +335,10 @@ in
       shortcuts.kwin = {
         "Window Maximize" = "Meta+Up";
         "Window Minimize" = "Meta+Down";
+        # As on Windows: Meta+D minimizes everything rather than peeking at the desktop, which
+        # brings every window back as soon as anything is clicked.
+        "Show Desktop" = [ ];
+        MinimizeAll = "Meta+D";
         "Window Quick Tile Top" = [ ];
         "Window Quick Tile Bottom" = [ ];
         # KZones registers its actions in KWin's component and claims Super+Space by default;

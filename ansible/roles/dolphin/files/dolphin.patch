@@ -112,3 +112,31 @@
  Q_SIGNALS:
      void errorMessage(const QString &error);
      void storageTearDownRequested(const QString &mountPath);
+--- a/src/panels/information/informationpanelcontent.cpp
++++ b/src/panels/information/informationpanelcontent.cpp
+@@ -136,8 +136,11 @@
+     QScroller::grabGesture(viewport, QScroller::TouchGesture);
+     viewport->installEventFilter(this);
+ 
+-    layout->addWidget(m_preview);
+-    layout->addWidget(m_mediaWidget);
++    // Spawnkit: the preview takes every pixel the name and metadata leave, so a tall page or
++    // receipt fills the panel's height instead of a square as wide as the panel.
++    m_preview->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
++    layout->addWidget(m_preview, 1);
++    layout->addWidget(m_mediaWidget, 1);
+     layout->addWidget(m_nameLabel);
+     layout->addWidget(new KSeparator());
+     layout->addWidget(m_configureLabel);
+--- a/src/panels/information/informationpanel.cpp
++++ b/src/panels/information/informationpanel.cpp
+@@ -392,7 +392,8 @@
+ void InformationPanel::init()
+ {
+     m_infoTimer = new QTimer(this);
+-    m_infoTimer->setInterval(300);
++    // Spawnkit: 100 ms instead of 300, so arrowing through files previews each one promptly.
++    m_infoTimer->setInterval(100);
+     m_infoTimer->setSingleShot(true);
+     connect(m_infoTimer, &QTimer::timeout, this, &InformationPanel::slotInfoTimeout);
+ 
