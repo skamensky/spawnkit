@@ -8,14 +8,20 @@ let
   repo = "${config.home.homeDirectory}/repos/skamensky/personal-agent-customizations";
   link = path: config.lib.file.mkOutOfStoreSymlink "${repo}/${path}";
   spawnkit = "${config.home.homeDirectory}/repos/skamensky/spawnkit";
-  # Claude Code in the Spawnkit checkout, briefed as the machine agent. The brief is read from the
-  # checkout at launch so editing docs/agent.md needs no switch; arguments pass through to claude.
+  # Claude Code in the Spawnkit checkout in agent mode: its CLAUDE.md (AGENTS.md) then has it read
+  # docs/agent.md. --desktop opens a Claude Desktop session there with the marker in the prompt box;
+  # otherwise it runs in this terminal and the remaining arguments pass through to claude.
+  marker = "Spawnkit agent mode.";
   spawnkitAgent = pkgs.writeShellApplication {
     name = "spawnkit-agent";
+    runtimeInputs = [ pkgs.xdg-utils ];
     text = ''
+      if [ "''${1-}" = --desktop ]; then
+        exec xdg-open ${lib.escapeShellArg "claude://code/new?folder=${lib.escapeURL spawnkit}&q=${lib.escapeURL "${marker} "}"}
+      fi
       cd ${lib.escapeShellArg spawnkit}
       exec claude --name Spawnkit --add-dir ${lib.escapeShellArg repo} \
-        --append-system-prompt "$(cat AGENTS.md docs/agent.md)" "$@"
+        --append-system-prompt ${lib.escapeShellArg marker} "$@"
     '';
   };
 in
@@ -26,8 +32,7 @@ in
       name = "Spawnkit Agent";
       genericName = "Machine configuration assistant";
       comment = "Claude, briefed to change this machine through Spawnkit";
-      exec = "spawnkit-agent";
-      terminal = true;
+      exec = "spawnkit-agent --desktop";
       icon = "${./plasma-start-icon.svg}";
       categories = [
         "Utility"

@@ -1,10 +1,12 @@
 # Spawnkit agent
 
-`spawnkit-agent` (the "Spawnkit Agent" launcher entry) starts Claude Code in this
-checkout with this file and `AGENTS.md` appended to its system prompt. Both are read
-from the checkout at launch, so editing them takes effect on the next session
-without a Home Manager switch. Arguments pass through to `claude`, for example
-`spawnkit-agent -p "why is Meta+D bound to MinimizeAll?"` for a one-shot answer.
+The Spawnkit Agent launcher entry runs `spawnkit-agent --desktop`, which opens a new
+Claude Desktop Code session in this checkout with "Spawnkit agent mode." already in
+the prompt box: type the request after it. `spawnkit-agent` alone does the same in
+a terminal, and its other arguments pass through to `claude`, for example
+`spawnkit-agent -p "why is Meta+D bound to MinimizeAll?"`. `CLAUDE.md` links to
+`AGENTS.md`, whose agent-mode rule sends the session here, so editing this file
+takes effect in the next session without a switch.
 
 Everything below is the agent's standing brief.
 
