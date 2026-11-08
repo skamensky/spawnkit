@@ -52,6 +52,18 @@ function bytes(n) {
     return Math.round(n / 1024) + " KiB"
 }
 
+function rate(n) {
+    return n < 1024 ? Math.round(n) + " B/s" : bytes(n) + "/s"
+}
+
+// The network graph's top: the smallest power of two from 64 KiB/s that holds every reading.
+function ceiling(peak) {
+    let top = 65536
+    while (top < peak)
+        top *= 2
+    return top
+}
+
 // Whole percents, with a decimal only where rounding would hide the figure; granular always has one.
 function percent(value, granular) {
     return (granular || value < 0.95 ? value.toFixed(1) : Math.round(value)) + "%"

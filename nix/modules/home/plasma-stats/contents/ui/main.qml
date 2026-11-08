@@ -623,8 +623,8 @@ PlasmoidItem {
                     font.pointSize: Theme.microSize
                     font.weight: Font.Medium
                     onLinkActivated: {
-                        root.expanded = false
                         processWindow.open()
+                        root.expanded = false
                     }
                     HoverHandler { cursorShape: parent.hoveredLink ? Qt.PointingHandCursor : Qt.ArrowCursor }
                 }

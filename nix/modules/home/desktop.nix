@@ -134,9 +134,9 @@ in
       with pkgs;
       [
         firefox
-        # Its nixpkgs wrapper already adds dconf's GIO module; Vulkan stays off because upstream
-        # finds it breaks VA-API video decoding.
-        brave
+        # Its nixpkgs wrapper already adds dconf's GIO module. Vulkan is on for WebGPU, like
+        # Chrome; nixpkgs leaves it off by default because it can break VA-API video decoding.
+        (brave.override { enableVulkan = true; })
         (plasmaQt (
           callPackage ./ladybird-rtx.nix {
             ladybird = callPackage ./ladybird.nix { src = inputs.ladybird; };

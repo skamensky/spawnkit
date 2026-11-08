@@ -425,7 +425,8 @@ Home Manager module, build/check the flake, then commit and push.
 
 ### D3. Graphics, assistants and language tools
 
-- The native laptop profile declares Firefox, Brave, Chrome on x86_64, VS Code, CopyQ,
+- The native laptop profile declares Firefox, Brave (with Vulkan on for WebGPU, which nixpkgs
+  leaves off because it can break VA-API video decoding; untested on the RTX), Chrome on x86_64, VS Code, CopyQ,
   ONLYOFFICE 10 on x86_64 (the default for Word, Excel, PowerPoint, OpenDocument, RTF
   and CSV files; PDFs stay in Chrome. It bundles its own Qt and runs through XWayland.
   It reads fonts only from its sandbox, not fontconfig, so it gets copies of the profile's
@@ -643,7 +644,11 @@ GNOME stays installed, so the session is chosen at login and the trial is revers
   `granularProcesses`, puts a decimal on every figure. Rows re-rank at
   most every 2 seconds and hold still while pointed at. End sends SIGTERM to the
   process or the whole group and waits 3 seconds; if anything survives the button
-  becomes Force kill (SIGKILL). Processes the desktop session needs (plasmashell,
+  becomes Force kill (SIGKILL). Above the list, Task Manager-style cards graph the
+  machine's CPU, memory, graphics (integrated and discrete) and network (physical
+  interfaces only) over the last minute, from the `machine` block of the same
+  `processes` reading; the snapshot reports `network` too. All processes brings an
+  already open window to the front. Processes the desktop session needs (plasmashell,
   kwin, systemd, dbus and similar) ask for End anyway first, and other users'
   processes show a lock and report permission denied. Right-clicking a row in the
   window or the card's list copies `spawnkit-stats details --text` for it, or for

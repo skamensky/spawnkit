@@ -2,7 +2,8 @@
 
 spawnkit-stats [--top N]      one snapshot of processor, graphics, memory, swap and disk use, with the
                               N busiest processes when asked
-spawnkit-stats processes      every process, grouped by the app or service that owns it
+spawnkit-stats processes      every process, grouped by the app or service that owns it, with the
+                              machine's CPU, memory, graphics and network use over the same interval
 spawnkit-stats signal PID:START...  end processes with SIGTERM (--term) or SIGKILL (--kill) and report
                               which exited within --wait seconds
 spawnkit-stats details PID:START...  what each process is: executable, parent, unit, start time and
@@ -10,7 +11,9 @@ spawnkit-stats details PID:START...  what each process is: executable, parent, u
                               and --row open with where it was copied from
 spawnkit-stats load           overall CPU use alone, a cheap reading for the panel's gauge
 
-CPU (overall and per hardware thread) and integrated-GPU load are measured over --interval seconds. The integrated GPU's load is the
+CPU (overall and per hardware thread), integrated-GPU load and network throughput are measured over
+--interval seconds. Network throughput counts physical interfaces only (those backed by a device), so
+bridges, VPN tunnels and the VM's virtual links do not count the same traffic twice. The integrated GPU's load is the
 share of that time it spent out of its RC6 sleep state (i915's rc6_residency_ms). A discrete
 NVIDIA GPU is reported as held by the Windows VM (bound to vfio-pci), asleep (runtime-suspended,
 left asleep rather than woken by a query) or with nvidia-smi's utilisation and temperature.
@@ -27,6 +30,7 @@ import signal as signals
 import subprocess
 import sys
 import time
+from functools import cache
 from pathlib import Path
 
 TICKS = os.sysconf("SC_CLK_TCK")
@@ -121,6 +125,7 @@ def cpu_temperature():
     return None
 
 
+@cache
 def pci_name(device):
     try:
         out = subprocess.run(["lspci", "-s", device.name, "-mm"], capture_output=True, text=True, timeout=2).stdout
@@ -174,6 +179,46 @@ def disk(path):
     stat = os.statvfs(path)
     total = stat.f_blocks * stat.f_frsize
     return {"path": path, "used_bytes": total - stat.f_bfree * stat.f_frsize, "total_bytes": total}
+
+
+def network_counters():
+    """(received, sent) bytes so far over the physical network interfaces."""
+    received = sent = 0
+    for iface in Path("/sys/class/net").iterdir():
+        if (iface / "device").exists():
+            received += read_int(iface / "statistics/rx_bytes") or 0
+            sent += read_int(iface / "statistics/tx_bytes") or 0
+    return received, sent
+
+
+class Interval:
+    """Machine-wide counters read when it starts and again at end(), giving the CPU, integrated-GPU
+    and network use in between."""
+
+    def __init__(self):
+        self.cards = rc6_cards()
+        self.cpu_before = cpu_times()
+        self.rc6 = {name: read_int(counter) for name, (_, counter) in self.cards.items()}
+        self.network_before = network_counters()
+        self.start = time.monotonic()
+
+    def end(self):
+        self.elapsed = time.monotonic() - self.start
+        self.cpu_after = cpu_times()
+        self.gpus = []
+        for name, (card, counter) in self.cards.items():
+            after = read_int(counter)
+            if self.rc6[name] is None or after is None:
+                continue
+            load = max(0.0, min(100.0, 100 * (1 - (after - self.rc6[name]) / (self.elapsed * 1000))))
+            self.gpus.append({"name": pci_name((card / "device").resolve()), "kind": "integrated",
+                              "state": "active", "usage_percent": round(load, 1)})
+        received, sent = network_counters()
+        self.network = {
+            "received_bytes_per_second": round(max(0, received - self.network_before[0]) / self.elapsed),
+            "sent_bytes_per_second": round(max(0, sent - self.network_before[1]) / self.elapsed),
+        }
+        self.cpu_percent = busy(self.cpu_before["cpu"], self.cpu_after["cpu"])
 
 
 def proc_sample():
@@ -341,13 +386,25 @@ def grouped(procs, sort):
 
 
 def measure_processes(interval, sort, flat):
+    window = Interval()
     before = proc_sample()
-    start = time.monotonic()
     time.sleep(interval)
     after = proc_sample()
-    procs = processes(before, after, time.monotonic() - start, sort=sort)
-    totals = memory()[0]
-    out = {"cpus": os.cpu_count(), "memory_total_bytes": totals["total_bytes"], "sort": sort}
+    window.end()
+    procs = processes(before, after, window.elapsed, sort=sort)
+    ram, swap = memory()
+    out = {
+        "cpus": os.cpu_count(),
+        "memory_total_bytes": ram["total_bytes"],
+        "sort": sort,
+        "machine": {
+            "cpu_percent": window.cpu_percent,
+            "memory": ram,
+            "swap": swap,
+            "gpus": window.gpus + nvidia_gpus(),
+            "network": window.network,
+        },
+    }
     if flat:
         out["processes"] = procs
     else:
@@ -507,38 +564,27 @@ def load(interval):
 
 
 def snapshot(interval, disk_path, top=0):
-    cards = rc6_cards()
     procs0 = proc_sample() if top else None
-    cpu0 = cpu_times()
-    rc60 = {name: read_int(counter) for name, (_, counter) in cards.items()}
-    start = time.monotonic()
+    window = Interval()
     time.sleep(interval)
-    elapsed_ms = (time.monotonic() - start) * 1000
-    cpu1 = cpu_times()
+    window.end()
     procs1 = proc_sample() if top else None
-    gpus = []
-    for name, (card, counter) in cards.items():
-        rc61 = read_int(counter)
-        if rc60[name] is None or rc61 is None:
-            continue
-        load = max(0.0, min(100.0, 100 * (1 - (rc61 - rc60[name]) / elapsed_ms)))
-        gpus.append({"name": pci_name((card / "device").resolve()), "kind": "integrated", "state": "active",
-                     "usage_percent": round(load, 1)})
     ram, swap = memory()
     result = {
         "cpu": {
-            "usage_percent": busy(cpu0["cpu"], cpu1["cpu"]),
+            "usage_percent": window.cpu_percent,
             "temperature_c": cpu_temperature(),
             "cores": os.cpu_count(),
-            "threads": threads(cpu0, cpu1),
+            "threads": threads(window.cpu_before, window.cpu_after),
         },
-        "gpus": gpus + nvidia_gpus(),
+        "gpus": window.gpus + nvidia_gpus(),
         "memory": ram,
         "swap": swap,
         "disk": disk(disk_path),
+        "network": window.network,
     }
     if top:
-        result["processes"] = processes(procs0, procs1, elapsed_ms / 1000, top=top)
+        result["processes"] = processes(procs0, procs1, window.elapsed, top=top)
     return result
 
 

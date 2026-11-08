@@ -1,6 +1,8 @@
 // Every process, in the manner of a task manager: grouped under the app or service that owns it
 // (an app's helper processes fold into one row), sortable by name, CPU, memory or PID, searchable,
 // with End (SIGTERM, then Force kill) on each row. It polls `spawnkit-stats processes` while open.
+// Above the list, graphs (Usage.qml) show the machine's CPU, memory, graphics and network use over
+// the last minute the window has been open, from the same readings.
 //
 // Rows never jump: values glide between readings, the order is re-ranked at most every two seconds
 // with the rows sliding to their places, and it holds still while the pointer is over the list.
@@ -29,17 +31,27 @@ Window {
     property double rankedAt: 0
     readonly property bool holding: listHover.hovered
     readonly property int glide: 900
+    // The machine's readings since the window opened, oldest first, a minute at most.
+    property var history: []
+    readonly property int capacity: 60
 
     title: i18n("Processes")
     width: 980
-    height: 700
+    height: 860
     minimumWidth: 700
-    minimumHeight: 360
+    minimumHeight: 520
     color: Theme.surface
     transientParent: null
 
+    // Also brings an open window to the front, restoring it if minimized. On Wayland KWin activates
+    // it only with a token from the window that took the click, so call this before closing the popup.
     function open() {
-        show()
+        if (!visible)
+            history = []
+        if (visibility === Window.Minimized)
+            showNormal()
+        else
+            show()
         raise()
         requestActivate()
         search.forceActiveFocus()
@@ -62,6 +74,7 @@ Window {
             disconnectSource(source)
             try {
                 win.listing = JSON.parse(data.stdout)
+                win.record(win.listing.machine)
                 win.refresh(false)
             } catch (err) {
                 // Keep the last listing.
@@ -74,6 +87,47 @@ Window {
         id: next
         interval: 100
         onTriggered: win.poll()
+    }
+
+    function record(machine) {
+        const gpu = kind => {
+            const g = machine.gpus.find(g => g.kind === kind)
+            return g && g.state === "active" && g.usage_percent !== undefined ? g.usage_percent : null
+        }
+        const next = history.concat([{
+            cpu: machine.cpu_percent,
+            memory: 100 * machine.memory.used_bytes / machine.memory.total_bytes,
+            integrated: gpu("integrated"),
+            discrete: gpu("discrete"),
+            received: machine.network.received_bytes_per_second,
+            sent: machine.network.sent_bytes_per_second,
+        }])
+        history = next.slice(-capacity)
+    }
+    function series(field) {
+        return history.map(h => h[field])
+    }
+    readonly property var machine: listing ? listing.machine : null
+    readonly property var integratedGpu: machine ? machine.gpus.find(g => g.kind === "integrated") || null : null
+    readonly property var discreteGpu: machine ? machine.gpus.find(g => g.kind === "discrete") || null : null
+    readonly property real networkTop: P.ceiling(Math.max(0, ...history.map(h => Math.max(h.received, h.sent))))
+
+    // "GeForce RTX 4060 Max-Q / Mobile" reads as "RTX 4060".
+    function shortGpu(gpu) {
+        const m = gpu.name.match(/(RTX|GTX|RX|Arc)\s*[A-Z]?\d+\w*( Ti| SUPER)?/)
+        return m ? m[0] : gpu.name
+    }
+    function gpuState(gpu) {
+        if (!gpu)
+            return ""
+        const name = shortGpu(gpu)
+        if (gpu.state === "windows")
+            return i18n("%1 in Windows", name)
+        if (gpu.state === "asleep")
+            return i18n("%1 asleep", name)
+        if (gpu.state === "off")
+            return i18n("%1 off", name)
+        return gpu.usage_percent !== undefined ? i18n("%1 at %2", name, P.percent(gpu.usage_percent, win.granular)) : name
     }
 
     function setSort(column) {
@@ -376,6 +430,56 @@ Window {
                         color: Theme.textTertiary
                     }
                 }
+            }
+        }
+
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: Theme.s3
+            Usage {
+                Layout.fillWidth: true
+                Layout.preferredWidth: 1
+                capacity: win.capacity
+                title: i18n("CPU")
+                value: win.machine ? P.percent(win.machine.cpu_percent, win.granular) : "–"
+                detail: win.listing ? i18np("%1 thread", "%1 threads", win.listing.cpus) : ""
+                series: [{ values: win.series("cpu"), color: Theme.accent }]
+            }
+            Usage {
+                Layout.fillWidth: true
+                Layout.preferredWidth: 1
+                capacity: win.capacity
+                title: i18n("Memory")
+                value: win.machine ? P.percent(100 * win.machine.memory.used_bytes / win.machine.memory.total_bytes, false) : "–"
+                detail: win.machine
+                    ? i18n("%1 of %2 · swap %3", P.bytes(win.machine.memory.used_bytes), P.bytes(win.machine.memory.total_bytes), P.bytes(win.machine.swap.used_bytes))
+                    : ""
+                series: [{ values: win.series("memory"), color: Theme.positive }]
+            }
+            Usage {
+                Layout.fillWidth: true
+                Layout.preferredWidth: 1
+                capacity: win.capacity
+                title: i18n("Graphics")
+                value: win.integratedGpu && win.integratedGpu.usage_percent !== undefined
+                    ? P.percent(win.integratedGpu.usage_percent, win.granular)
+                    : win.discreteGpu ? win.gpuState(win.discreteGpu) : "–"
+                // The integrated GPU leads; the discrete one follows on the second line and graph.
+                detail: win.integratedGpu ? win.gpuState(win.discreteGpu) || win.integratedGpu.name : ""
+                series: win.integratedGpu
+                    ? [{ values: win.series("integrated"), color: Theme.caution }, { values: win.series("discrete"), color: Theme.negative }]
+                    : [{ values: win.series("discrete"), color: Theme.negative }]
+            }
+            Usage {
+                Layout.fillWidth: true
+                Layout.preferredWidth: 1
+                capacity: win.capacity
+                title: i18n("Network")
+                value: win.machine ? "↓ " + P.rate(win.machine.network.received_bytes_per_second) : "–"
+                detail: win.machine ? "↑ " + P.rate(win.machine.network.sent_bytes_per_second) : ""
+                maximum: win.networkTop
+                scaleLabel: P.rate(win.networkTop)
+                series: [{ values: win.series("received"), color: Theme.accent }, { values: win.series("sent"), color: Theme.positive }]
             }
         }
 
