@@ -59,6 +59,45 @@ let
     setCommands(commands().filter(function(c) { return c.name !== name })
       .concat([{name: name, isScript: true, cmd: script}]))
   '';
+  # Common web and document fonts, so pages and documents that name Verdana, Arial,
+  # Calibri and the like render as designed instead of a fallback.
+  documentFonts = with pkgs; [
+    corefonts
+    vista-fonts
+    liberation_ttf
+    dejavu_fonts
+    noto-fonts
+    noto-fonts-cjk-sans
+    noto-fonts-cjk-serif
+    noto-fonts-color-emoji
+    culmus
+    roboto
+    open-sans
+    lato
+    inter
+    source-sans
+    source-serif
+    source-code-pro
+    ibm-plex
+    fira-code
+    jetbrains-mono
+    ubuntu-classic
+    ubuntu-sans
+    ubuntu-sans-mono
+    # Hack is KDE's default fixed-width font: without it terminals fall back to a
+    # proportional font and space letters far apart.
+    hack-font
+    cascadia-code
+    liberation-sans-narrow
+    montserrat
+    poppins
+    raleway
+    merriweather
+    crimson-pro
+    eb-garamond
+    font-awesome
+    nerd-fonts.symbols-only
+  ];
 in
 {
   options.personal.desktop = {
@@ -103,44 +142,8 @@ in
         vscode
         copyq
         (if config.personal.desktop.session == "x11" then xclip else wl-clipboard)
-        # Common web and document fonts, so pages that name Verdana, Arial,
-        # Calibri and the like render as designed instead of a fallback.
-        corefonts
-        vista-fonts
-        liberation_ttf
-        dejavu_fonts
-        noto-fonts
-        noto-fonts-cjk-sans
-        noto-fonts-cjk-serif
-        noto-fonts-color-emoji
-        culmus
-        roboto
-        open-sans
-        lato
-        inter
-        source-sans
-        source-serif
-        source-code-pro
-        ibm-plex
-        fira-code
-        jetbrains-mono
-        ubuntu-classic
-        ubuntu-sans
-        ubuntu-sans-mono
-        # Hack is KDE's default fixed-width font: without it terminals fall back to a
-        # proportional font and space letters far apart.
-        hack-font
-        cascadia-code
-        liberation-sans-narrow
-        montserrat
-        poppins
-        raleway
-        merriweather
-        crimson-pro
-        eb-garamond
-        font-awesome
-        nerd-fonts.symbols-only
       ]
+      ++ documentFonts
       ++ lib.optionals pkgs.stdenv.hostPlatform.isx86_64 [
         # Linux Chrome lists the Vulkan adapters but hands WebGPU none without this.
         # Without dconf its Nix GTK reads default settings, whose title bar has only a close button.
@@ -150,9 +153,14 @@ in
           '';
         }))
         zoom-us
-        # Spreadsheets open here: closer to Excel than LibreOffice Calc, and keeps .xlsx intact.
-        # It bundles its own Qt, so plasma-qt.nix must not wrap it.
-        onlyoffice-desktopeditors
+        # Office documents open here: closer to Microsoft Office than LibreOffice, and keeps OOXML intact.
+        # It bundles its own Qt, so plasma-qt.nix must not wrap it. Version 10 reached
+        # nixpkgs-unstable first; take it from nixpkgs once nixos-unstable has 10.0 or later.
+        # It reads fonts only from its own sandbox, not fontconfig, so it gets copies of the
+        # desktop's fonts; without them Hebrew and other scripts draw as empty boxes.
+        (inputs.nixpkgs-unstable.legacyPackages.${pkgs.stdenv.hostPlatform.system}.onlyoffice-desktopeditors.override {
+          extraFontPackages = documentFonts;
+        })
       ];
     # GNOME Shell never notices launchers added to a profile directory that a switch
     # replaces, so link every profile app into ~/.local/share/applications, which stays
@@ -237,6 +245,17 @@ in
           "application/vnd.ms-excel.sheet.binary.macroEnabled.12"
           "application/vnd.oasis.opendocument.spreadsheet"
           "text/csv"
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.template"
+          "application/msword"
+          "application/vnd.ms-word.document.macroEnabled.12"
+          "application/vnd.oasis.opendocument.text"
+          "application/rtf"
+          "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+          "application/vnd.openxmlformats-officedocument.presentationml.slideshow"
+          "application/vnd.ms-powerpoint"
+          "application/vnd.ms-powerpoint.presentation.macroEnabled.12"
+          "application/vnd.oasis.opendocument.presentation"
         ] (_: "onlyoffice-desktopeditors.desktop")
       );
     };
