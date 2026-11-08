@@ -9,17 +9,30 @@ let
   link = path: config.lib.file.mkOutOfStoreSymlink "${repo}/${path}";
   spawnkit = "${config.home.homeDirectory}/repos/skamensky/spawnkit";
   # Claude Code in the Spawnkit checkout in agent mode: its CLAUDE.md (AGENTS.md) then has it read
-  # docs/agent.md. --desktop opens a Claude Desktop session there with the marker in the prompt box;
-  # otherwise it runs in this terminal and the remaining arguments pass through to claude.
+  # docs/agent.md. --desktop starts the session headless and hands it to Claude Desktop through
+  # claude://resume, which, unlike a claude://code/new folder link, carries no outside folder for
+  # Desktop to re-confirm. Otherwise it runs in this terminal and arguments pass through to claude.
   marker = "Spawnkit agent mode.";
   spawnkitAgent = pkgs.writeShellApplication {
     name = "spawnkit-agent";
-    runtimeInputs = [ pkgs.xdg-utils ];
+    runtimeInputs = [
+      pkgs.jq
+      pkgs.libnotify
+      pkgs.xdg-utils
+    ];
     text = ''
-      if [ "''${1-}" = --desktop ]; then
-        exec xdg-open ${lib.escapeShellArg "claude://code/new?folder=${lib.escapeURL spawnkit}&q=${lib.escapeURL "${marker}\n\n"}"}
-      fi
       cd ${lib.escapeShellArg spawnkit}
+      if [ "''${1-}" = --desktop ]; then
+        notify-send --app-name "Spawnkit Agent" --icon claude-desktop --expire-time 8000 \
+          "Spawnkit Agent" "Starting a session in Claude Desktop" || true
+        if ! session=$(claude -p ${lib.escapeShellArg "${marker} Read docs/agent.md now, then reply with only: Ready. What should I change?"} \
+          --name Spawnkit --add-dir ${lib.escapeShellArg repo} --output-format json | jq -er .session_id); then
+          notify-send --app-name "Spawnkit Agent" --urgency critical "Spawnkit Agent" \
+            "Claude could not start the session; run spawnkit-agent --desktop in a terminal to see why"
+          exit 1
+        fi
+        exec xdg-open "claude://resume?session=$session"
+      fi
       exec claude --name Spawnkit --add-dir ${lib.escapeShellArg repo} \
         --append-system-prompt ${lib.escapeShellArg marker} "$@"
     '';
