@@ -150,6 +150,9 @@ in
           '';
         }))
         zoom-us
+        # Spreadsheets open here: closer to Excel than LibreOffice Calc, and keeps .xlsx intact.
+        # It bundles its own Qt, so plasma-qt.nix must not wrap it.
+        onlyoffice-desktopeditors
       ];
     # GNOME Shell never notices launchers added to a profile directory that a switch
     # replaces, so link every profile app into ~/.local/share/applications, which stays
@@ -226,6 +229,15 @@ in
           "x-scheme-handler/about"
           "x-scheme-handler/unknown"
         ] (_: "google-chrome.desktop")
+        // lib.genAttrs [
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.template"
+          "application/vnd.ms-excel"
+          "application/vnd.ms-excel.sheet.macroEnabled.12"
+          "application/vnd.ms-excel.sheet.binary.macroEnabled.12"
+          "application/vnd.oasis.opendocument.spreadsheet"
+          "text/csv"
+        ] (_: "onlyoffice-desktopeditors.desktop")
       );
     };
     # WhatsApp Desktop's replacement: web.whatsapp.com in its own Chrome app window. It runs a
