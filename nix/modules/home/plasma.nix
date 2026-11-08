@@ -561,6 +561,44 @@ in
         ShowCopyToOtherSplitView = false;
         ShowMoveToOtherSplitView = false;
       };
+      # Dolphin's previews: KIO's default plugins, less two. opendocumentthumbnail claims Word,
+      # Excel and PowerPoint files and, as KIO prefers compiled plugins, would shadow
+      # spawnkit-office, though it only shows a thumbnail already embedded in the file (rare
+      # outside ODF). Ubuntu's papers.thumbnailer cannot write where KIO asks under its AppArmor
+      # profile; gsthumbnail (kdegraphics-thumbnailers, host base role) renders PDFs instead.
+      configFile.dolphinrc.PreviewSettings.Plugins = lib.concatStringsSep "," [
+        "directorythumbnail"
+        "imagethumbnail"
+        "jpegthumbnail"
+        "svgthumbnail"
+        "exrthumbnail"
+        "rawthumbnail"
+        "windowsimagethumbnail"
+        "windowsexethumbnail"
+        "appimagethumbnail"
+        "cursorthumbnail"
+        "fontthumbnail"
+        "audiothumbnail"
+        "comicbookthumbnail"
+        "ebookthumbnail"
+        "mobithumbnail"
+        "djvuthumbnail"
+        "kraorathumbnail"
+        "blenderthumbnail"
+        "gsthumbnail"
+        "spawnkit-office"
+        "glycin-image-rs"
+        "glycin-heif"
+        "glycin-jxl"
+        "glycin-svg"
+        "heif"
+        "jxl"
+        "webp-pixbuf"
+        "librsvg"
+        "gst-video-thumbnailer"
+        "gst-audio-thumbnailer"
+        "gnome-font-viewer"
+      ];
       # Spectacle announces nothing: no popup for a copied, saved or recorded capture.
       # The groups are named "Event/<id>"; KConfig escapes a "/" in a group name as "\/".
       configFile."spectacle.notifyrc" = lib.genAttrs [

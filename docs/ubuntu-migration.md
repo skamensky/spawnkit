@@ -821,12 +821,20 @@ GNOME stays installed, so the session is chosen at login and the trial is revers
   In the Information panel (F11) the preview takes all the height the name and
   details leave rather than a square as wide as the panel, so a tall page or receipt
   fills it, and it follows the selection after 100 ms instead of 300 for arrowing
-  through files. Images and PDFs (Ubuntu's `papers.thumbnailer`) already have
-  previews; `office-thumbnailer.nix` adds Word, PowerPoint, Excel and RTF through a
-  freedesktop `.thumbnailer` in the profile that KIO runs: `spawnkit-office-thumbnail
-  SIZE INPUT OUTPUT` renders the first page with ONLYOFFICE's x2t converter. x2t
-  needs the font list ONLYOFFICE writes on its first run, so until ONLYOFFICE has
-  been opened once these files keep their icons. Host builds of Dolphin and the
+  through files. KIO's image plugins preview pictures. PDFs come from
+  `gsthumbnail` (`kdegraphics-thumbnailers`, base role): Ubuntu's `papers.thumbnailer`
+  fails under its AppArmor profile, which lets it write only to GNOME's temporary
+  paths. `office-thumbnailer.nix` adds Word, PowerPoint, Excel, RTF and OpenDocument
+  through a freedesktop `.thumbnailer` in the profile that KIO runs:
+  `spawnkit-office-thumbnail SIZE INPUT OUTPUT` renders the first page with
+  ONLYOFFICE's x2t converter. `dolphinrc [PreviewSettings] Plugins` lists KIO's
+  default plugins less `opendocumentthumbnail` and `papers`: KIO prefers compiled
+  plugins, and `opendocumentthumbnail` claims the Office formats but only shows a
+  thumbnail already embedded in the file. x2t needs the font list ONLYOFFICE writes
+  on its first run, so until ONLYOFFICE has been opened once these files keep their
+  icons. A newly installed thumbnail plugin needs adding to that list. (2026-11-08:
+  KIO previewed all 13 sample files (pictures, PDFs, docx incl. Hebrew, pptx, xlsx,
+  RTF, ODT) with that list; not yet viewed in Dolphin.) Host builds of Dolphin and the
   task manager run one compile job per 1.5 GB available (at most one per CPU):
   unbounded, 32 compilers beside the Windows VM set off the OOM killer, which killed
   the desktop Claude app on 2026-11-08.

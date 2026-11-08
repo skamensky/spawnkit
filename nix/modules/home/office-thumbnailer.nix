@@ -1,6 +1,6 @@
-# Previews of Word, PowerPoint and Excel files in Dolphin and file dialogs: a freedesktop
+# Previews of Word, PowerPoint, Excel and OpenDocument files in Dolphin: a freedesktop
 # thumbnailer, which KIO runs like its own plugins, that renders the first page through
-# ONLYOFFICE's converter, x2t. KDE has no thumbnailer for these formats.
+# ONLYOFFICE's converter, x2t. KDE has no thumbnailer that renders these formats.
 #
 # x2t reads the font list ONLYOFFICE writes on its first run (data/fonts/AllFonts.js), whose
 # paths point into its sandbox's /usr/share/fonts, so x2t runs under bwrap with the same fonts
@@ -28,6 +28,11 @@ let
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     "application/vnd.ms-excel.sheet.macroEnabled.12"
     "application/vnd.ms-excel"
+    # OpenDocument too: Dolphin turns off opendocumentthumbnail, which also claims the formats
+    # above (plasma.nix).
+    "application/vnd.oasis.opendocument.text"
+    "application/vnd.oasis.opendocument.spreadsheet"
+    "application/vnd.oasis.opendocument.presentation"
   ];
   command = writeShellApplication {
     name = "spawnkit-office-thumbnail";
