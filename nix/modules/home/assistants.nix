@@ -46,6 +46,8 @@ let
           qdbus6 org.kde.KWin /Scripting org.kde.kwin.Scripting.unloadScript spawnkit-agent-focus >/dev/null
           exit 0
         fi
+        # The new terminal attaches to tmux itself, even when launched from inside tmux.
+        unset TMUX
         exec setsid -f ${lib.getExe config.programs.ghostty.package} --class=${agentClass} \
           --title="Spawnkit Agent" -e "$0" "$@"
       fi
