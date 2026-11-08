@@ -756,7 +756,16 @@ GNOME stays installed, so the session is chosen at login and the trial is revers
   Properties, the real file its `Exec` line runs; `spawnkit-search properties
   [--executable] TARGET` is the same action, opening the file manager's dialog.
   Baloo indexes file names only, so search finds files; it ships disabled here, and
-  a first login after enabling it indexes the home folder in the background.
+  a first login after enabling it indexes the home folder in the background. It
+  skips `~/native-pre-migration`; files indexed before an exclusion stay listed until
+  `balooctl6 purge` rebuilds the index. Nix Qt 6 apps (CopyQ, OBS, Ladybird) are
+  wrapped by `plasma-qt.nix` with Plasma's platform theme, Kvantum and Breeze, since
+  Nix Qt loads only its own plugins and would otherwise draw with Fusion and default
+  fonts; apps bundling their own Qt (Zoom) stay unwrapped. The `desktop-integration`
+  flake check (`scripts/desktop-check.py PROFILE [--json]`) fails when a launcher's
+  Nix app lacks that wrapper, a GTK app lacks dconf's GIO module, or a launcher's
+  `/nix/store` program is missing. It checks the built profile offline; whether an
+  app actually looks right is still a native check.
   Applications' jump-list actions (such as
   New Window) are no longer offered in search. (2026-11-05: KRunner listed System
   Settings first for "settings", WhatsApp first for "wa", and a launch through the

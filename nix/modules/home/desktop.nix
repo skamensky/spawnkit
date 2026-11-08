@@ -7,6 +7,8 @@
   ...
 }:
 let
+  plasmaQt = pkgs.callPackage ./plasma-qt.nix { };
+  copyq = plasmaQt pkgs.copyq;
   quietAttentionUuid = "quiet-window-attention@spawnkit";
   # GNOME's WindowAttentionHandler binds its display signals in its constructor,
   # so disconnect them while enabled and reconnect the stock handler on disable.
@@ -93,9 +95,11 @@ in
       with pkgs;
       [
         firefox
-        (callPackage ./ladybird-rtx.nix {
-          ladybird = callPackage ./ladybird.nix { src = inputs.ladybird; };
-        })
+        (plasmaQt (
+          callPackage ./ladybird-rtx.nix {
+            ladybird = callPackage ./ladybird.nix { src = inputs.ladybird; };
+          }
+        ))
         vscode
         copyq
         (if config.personal.desktop.session == "x11" then xclip else wl-clipboard)
@@ -172,8 +176,14 @@ in
     dconf.settings."org/gnome/desktop/session".idle-delay = lib.hm.gvariant.mkUint32 0;
     # English and Hebrew keyboard layouts; GNOME switches with Super+Space.
     dconf.settings."org/gnome/desktop/input-sources".sources = [
-      (lib.hm.gvariant.mkTuple [ "xkb" "us" ])
-      (lib.hm.gvariant.mkTuple [ "xkb" "il" ])
+      (lib.hm.gvariant.mkTuple [
+        "xkb"
+        "us"
+      ])
+      (lib.hm.gvariant.mkTuple [
+        "xkb"
+        "il"
+      ])
     ];
     # Suppress GNOME's '"<window>" is ready' banners (window-demands-attention);
     # the dock still highlights the app.
@@ -187,11 +197,13 @@ in
     programs.obs-studio.enable = true;
     # nixpkgs adds the driver path only to OBS's libraries; its NVENC probe in bin/ (behind the
     # Qt wrapper) needs it too.
-    programs.obs-studio.package = pkgs.obs-studio.overrideAttrs (old: {
-      postFixup = old.postFixup + ''
-        addDriverRunpath $out/bin/.obs-nvenc-test-wrapped
-      '';
-    });
+    programs.obs-studio.package = plasmaQt (
+      pkgs.obs-studio.overrideAttrs (old: {
+        postFixup = old.postFixup + ''
+          addDriverRunpath $out/bin/.obs-nvenc-test-wrapped
+        '';
+      })
+    );
     # Print opens GNOME's screenshot UI: drag a region, then Enter copies it to the clipboard
     # (and keeps a copy in ~/Pictures/Screenshots); no save dialog.
     dconf.settings."org/gnome/shell/keybindings".show-screenshot-ui = [ "Print" ];
@@ -201,7 +213,7 @@ in
     # Ditto's shortcut. While Looking Glass holds the keyboard, Windows' CopyQ gets it instead.
     dconf.settings."org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/copyq" = {
       name = "CopyQ";
-      command = "${pkgs.copyq}/bin/copyq toggle";
+      command = "${copyq}/bin/copyq toggle";
       binding = "<Control>grave";
     };
     xdg.mimeApps = {
@@ -220,21 +232,23 @@ in
     # dedicated Chrome profile (its own login) with DevTools on a loopback port, from which
     # spawnkit-badges reads the unread count for the task manager icon. The entry's name is the
     # window's Wayland app id, so docks group the window with this launcher.
-    xdg.desktopEntries."chrome-web.whatsapp.com__-Default" = lib.mkIf pkgs.stdenv.hostPlatform.isx86_64 {
-      name = "WhatsApp";
-      comment = "WhatsApp Web in its own window";
-      exec = "google-chrome --user-data-dir=${config.home.homeDirectory}/.local/share/spawnkit/whatsapp-chrome --remote-debugging-port=9333 --no-first-run --app=https://web.whatsapp.com/";
-      icon = "${pkgs.tela-circle-icon-theme}/share/icons/Tela-circle/scalable/apps/whatsapp.svg";
-      categories = [
-        "Network"
-        "InstantMessaging"
-      ];
-      startupNotify = true;
-      settings = {
-        Keywords = "WhatsApp;Chat;Messages;";
-        StartupWMClass = "chrome-web.whatsapp.com__-Default";
-      };
-    };
+    xdg.desktopEntries."chrome-web.whatsapp.com__-Default" =
+      lib.mkIf pkgs.stdenv.hostPlatform.isx86_64
+        {
+          name = "WhatsApp";
+          comment = "WhatsApp Web in its own window";
+          exec = "google-chrome --user-data-dir=${config.home.homeDirectory}/.local/share/spawnkit/whatsapp-chrome --remote-debugging-port=9333 --no-first-run --app=https://web.whatsapp.com/";
+          icon = "${pkgs.tela-circle-icon-theme}/share/icons/Tela-circle/scalable/apps/whatsapp.svg";
+          categories = [
+            "Network"
+            "InstantMessaging"
+          ];
+          startupNotify = true;
+          settings = {
+            Keywords = "WhatsApp;Chat;Messages;";
+            StartupWMClass = "chrome-web.whatsapp.com__-Default";
+          };
+        };
     systemd.user.services.copyq = {
       Unit = {
         Description = "CopyQ clipboard history";
@@ -242,7 +256,7 @@ in
         After = [ "graphical-session.target" ];
       };
       Service = {
-        ExecStart = "${pkgs.copyq}/bin/copyq";
+        ExecStart = "${copyq}/bin/copyq";
         # GNOME's Wayland compositor lets no background app watch the clipboard; through
         # XWayland, which GNOME keeps in sync with it, CopyQ can. KWin offers Wayland's data
         # control protocol instead and syncs XWayland only while an X11 window has focus, so
@@ -260,12 +274,13 @@ in
           pkgs.writeShellScript "copyq-setup" ''
             ready=
             for _ in $(${pkgs.coreutils}/bin/seq 30); do
-              ${pkgs.copyq}/bin/copyq source ${copyqKeepImages} >/dev/null 2>&1 && { ready=1; break; }
+              ${copyq}/bin/copyq source ${copyqKeepImages} >/dev/null 2>&1 && { ready=1; break; }
               ${pkgs.coreutils}/bin/sleep 1
             done
             [ -n "$ready" ] || exit 1
-            ${lib.optionalString (config.personal.desktop.copyqShare != null)
-              "${pkgs.copyq}/bin/copyq config save_delay_ms_on_item_added 10000 >/dev/null"}
+            ${lib.optionalString (
+              config.personal.desktop.copyqShare != null
+            ) "${copyq}/bin/copyq config save_delay_ms_on_item_added 10000 >/dev/null"}
           ''
         );
       };
@@ -286,7 +301,13 @@ in
       };
       Service = {
         Type = "oneshot";
-        Environment = "PATH=${lib.makeBinPath [ pkgs.coreutils pkgs.diffutils pkgs.gnugrep ]}";
+        Environment = "PATH=${
+          lib.makeBinPath [
+            pkgs.coreutils
+            pkgs.diffutils
+            pkgs.gnugrep
+          ]
+        }";
         # Each file lands under a temporary name and is renamed, so Windows never reads half a tab.
         ExecStart = toString (
           pkgs.writeShellScript "copyq-share" ''

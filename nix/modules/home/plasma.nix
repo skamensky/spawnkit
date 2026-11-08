@@ -348,7 +348,7 @@ in
           "Ctrl+`"
           "Ctrl+;"
         ];
-        command = "${pkgs.copyq}/bin/copyq toggle";
+        command = "${pkgs.callPackage ./plasma-qt.nix { } pkgs.copyq}/bin/copyq toggle";
       };
       # Windows' title bar buttons: the window menu on the left, minimize, maximize and
       # close on the right (Layan's Aurorae theme defaults to macOS' left-hand set).

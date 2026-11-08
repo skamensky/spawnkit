@@ -275,6 +275,15 @@ in
         assert evaluated.config.programs.nix-ld.enable;
         assert evaluated.config.home-manager.users.shmuel.home.activationPackage.drvPath != "";
         pkgs.runCommand "nixos-module-evaluation" { } "touch $out";
+      # Launchers whose Nix app would silently ignore dconf or Plasma's Qt style fail the check.
+      desktop-integration =
+        pkgs.runCommand "spawnkit-desktop-integration" { nativeBuildInputs = [ pkgs.python3 ]; }
+          ''
+            python3 ${../scripts/desktop-check.py} ${
+              self.homeConfigurations.${homeName system "laptop-ubuntu" false}.config.home.path
+            }
+            touch "$out"
+          '';
       # The installed CLI (flake.lock) and a fresh checkout (repositories.json) use one revision.
       tool-pins =
         let
