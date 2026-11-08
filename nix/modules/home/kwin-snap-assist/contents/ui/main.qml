@@ -41,11 +41,6 @@ KWinComponents.SceneEffect {
         return Math.abs(a - b) <= 2;
     }
 
-    function fills(w, rect) {
-        const g = w.frameGeometry;
-        return near(g.x, rect.x) && near(g.y, rect.y) && near(g.width, rect.width) && near(g.height, rect.height);
-    }
-
     function onDesktop(w) {
         return w.onAllDesktops || w.desktops.indexOf(KWinComponents.Workspace.currentDesktop) !== -1;
     }
@@ -68,43 +63,98 @@ KWinComponents.SceneEffect {
         settle.restart();
     }
 
-    // The halves and quarters of w's screen, by zone name.
-    function zones(w) {
-        const a = KWinComponents.Workspace.clientArea(KWinComponents.Workspace.MaximizeArea, w);
-        const xm = Math.round(a.width / 2);
-        const ym = Math.round(a.height / 2);
-        return {
-            full: a,
-            left: Qt.rect(a.x, a.y, xm, a.height),
-            right: Qt.rect(a.x + xm, a.y, a.width - xm, a.height),
-            topleft: Qt.rect(a.x, a.y, xm, ym),
-            bottomleft: Qt.rect(a.x, a.y + ym, xm, a.height - ym),
-            topright: Qt.rect(a.x + xm, a.y, a.width - xm, ym),
-            bottomright: Qt.rect(a.x + xm, a.y + ym, a.width - xm, a.height - ym)
-        };
+    function area(w) {
+        return KWinComponents.Workspace.clientArea(KWinComponents.Workspace.MaximizeArea, w);
     }
 
-    // The zone w fills, or null when it fills none.
+    // The zone w fills, read from the edges of its screen's work area that it touches: all four
+    // is full, three a half, two a quarter, fewer none. KWin's quick tiles split the screen
+    // where the user last dragged a tiled window's edge, and its quarters are cut at half the
+    // screen rather than half the work area, so the window's own edges are the only reliable
+    // account of the split lines. A floating window that happens to sit in a corner is not
+    // snapped: besides a maximized one, only a tiled window counts.
     function zone(w) {
-        const r = zones(w);
-        return Object.keys(r).find(name => fills(w, r[name])) || null;
+        const a = area(w);
+        const g = w.frameGeometry;
+        const l = near(g.x, a.x);
+        const r = near(g.x + g.width, a.x + a.width);
+        const t = near(g.y, a.y);
+        const b = near(g.y + g.height, a.y + a.height);
+        if (l && r && t && b) {
+            return "full";
+        }
+        if (!w.tile) {
+            return null;
+        }
+        if (t && b && l !== r) {
+            return l ? "left" : "right";
+        }
+        if (l && r && t !== b) {
+            return t ? "top" : "bottom";
+        }
+        if (l !== r && t !== b) {
+            return (t ? "top" : "bottom") + (l ? "left" : "right");
+        }
+        return null;
     }
 
-    // What to fill once a window took a zone, most natural first: the rest of its side, then
-    // the other side.
-    readonly property var nextZones: ({
-        left: ["right"],
-        right: ["left"],
-        topleft: ["bottomleft", "right"],
-        bottomleft: ["topleft", "right"],
-        topright: ["bottomright", "left"],
-        bottomright: ["topright", "left"]
-    })
+    // The places left free beside w, which fills zone z, as [name, rect] pairs, most natural
+    // first: the rest of its side, then the other side.
+    function freeRects(w, z) {
+        const a = area(w);
+        const g = w.frameGeometry;
+        const gr = g.x + g.width;
+        const gb = g.y + g.height;
+        const left = Qt.rect(a.x, a.y, g.x - a.x, a.height);
+        const right = Qt.rect(gr, a.y, a.x + a.width - gr, a.height);
+        const top = Qt.rect(a.x, a.y, a.width, g.y - a.y);
+        const bottom = Qt.rect(a.x, gb, a.width, a.y + a.height - gb);
+        const above = Qt.rect(g.x, a.y, g.width, g.y - a.y);
+        const below = Qt.rect(g.x, gb, g.width, a.y + a.height - gb);
+        switch (z) {
+        case "left":
+            return [["right", right]];
+        case "right":
+            return [["left", left]];
+        case "top":
+            return [["bottom", bottom]];
+        case "bottom":
+            return [["top", top]];
+        case "topleft":
+            return [["bottomleft", below], ["right", right]];
+        case "bottomleft":
+            return [["topleft", above], ["right", right]];
+        case "topright":
+            return [["bottomright", below], ["left", left]];
+        case "bottomright":
+            return [["topright", above], ["left", left]];
+        }
+        return [];
+    }
+
+    // Whether windows already fill rect: one that fills it, or a stack of them across its
+    // width from its top to its bottom (two quarters making a half).
+    function covered(windows, rect) {
+        const column = windows
+            .filter(c => !c.minimized && near(c.frameGeometry.x, rect.x) && near(c.frameGeometry.width, rect.width)
+                && c.frameGeometry.y >= rect.y - 2 && c.frameGeometry.y + c.frameGeometry.height <= rect.y + rect.height + 2)
+            .sort((p, q) => p.frameGeometry.y - q.frameGeometry.y);
+        let y = rect.y;
+        for (const c of column) {
+            if (!near(c.frameGeometry.y, y)) {
+                break;
+            }
+            y = c.frameGeometry.y + c.frameGeometry.height;
+        }
+        return near(y, rect.y + rect.height);
+    }
 
     // KWin's quick-tile action that puts the active window in a zone.
     readonly property var tileSlot: ({
         left: "slotWindowQuickTileLeft",
         right: "slotWindowQuickTileRight",
+        top: "slotWindowQuickTileTop",
+        bottom: "slotWindowQuickTileBottom",
         topleft: "slotWindowQuickTileTopLeft",
         bottomleft: "slotWindowQuickTileBottomLeft",
         topright: "slotWindowQuickTileTopRight",
@@ -133,25 +183,20 @@ KWinComponents.SceneEffect {
         if (settled && !visible) {
             return;
         }
-        const r = zones(w);
         const others = KWinComponents.Workspace.stackingOrder.slice().reverse()
             .filter(c => c !== w && eligible(c) && c.output === w.output);
-        const covered = name => others.some(c => !c.minimized && fills(c, r[name]));
-        const taken = name => covered(name)
-            || (name === "left" && covered("topleft") && covered("bottomleft"))
-            || (name === "right" && covered("topright") && covered("bottomright"));
-        const target = nextZones[now].find(name => !taken(name));
+        const target = freeRects(w, now).find(([name, rect]) => !covered(others, rect));
         if (others.length === 0 || !target) {
             dismiss();
             return;
         }
-        const other = r[target];
+        const other = target[1];
         // The same offer again (the snapped window settled in a few steps): keep the highlight.
         if (!(visible && w === snapped && sameRect(other, free) && sameWindows(others, candidates))) {
             current = 0;
         }
         snapped = w;
-        freeZone = target;
+        freeZone = target[0];
         free = other;
         candidates = others;
         visible = true;
@@ -196,10 +241,12 @@ KWinComponents.SceneEffect {
             break;
         case "left":
         case "right":
+        case "bottom":
         case "bottomleft":
         case "bottomright":
             KWinComponents.Workspace.slotWindowQuickTileTop();
             break;
+        case "top":
         case "topleft":
         case "topright":
             KWinComponents.Workspace.slotWindowMaximize();
@@ -222,6 +269,8 @@ KWinComponents.SceneEffect {
             break;
         case "left":
         case "right":
+        case "top":
+        case "bottom":
         case "topleft":
         case "topright":
         case "bottomleft":

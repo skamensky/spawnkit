@@ -3,13 +3,13 @@
   "KPlugin": {
     "Authors": [{ "Name": "Shmuel Kamensky" }],
     "Category": "Window Management",
-    "Description": "After a window snaps to half the screen, pick a window for the other half, as on Windows.",
+    "Description": "After a window snaps to a half or a quarter of the screen, pick a window for the space beside it, as on Windows. Also owns Meta+Up and Meta+Down.",
     "EnabledByDefault": false,
     "Icon": "view-split-left-right",
     "Id": "tech.shmuel.snapassist",
     "License": "GPL-3.0+",
     "Name": "Snap Assist",
-    "Version": "2.0"
+    "Version": "2.1"
   },
   "X-KDE-Ordering": 70,
   "X-Plasma-API": "declarativescript"
