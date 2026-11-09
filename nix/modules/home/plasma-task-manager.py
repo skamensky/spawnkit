@@ -17,7 +17,6 @@ import os
 import selectors
 import subprocess
 import sys
-import tempfile
 import time
 from pathlib import Path
 
@@ -31,7 +30,7 @@ DEBOUNCE = 1.0
 # Every normal window but plasmashell's own, which includes the process window being shown.
 MINIMIZE_ALL = """
 for (const w of workspace.windowList()) {
-    if (w.normalWindow && w.minimizable && !w.minimized && w.resourceClass !== "plasmashell")
+    if (w.normalWindow && w.minimizable && !w.minimized && w.resourceClass !== "org.kde.plasmashell")
         w.minimized = true;
 }
 """
@@ -50,16 +49,15 @@ def busctl(*args):
 
 
 def minimize_all():
-    with tempfile.NamedTemporaryFile("w", suffix=".js", dir=STATE.parent, delete=False) as script:
-        script.write(MINIMIZE_ALL)
+    # KWin may run the script after start returns, so it stays loaded (and its file in place)
+    # until the next show unloads it.
+    script = STATE.with_name("spawnkit-minimize-all.js")
+    script.write_text(MINIMIZE_ALL)
     name = "spawnkit-minimize-all"
-    try:
-        busctl("org.kde.KWin", "/Scripting", "org.kde.kwin.Scripting", "unloadScript", "s", name)
-        number = busctl("org.kde.KWin", "/Scripting", "org.kde.kwin.Scripting", "loadScript", "ss", script.name, name)[0]
-        busctl("org.kde.KWin", f"/Scripting/Script{number}", "org.kde.kwin.Script", "run")
-        busctl("org.kde.KWin", "/Scripting", "org.kde.kwin.Scripting", "unloadScript", "s", name)
-    finally:
-        os.unlink(script.name)
+    busctl("org.kde.KWin", "/Scripting", "org.kde.kwin.Scripting", "unloadScript", "s", name)
+    busctl("org.kde.KWin", "/Scripting", "org.kde.kwin.Scripting", "loadScript", "ss", str(script), name)
+    # KWin 6.6 ignores Script.run on a script loaded over D-Bus; start runs every loaded one.
+    busctl("org.kde.KWin", "/Scripting", "org.kde.kwin.Scripting", "start")
 
 
 def open_process_window():
