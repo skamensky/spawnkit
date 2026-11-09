@@ -23,3 +23,19 @@
       environment:
         DEBIAN_FRONTEND: noninteractive
       when: not ansible_check_mode
+# Chrome opens a downloaded .ica file in Citrix Workspace at once, as the Citrix plug-in does on
+# Windows, instead of leaving the session launch in the download bubble.
+- name: Create Chrome's managed policy directory
+  ansible.builtin.file:
+    path: /etc/opt/chrome/policies/managed
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+- name: Let Chrome auto-open downloaded Citrix .ica files
+  ansible.builtin.copy:
+    dest: /etc/opt/chrome/policies/managed/citrix.json
+    content: "{{ {'AutoOpenFileTypes': ['ica']} | to_nice_json }}\n"
+    owner: root
+    group: root
+    mode: '0644'
