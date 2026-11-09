@@ -1,36 +1,25 @@
-// spawnkit-markdown-thumbnail SIZE INPUT OUTPUT: render INPUT's Markdown as a page, in the
-// GitHub dialect (tables, task lists, strikethrough, autolinks), and write it as a PNG that
-// fits in SIZE x SIZE pixels to OUTPUT. Qt parses the Markdown with md4c and lays it out with
-// QTextDocument; KSyntaxHighlighting colours fenced code by its language.
+// Markdown in the GitHub dialect (tables, task lists, strikethrough, autolinks): Qt parses it
+// with md4c into a QTextDocument, which is restyled here like GitHub's page, and
+// KSyntaxHighlighting colours fenced code by its language.
+#include "thumbnail.h"
 #include <KSyntaxHighlighting/AbstractHighlighter>
 #include <KSyntaxHighlighting/Definition>
 #include <KSyntaxHighlighting/Format>
 #include <KSyntaxHighlighting/Repository>
 #include <KSyntaxHighlighting/State>
 #include <KSyntaxHighlighting/Theme>
-#include <QAbstractTextDocumentLayout>
-#include <QFile>
-#include <QFileInfo>
 #include <QFontDatabase>
-#include <QGuiApplication>
 #include <QImage>
-#include <QPainter>
 #include <QTextBlock>
 #include <QTextCursor>
-#include <QTextDocument>
 #include <QTextLayout>
 #include <QTextList>
 #include <QTextTable>
 #include <QUrl>
-#include <cstdio>
 
 namespace KSH = KSyntaxHighlighting;
 
-// The page: GitHub's README width and colours, a portrait sheet at most.
-constexpr qreal pageWidth = 820, margin = 32, maxHeight = pageWidth * 1.3;
-constexpr qint64 maxBytes = 256 * 1024; // the first page never needs more
-const QColor ink(0x1f, 0x23, 0x28), muted(0x59, 0x63, 0x6e), codeBackground(0xf6, 0xf8, 0xfa),
-    link(0x09, 0x69, 0xda);
+namespace {
 
 // Collects the formats of one line of code as QTextLayout ranges.
 class LineHighlighter : public KSH::AbstractHighlighter {
@@ -52,42 +41,33 @@ protected:
     }
 };
 
-int main(int argc, char **argv) {
-    if (argc != 4) {
-        std::fprintf(stderr, "usage: spawnkit-markdown-thumbnail SIZE INPUT OUTPUT\n");
-        return 2;
-    }
-    qputenv("QT_QPA_PLATFORM", "offscreen");
-    QGuiApplication app(argc, argv);
-    const int size = QString::fromLocal8Bit(argv[1]).toInt();
-    const QString input = QString::fromLocal8Bit(argv[2]);
-    QFile file(input);
-    if (size <= 0 || !file.open(QIODevice::ReadOnly)) {
-        std::fprintf(stderr, "spawnkit-markdown-thumbnail: cannot read %s\n", argv[2]);
-        return 1;
-    }
+bool fenced(const QTextBlock &b) { return b.isValid() && b.blockFormat().hasProperty(QTextFormat::BlockCodeFence); }
+QString fenceLanguage(const QTextBlock &b) { return b.blockFormat().stringProperty(QTextFormat::BlockCodeLanguage); }
+const QString outputLanguage = QStringLiteral("output");
 
-    QTextDocument doc;
-    QFont body(QStringLiteral("sans-serif"));
-    body.setPixelSize(16);
-    doc.setDefaultFont(body);
-    doc.setDocumentMargin(margin);
-    doc.setTextWidth(pageWidth);
-    // Relative image paths resolve beside the file.
-    doc.setBaseUrl(QUrl::fromLocalFile(QFileInfo(input).absolutePath() + QLatin1Char('/')));
-    doc.setMarkdown(QString::fromUtf8(file.read(maxBytes)), QTextDocument::MarkdownDialectGitHub);
+} // namespace
 
-    const QFont mono = QFontDatabase::systemFont(QFontDatabase::FixedFont);
+void renderMarkdown(QTextDocument &doc, const QString &markdown, const QHash<QString, QImage> &images) {
+    // The importer drops an image it cannot load, so the named ones are added first.
+    for (auto it = images.begin(); it != images.end(); ++it) doc.addResource(QTextDocument::ImageResource, QUrl(it.key()), it.value());
+    QTextCursor(&doc).insertMarkdown(markdown, QTextDocument::MarkdownDialectGitHub);
+
+    // GitHub's code size, 85% of the text.
+    QFont mono = QFontDatabase::systemFont(QFontDatabase::FixedFont);
+    mono.setPixelSize(qRound(doc.defaultFont().pixelSize() * 0.85));
     const qreal maxImageWidth = pageWidth - 2 * margin;
     QTextCursor cursor(&doc);
     for (QTextBlock block = doc.begin(); block.isValid(); block = block.next()) {
         QTextBlockFormat blockFormat = block.blockFormat();
         cursor.setPosition(block.position());
         // GitHub's spacing between blocks; Qt's Markdown import leaves none.
-        const auto fenced = [](const QTextBlock &b) { return b.isValid() && b.blockFormat().hasProperty(QTextFormat::BlockCodeFence); };
-        if (fenced(block)) {
-            // Fenced code: a shaded block.
-            blockFormat.setBackground(codeBackground);
+        if (block.text() == cellBreak) {
+            blockFormat.setLineHeight(12, QTextBlockFormat::FixedHeight);
+            blockFormat.setTopMargin(0);
+            blockFormat.setBottomMargin(0);
+        } else if (fenced(block)) {
+            // Fenced code: a shaded block, and a cell's output plain beneath it.
+            if (fenceLanguage(block) != outputLanguage) blockFormat.setBackground(codeBackground);
             blockFormat.setTopMargin(fenced(block.previous()) ? 0 : 4);
             blockFormat.setBottomMargin(fenced(block.next()) ? 0 : 14);
         } else if (blockFormat.headingLevel() > 0) {
@@ -100,6 +80,7 @@ int main(int argc, char **argv) {
         }
         cursor.setBlockFormat(blockFormat);
         const bool quote = blockFormat.intProperty(QTextFormat::BlockQuoteLevel) > 0;
+        const bool output = fenced(block) && fenceLanguage(block) == outputLanguage;
         for (auto it = block.begin(); !it.atEnd(); ++it) {
             const QTextFragment fragment = it.fragment();
             QTextCharFormat format = fragment.charFormat();
@@ -117,15 +98,16 @@ int main(int argc, char **argv) {
                 }
                 continue;
             }
-            QTextCharFormat change;
-            if (format.fontFixedPitch()) {
-                change.setFont(mono, QTextCharFormat::FontPropertiesSpecifiedOnly);
-                change.setFontFixedPitch(true);
-                if (!blockFormat.hasProperty(QTextFormat::BlockCodeFence)) change.setBackground(QColor(0xef, 0xf1, 0xf3));
+            if (format.fontFixedPitch() || fenced(block)) {
+                // The importer sizes code in points, which would outrank a merged pixel size.
+                format.clearProperty(QTextFormat::FontPointSize);
+                format.setFontFamilies(mono.families());
+                format.setProperty(QTextFormat::FontPixelSize, mono.pixelSize());
+                if (!blockFormat.hasProperty(QTextFormat::BlockCodeFence)) format.setBackground(QColor(0xef, 0xf1, 0xf3));
             }
-            if (format.isAnchor()) change.setForeground(link);
-            else if (quote) change.setForeground(muted);
-            if (change.propertyCount()) cursor.mergeCharFormat(change);
+            if (format.isAnchor()) format.setForeground(link);
+            else if (quote || output) format.setForeground(muted);
+            cursor.setCharFormat(format);
         }
     }
 
@@ -146,7 +128,7 @@ int main(int argc, char **argv) {
             f.setCellPadding(6);
             f.setBorder(1);
             f.setBorderStyle(QTextFrameFormat::BorderStyle_Solid);
-            f.setBorderBrush(QColor(0xd1, 0xd9, 0xe0));
+            f.setBorderBrush(rule);
             f.setBorderCollapse(true);
             table->setFormat(f);
         }
@@ -160,16 +142,18 @@ int main(int argc, char **argv) {
     KSH::State state;
     QString language;
     for (QTextBlock block = doc.begin(); block.isValid(); block = block.next()) {
-        const QTextBlockFormat blockFormat = block.blockFormat();
-        if (!blockFormat.hasProperty(QTextFormat::BlockCodeFence)) {
+        if (!fenced(block)) {
             language.clear();
             continue;
         }
-        const QString blockLanguage = blockFormat.stringProperty(QTextFormat::BlockCodeLanguage);
-        if (blockLanguage != language || !block.previous().blockFormat().hasProperty(QTextFormat::BlockCodeFence)) {
+        const QString blockLanguage = fenceLanguage(block);
+        if (blockLanguage != language || !fenced(block.previous())) {
             language = blockLanguage;
-            KSH::Definition definition = repository.definitionForName(language);
-            if (!definition.isValid()) definition = repository.definitionForFileName(QStringLiteral("x.") + language);
+            KSH::Definition definition;
+            if (language != outputLanguage) {
+                definition = repository.definitionForName(language);
+                if (!definition.isValid()) definition = repository.definitionForFileName(QStringLiteral("x.") + language);
+            }
             highlighter.setDefinition(definition);
             state = {};
         }
@@ -178,24 +162,4 @@ int main(int argc, char **argv) {
         block.layout()->setFormats(highlighter.ranges);
     }
     doc.markContentsDirty(0, doc.characterCount());
-
-    const qreal height = qBound(pageWidth * 0.4, doc.size().height(), maxHeight);
-    const qreal scale = size / qMax(pageWidth, height);
-    QImage image(qRound(pageWidth * scale), qRound(height * scale), QImage::Format_RGB32);
-    image.fill(Qt::white);
-    QPainter painter(&image);
-    painter.setRenderHints(QPainter::Antialiasing | QPainter::TextAntialiasing | QPainter::SmoothPixmapTransform);
-    painter.scale(scale, scale);
-    painter.setClipRect(QRectF(0, 0, pageWidth, height));
-    QAbstractTextDocumentLayout::PaintContext context;
-    context.palette.setColor(QPalette::Text, ink);
-    context.palette.setColor(QPalette::Link, link);
-    context.clip = QRectF(0, 0, pageWidth, height);
-    doc.documentLayout()->draw(&painter, context);
-    painter.end();
-    if (!image.save(QString::fromLocal8Bit(argv[3]), "PNG")) {
-        std::fprintf(stderr, "spawnkit-markdown-thumbnail: cannot write %s\n", argv[3]);
-        return 1;
-    }
-    return 0;
 }

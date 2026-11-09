@@ -831,14 +831,20 @@ GNOME stays installed, so the session is chosen at login and the trial is revers
   through files, and stays on the clicked item rather than following the mouse
   (`InformationPanel showHovered=false`). KIO's image plugins preview pictures, and
   `textthumbnail` previews source code and other text with syntax highlighting.
-  `markdown-thumbnailer.nix` renders Markdown as a GitHub-style page (tables, task
-  lists, strikethrough, images beside the file, highlighted fenced code) through a
-  `.thumbnailer` running `spawnkit-markdown-thumbnail SIZE INPUT OUTPUT`, a small Qt
-  program over md4c and KSyntaxHighlighting, about 0.2 s a file; a MIME package in `desktop.nix` makes shell, awk and sed scripts
-  plain text again, which shared-mime-info 2.5 dropped. PDFs come from
+  `document-thumbnailer.nix` draws text formats as pages through one `.thumbnailer`
+  per kind running `spawnkit-document-thumbnail KIND SIZE INPUT OUTPUT`, a small Qt
+  program over md4c and KSyntaxHighlighting taking under 0.2 s a file: Markdown as a
+  GitHub-style page (tables, task lists, strikethrough, images beside the file,
+  highlighted fenced code), CSV and TSV as a spreadsheet grid, iCalendar files as an
+  event card and Jupyter notebooks with rendered Markdown, highlighted code, printed
+  output and plots. A MIME package in `desktop.nix` makes shell, awk and sed scripts
+  plain text again, which shared-mime-info 2.5 dropped. The base role installs
+  `ffmpegthumbs` for videos (GNOME's `gst-video-thumbnailer`, left out of the list,
+  fails on MP4 and MOV) and `kimageformat6-plugins` with `qt6-image-formats-plugins`,
+  through which Qt reads WebP, HEIC, AVIF, PSD, XCF, JXL and ICO. PDFs come from
   `gsthumbnail` (`kdegraphics-thumbnailers`, base role): Ubuntu's `papers.thumbnailer`
   fails under its AppArmor profile, which lets it write only to GNOME's temporary
-  paths. `office-thumbnailer.nix` adds Word, PowerPoint, Excel, RTF and OpenDocument
+  paths. `office-thumbnailer.nix` adds Word, PowerPoint, Excel, RTF and OpenDocument (including Draw)
   through a freedesktop `.thumbnailer` in the profile that KIO runs:
   `spawnkit-office-thumbnail SIZE INPUT OUTPUT` renders the first page with
   ONLYOFFICE's x2t converter. `dolphinrc [PreviewSettings] Plugins` lists KIO's

@@ -33,6 +33,7 @@ let
     "application/vnd.oasis.opendocument.text"
     "application/vnd.oasis.opendocument.spreadsheet"
     "application/vnd.oasis.opendocument.presentation"
+    "application/vnd.oasis.opendocument.graphics"
   ];
   command = writeShellApplication {
     name = "spawnkit-office-thumbnail";

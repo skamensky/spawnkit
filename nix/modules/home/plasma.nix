@@ -622,15 +622,18 @@ in
       };
       # The Information panel stays on the clicked item; hovering another does not replace it.
       configFile.dolphinrc.InformationPanel.showHovered = false;
-      # Dolphin's previews: KIO's default plugins plus its text one, less two.
+      # Dolphin's previews: KIO's default plugins plus its text and video ones, less three.
       # opendocumentthumbnail claims Word, Excel and PowerPoint files and, as KIO prefers compiled plugins, would shadow
       # spawnkit-office, though it only shows a thumbnail already embedded in the file (rare
       # outside ODF). Ubuntu's papers.thumbnailer cannot write where KIO asks under its AppArmor
       # profile; gsthumbnail (kdegraphics-thumbnailers, host base role) renders PDFs instead.
+      # GNOME's gst-video-thumbnailer fails on MP4 and MOV yet shadows ffmpegthumbs (base role).
       configFile.dolphinrc.PreviewSettings.Plugins = lib.concatStringsSep "," [
-        # Source code and other text, with syntax highlighting; spawnkit-markdown renders
-        # Markdown, as KIO prefers a plugin for the exact type over one for its parent.
+        # Source code and other text, with syntax highlighting. The spawnkit document
+        # thumbnailers render Markdown, CSV, TSV, iCalendar and Jupyter files instead, as KIO
+        # prefers a plugin for the exact type over one for its parent.
         "textthumbnail"
+        "ffmpegthumbs"
         "directorythumbnail"
         "imagethumbnail"
         "jpegthumbnail"
@@ -652,6 +655,10 @@ in
         "gsthumbnail"
         "spawnkit-office"
         "spawnkit-markdown"
+        "spawnkit-csv"
+        "spawnkit-tsv"
+        "spawnkit-calendar"
+        "spawnkit-notebook"
         "glycin-image-rs"
         "glycin-heif"
         "glycin-jxl"
@@ -660,7 +667,6 @@ in
         "jxl"
         "webp-pixbuf"
         "librsvg"
-        "gst-video-thumbnailer"
         "gst-audio-thumbnailer"
         "gnome-font-viewer"
       ];
