@@ -4,6 +4,7 @@
   personal.desktop.enable = true;
   # Matches plasma in system.yml.
   personal.desktop.plasma = true;
+  personal.eda.enable = true;
   # The built-in touchpad scrolls naturally, as it did under GNOME; the mouse keeps wheel scrolling.
   programs.plasma.input.touchpads = [
     {

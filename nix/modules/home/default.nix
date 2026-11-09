@@ -13,6 +13,7 @@
     ./shell.nix
     ./certificate-policy.nix
     ./tools.nix
+    ./eda.nix
     ./runtimes.nix
     ./repositories.nix
     ./assistants.nix
