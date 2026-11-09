@@ -86,6 +86,19 @@ PlasmoidItem {
         visible: false
     }
 
+    // Activation (`spawnkit-task-manager show`, Ctrl+Shift+Esc) opens the process window rather
+    // than the card. Assigning the shortcut to itself registers the activation action with
+    // kglobalaccel even without keys, so the CLI can invoke it, and keeps any key set by hand.
+    activationTogglesExpanded: false
+    Component.onCompleted: Plasmoid.globalShortcut = Plasmoid.globalShortcut
+    Connections {
+        target: Plasmoid
+        function onActivated() {
+            root.expanded = false
+            processWindow.open()
+        }
+    }
+
     Plasmoid.icon: "speedometer-symbolic"
     Plasmoid.backgroundHints: PlasmaCore.Types.NoBackground
     toolTipMainText: i18n("System stats")

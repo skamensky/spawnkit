@@ -89,3 +89,16 @@
     group: root
     mode: '0755'
   when: not ansible_check_mode
+# Lets the seat's active user read keyboards, so spawnkit-task-manager (Home Manager) sees
+# Ctrl+Shift+Esc while Citrix or the Windows VM holds the keyboard and KWin's shortcuts are off.
+# logind grants the read access only to the user at the active seat, as for cameras and sound.
+- name: Let the active seat user read keyboards
+  ansible.builtin.copy:
+    dest: /etc/udev/rules.d/70-spawnkit-keyboards.rules
+    content: |
+      SUBSYSTEM=="input", KERNEL=="event*", ENV{ID_INPUT_KEYBOARD}=="1", TAG+="uaccess"
+    owner: root
+    group: root
+    mode: '0644'
+  when: cfg.plasma
+  notify: Apply udev rules to input devices

@@ -201,6 +201,15 @@ let
     flakeIgnore = [ "E501" ];
     makeWrapperArgs = [ "--prefix" "PATH" ":" (lib.makeBinPath [ pkgs.pciutils ]) ];
   } (builtins.readFile ./plasma-stats.py);
+  # Ctrl+Shift+Esc: minimizes every window and shows the stats widget's process window, also over
+  # Citrix and the Windows VM, which hold the keyboard and so silence KWin's shortcuts.
+  taskManagerTool = pkgs.writers.writePython3Bin "spawnkit-task-manager" {
+    libraries = [
+      pkgs.python3Packages.evdev
+      pkgs.python3Packages.pyudev
+    ];
+    flakeIgnore = [ "E501" ];
+  } (builtins.readFile ./plasma-task-manager.py);
   # The stats widget carries the Spawnkit UI components (Theme, Chip, SectionLabel, Spinner) as a
   # local directory import, since plasmashell has no import path for the Spawnkit module.
   statsWidget = (plasmoid "tech.shmuel.stats" ./plasma-stats { stats = "${statsTool}/bin/spawnkit-stats"; }).overrideAttrs (old: {
@@ -360,6 +369,13 @@ in
           "Ctrl+;"
         ];
         command = "${pkgs.callPackage ./plasma-qt.nix { } pkgs.copyq}/bin/copyq toggle";
+      };
+      # Windows' Ctrl+Shift+Esc. The spawnkit-task-manager service catches it while Citrix or the
+      # VM holds the keyboard and KWin's shortcuts are off.
+      hotkeys.commands.spawnkit-task-manager = {
+        name = "Task Manager";
+        key = "Ctrl+Shift+Esc";
+        command = "${taskManagerTool}/bin/spawnkit-task-manager show";
       };
       # Windows' title bar buttons: the window menu on the left, minimize, maximize and
       # close on the right (Layan's Aurorae theme defaults to macOS' left-hand set).
@@ -683,6 +699,7 @@ in
     };
     home.packages = with pkgs; [
       plasmaTheme
+      taskManagerTool
       layan
       colloid
       orchis
@@ -774,6 +791,18 @@ in
         Type = "dbus";
         BusName = "tech.shmuel.apps";
         ExecStart = "${appSearch}/bin/spawnkit-search serve";
+        Restart = "on-failure";
+      };
+      Install.WantedBy = [ "graphical-session.target" ];
+    };
+    systemd.user.services.spawnkit-task-manager = {
+      Unit = {
+        Description = "Ctrl+Shift+Esc from the keyboards, for when a window holds the keyboard";
+        PartOf = [ "graphical-session.target" ];
+        After = [ "graphical-session.target" ];
+      };
+      Service = {
+        ExecStart = "${taskManagerTool}/bin/spawnkit-task-manager watch";
         Restart = "on-failure";
       };
       Install.WantedBy = [ "graphical-session.target" ];

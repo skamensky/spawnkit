@@ -3,3 +3,6 @@
   ansible.builtin.systemd_service:
     name: nix-daemon.service
     state: restarted
+- name: Apply udev rules to input devices
+  ansible.builtin.shell: udevadm control --reload && udevadm trigger --subsystem-match=input --action=change
+  changed_when: true
