@@ -765,6 +765,26 @@ in
         X-Plasma-Runner-Unique-Results = true;
       };
     };
+    # A logout that an application cancels can leave plasma-shutdown running and owning
+    # org.kde.Shutdown; every later logout prompt then sees that name taken and quits at once, so
+    # Log Out does nothing. Opening the prompt means no logout is under way, so it first ends any
+    # plasma-shutdown older than a minute (a younger one may be a logout still closing apps).
+    xdg.dataFile."dbus-1/services/org.kde.LogoutPrompt.service".text = lib.generators.toINI { } {
+      "D-BUS Service" = {
+        Name = "org.kde.LogoutPrompt";
+        Exec = pkgs.writeShellScript "spawnkit-logout-prompt" ''
+          for pid in $(${pkgs.procps}/bin/pgrep -u "$(${pkgs.coreutils}/bin/id -u)" -x plasma-shutdown); do
+            age=$(${pkgs.procps}/bin/ps -o etimes= -p "$pid" | ${pkgs.coreutils}/bin/tr -d ' ')
+            if [ "''${age:-0}" -gt 60 ]; then
+              echo "spawnkit: ending stale plasma-shutdown $pid (''${age}s old) so the logout prompt can open" >&2
+              kill "$pid"
+              for _ in 1 2 3 4 5 6 7 8 9 10; do kill -0 "$pid" 2>/dev/null || break; sleep 0.1; done
+            fi
+          done
+          exec /usr/lib/x86_64-linux-gnu/libexec/ksmserver-logout-greeter "$@"
+        '';
+      };
+    };
     # Places without Desktop, Music or the Recent section (recent files and locations, modified
     # today and yesterday); everything else in Places stays as edited in Dolphin.
     # Running programs (kdeconnectd, plasmashell) cache their notification settings; tell them to
