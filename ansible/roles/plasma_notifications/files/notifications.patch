@@ -8,12 +8,12 @@
  
  import plasma.applet.org.kde.plasma.notifications as Notifications
  
-@@ -141,6 +142,47 @@
+@@ -141,6 +142,49 @@
          }
      }
  
-+    // Spawnkit: copies the notification's title and text, as plain text, to the clipboard; shown
-+    // on popups and in the history alike, since both draw their header with these buttons.
++    // Spawnkit: copies the notification's source, title and text, as plain text, to the clipboard;
++    // shown on popups and in the history alike, since both draw their header with these buttons.
 +    KQCAddons.Clipboard {
 +        id: clipboard
 +    }
@@ -34,10 +34,12 @@
 +
 +    PlasmaComponents3.ToolButton {
 +        id: copyButton
-+        readonly property string copyText: [headingButtons.modelInterface.summary, headingButtons.modelInterface.body]
++        readonly property string messageText: [headingButtons.modelInterface.summary, headingButtons.modelInterface.body]
 +            .map(text => headingButtons.plainText(text || "")).filter(text => text !== "").join("\n")
++        readonly property string copyText: [headingButtons.__applicationName.trim(), messageText]
++            .filter(text => text !== "").join("\n")
 +        icon.name: copiedTimer.running ? "checkmark" : "edit-copy"
-+        visible: copyText !== ""
++        visible: messageText !== ""
 +
 +        display: PlasmaComponents3.AbstractButton.IconOnly
 +        text: copiedTimer.running ? "Copied" : "Copy Text"
