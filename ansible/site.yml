@@ -50,6 +50,8 @@
       when: cfg.nix_bwrap
     - role: plasma_taskmanager
       when: cfg.plasma
+    - role: plasma_notifications
+      when: cfg.plasma
     - role: dolphin
       when: cfg.plasma
   post_tasks:

@@ -1,0 +1,58 @@
+--- a/components/HeadingButtons.qml
++++ b/components/HeadingButtons.qml
+@@ -15,6 +15,7 @@
+ import org.kde.notificationmanager as NotificationManager
+ 
+ import org.kde.coreaddons as KCoreAddons
++import org.kde.kquickcontrolsaddons as KQCAddons
+ 
+ import plasma.applet.org.kde.plasma.notifications as Notifications
+ 
+@@ -141,6 +142,47 @@
+         }
+     }
+ 
++    // Spawnkit: copies the notification's title and text, as plain text, to the clipboard; shown
++    // on popups and in the history alike, since both draw their header with these buttons.
++    KQCAddons.Clipboard {
++        id: clipboard
++    }
++
++    Timer {
++        id: copiedTimer
++        interval: 1500
++    }
++
++    function plainText(richText: string): string {
++        return richText
++            .replace(/<br\s*\/?>|<\/p>|<\/div>|<\/li>/gi, "\n")
++            .replace(/<[^>]*>/g, "")
++            .replace(/&nbsp;/g, " ").replace(/&lt;/g, "<").replace(/&gt;/g, ">")
++            .replace(/&quot;/g, "\"").replace(/&#0*39;|&apos;/g, "'").replace(/&amp;/g, "&")
++            .trim();
++    }
++
++    PlasmaComponents3.ToolButton {
++        id: copyButton
++        readonly property string copyText: [headingButtons.modelInterface.summary, headingButtons.modelInterface.body]
++            .map(text => headingButtons.plainText(text || "")).filter(text => text !== "").join("\n")
++        icon.name: copiedTimer.running ? "checkmark" : "edit-copy"
++        visible: copyText !== ""
++
++        display: PlasmaComponents3.AbstractButton.IconOnly
++        text: copiedTimer.running ? "Copied" : "Copy Text"
++        Accessible.description: headingButtons.__applicationName
++
++        onClicked: {
++            clipboard.content = copyText;
++            copiedTimer.restart();
++        }
++
++        PlasmaComponents3.ToolTip {
++            text: copyButton.text
++        }
++    }
++
+     PlasmaComponents3.ToolButton {
+         id: configureButton
+         icon.name: "configure"

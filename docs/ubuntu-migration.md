@@ -706,6 +706,13 @@ GNOME stays installed, so the session is chosen at login and the trial is revers
   Plasma upgrade, update `plasma_desktop_version` and its sha256 in the role's
   defaults, refresh the patch and rerun `host-config apply` (2026-11-05: built and
   installed for 6.6.6; the panel loads it with no QML errors).
+  The panel's notifications applet is Plasma's, forked the same way as
+  `tech.shmuel.notifications` by the `plasma_notifications` host role: it builds the
+  applet from the matching plasma-workspace tarball (sha256-pinned) with
+  `notifications.patch`, which adds a Copy Text button to every notification header,
+  so a popup or a history entry copies its title and text as plain text. The fork
+  keeps `X-Plasma-Provides: org.kde.plasma.notifications`; after a Plasma upgrade,
+  update `plasma_workspace_version` and its sha256 and refresh the patch.
   WhatsApp is pinned to the panel. Its launcher opens web.whatsapp.com in a
   dedicated Chrome profile (`~/.local/share/spawnkit/whatsapp-chrome`, logged in
   once by QR code) with DevTools on 127.0.0.1:9333. The `spawnkit-badges` user

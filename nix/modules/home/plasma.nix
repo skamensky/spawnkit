@@ -324,7 +324,9 @@ in
             # The paired phone (shown only while connected): battery, texts, ring, send a file.
             "org.kde.kdeconnect"
             "tech.shmuel.clock"
-            "org.kde.plasma.notifications"
+            # Plasma's notifications, forked by the plasma_notifications host role so that every
+            # notification, popup or in the history, has a Copy Text button.
+            "tech.shmuel.notifications"
           ];
         }
       ];

@@ -1,0 +1,6 @@
+---
+# Must match Ubuntu's plasma-workspace: the fork links against the installed LibNotificationManager.
+plasma_workspace_version: 6.6.6
+plasma_workspace_sha256: c9ffe4110b59e465ab2d5d431db2185fec6ea109fa39e4f3cac04c9553c28a7b
+plasma_notifications_dir: /var/cache/spawnkit/plasma-notifications
+plasma_notifications_plugins: /usr/lib/{{ ansible_facts.architecture }}-linux-gnu/qt6/plugins/plasma/applets
