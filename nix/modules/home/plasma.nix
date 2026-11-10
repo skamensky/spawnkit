@@ -232,9 +232,24 @@ let
       "--set" "SPAWNKIT_PANEL_PINS" (lib.concatStringsSep "," panelPins)
     ];
   } (builtins.readFile ./plasma-theme.py);
+  # plasma-manager writes its startup scripts with a #!/bin/sh shebang but bash's `trap ... ERR`;
+  # Ubuntu's /bin/sh is dash, which prints "trap: ERR: bad trap" and never notices a failed
+  # layout script. Its startup module is self-contained, so swap in a copy that runs under bash.
+  # Fails loudly once upstream changes the shebang.
+  plasmaManagerStartup = "${inputs.plasma-manager}/modules/startup.nix";
+  plasmaManagerStartupText = builtins.readFile plasmaManagerStartup;
+  plasmaManagerStartupBash =
+    assert lib.assertMsg (lib.hasInfix "#!/bin/sh" plasmaManagerStartupText)
+      "plasma-manager's startup.nix no longer uses #!/bin/sh; drop the bash override in plasma.nix";
+    builtins.toFile "plasma-manager-startup.nix"
+      (builtins.replaceStrings [ "#!/bin/sh" ] [ "#!/usr/bin/env bash" ] plasmaManagerStartupText);
 in
 {
-  imports = [ inputs.plasma-manager.homeModules.plasma-manager ];
+  imports = [
+    inputs.plasma-manager.homeModules.plasma-manager
+    plasmaManagerStartupBash
+  ];
+  disabledModules = [ plasmaManagerStartup ];
   # Plasma itself comes from Ubuntu (plasma in hosts/<profile>/system.yml); this declares
   # its look, panel and settings, and the theme gallery's candidates.
   options.personal.desktop.plasma = lib.mkEnableOption "KDE Plasma 6 settings and themes";
