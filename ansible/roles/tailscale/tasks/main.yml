@@ -64,6 +64,15 @@
     - not ansible_check_mode
     - (tailscale_status.stdout | from_json).BackendState == 'Running'
     - not (tailscale_prefs.stdout | from_json).RunSSH
+# Taildrop holds received files in a root-only inbox; the owner's user service
+# (personal.clients.taildrop) moves them out, which needs operator rights.
+- name: Let the owner receive Taildrop files without root
+  ansible.builtin.command:
+    argv: [tailscale, set, '--operator={{ cfg.user }}']
+  when:
+    - not ansible_check_mode
+    - (tailscale_status.stdout | from_json).BackendState == 'Running'
+    - (tailscale_prefs.stdout | from_json).OperatorUser | default('') != cfg.user
 - name: Explain post-login SSH setup
   ansible.builtin.debug:
     msg: Complete the owner's Tailscale login, then rerun host apply or run sudo tailscale set --ssh. Tailnet SSH policy and a fresh connection must be verified separately.

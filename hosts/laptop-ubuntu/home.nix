@@ -40,4 +40,5 @@
   # Ubuntu daemon packages include these clients; do not install parallel copies.
   personal.clients.docker = false;
   personal.clients.tailscale = false;
+  personal.clients.taildrop = true;
 }
