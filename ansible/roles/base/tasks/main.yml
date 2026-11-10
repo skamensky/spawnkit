@@ -41,6 +41,9 @@
     # cannot, as AppArmor lets it write only to GNOME's temporary paths, not the one KIO passes.
     # ffmpegthumbs previews videos, which GNOME's gst-video-thumbnailer fails to; kimageformat6-plugins
     # and qt6-image-formats-plugins let Qt, and so Dolphin, read WebP, HEIC, AVIF, PSD, XCF, JXL and ICO.
+    # gnome-snapshot is the camera app: pick a camera, take photos and videos, browse and play recent
+    # ones. Ubuntu's build uses the host's PipeWire camera stack; libspa-0.2-libcamera and libcamera-ipa,
+    # only recommended, let PipeWire reach cameras that need libcamera (MIPI/IPU sensors).
     # Recommends would pull in SDDM, which takes over from GDM, so the parts of a working
     # desktop that kde-plasma-desktop only recommends are listed here: brightness and power
     # (powerdevil), volume, network, displays, Bluetooth, System Settings and the KDE portal.
@@ -49,7 +52,7 @@
        powerdevil, plasma-pa, plasma-nm, kscreen, bluedevil, systemsettings, xdg-desktop-portal-kde, kio-extras, breeze-gtk-theme, kde-config-gtk-style,
        kinfocenter, kmenuedit, ksystemstats, plasma-systemmonitor, plasma-disks, plasma-thunderbolt, kde-config-screenlocker, libpam-kwallet5, ksshaskpass,
        appmenu-gtk3-module, kdeconnect, konsole, kdegraphics-thumbnailers, ffmpegthumbs, kimageformat6-plugins,
-       qt6-image-formats-plugins]
+       qt6-image-formats-plugins, gnome-snapshot, libspa-0.2-libcamera, libcamera-ipa]
     install_recommends: false
     state: present
   when: cfg.plasma and not ansible_check_mode
