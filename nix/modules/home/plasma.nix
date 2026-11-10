@@ -301,7 +301,7 @@ in
         blur.enable = true;
         translucency.enable = true;
       };
-      # One bottom panel, as on Windows. Its right side holds only Wi-Fi, the battery (while on
+      # One bottom panel, as on Windows. Its right side holds only Wi-Fi, Bluetooth, the battery (while on
       # battery), the clock with Google Calendar, and notifications; without a system tray,
       # applications' tray icons (CopyQ, Claude) have nowhere to appear.
       panels = [
@@ -334,6 +334,9 @@ in
             # Plasma's network applet (plasma-nm, installed by the base host role): pick a Wi-Fi
             # network, see the connection, or toggle Wi-Fi and airplane mode.
             "org.kde.plasma.networkmanagement"
+            # Plasma's Bluetooth applet (bluedevil, installed by the base host role): connect and
+            # disconnect paired devices, pair new ones, or turn Bluetooth off.
+            "org.kde.plasma.bluetooth"
             "tech.shmuel.battery"
             # The current layout: a click switches between two, or opens a menu of more.
             "tech.shmuel.language"
