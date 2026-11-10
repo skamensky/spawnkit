@@ -19,6 +19,7 @@ host_packages: [solaar, cmake, ninja-build, language-pack-he, language-pack-gnom
 webex: true
 # Work's Citrix desktop runs from Ubuntu; Windows keeps the camera for calls.
 citrix: true
+chatgpt: true
 nix_chrome: true
 nix_bwrap: true
 # Same tailnet identity and listener as the WSL node (migration C4); key-only.

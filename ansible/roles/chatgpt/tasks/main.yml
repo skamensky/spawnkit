@@ -1,0 +1,28 @@
+---
+# OpenAI's ChatGPT desktop app, which carries the Codex app on Linux. Its .deb's postinst writes
+# this same key and sources file; declaring them under the package's own names first keeps
+# that postinst from adding a second copy, and apt upgrades it like any Ubuntu package.
+- name: Install OpenAI's Codex Linux repository signing key
+  ansible.builtin.copy:
+    src: chatgpt-archive-keyring.gpg
+    dest: /usr/share/keyrings/chatgpt-archive-keyring.gpg
+    owner: root
+    group: root
+    mode: '0644'
+- name: Declare OpenAI's signed ChatGPT repository
+  ansible.builtin.copy:
+    src: chatgpt.sources
+    dest: /etc/apt/sources.list.d/chatgpt.sources
+    owner: root
+    group: root
+    mode: '0644'
+- name: Preview ChatGPT installation
+  ansible.builtin.debug:
+    msg: Install chatgpt (ChatGPT with Codex) from OpenAI's repository.
+  when: ansible_check_mode
+- name: Install ChatGPT with Codex
+  ansible.builtin.apt:
+    name: chatgpt
+    state: present
+    update_cache: true
+  when: not ansible_check_mode

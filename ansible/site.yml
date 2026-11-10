@@ -44,6 +44,8 @@
       when: cfg.webex
     - role: citrix
       when: cfg.citrix
+    - role: chatgpt
+      when: cfg.chatgpt
     - role: nix_chrome
       when: cfg.nix_chrome
     - role: nix_bwrap

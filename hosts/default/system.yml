@@ -18,6 +18,8 @@ windows_vm: false
 webex: false
 # Citrix Workspace app from a .deb Shmuel downloads (Citrix gates it behind its EULA).
 citrix: false
+# OpenAI's ChatGPT desktop app with Codex, from its signed APT repository.
+chatgpt: false
 # AppArmor userns exception for Home Manager's Chrome (desktop hosts on Ubuntu 24.04+).
 nix_chrome: false
 nix_bwrap: false
