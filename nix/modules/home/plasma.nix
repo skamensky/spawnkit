@@ -112,6 +112,18 @@ let
     for dir in $(cd $src && find -L . -mindepth 2 -maxdepth 2 -type d -path './symbolic/apps'); do
       ln -s $(readlink -f $src/$dir) $dest/$dir
     done
+    # Fluent marks a connected Bluetooth device with dots on either side of the rune; the panel's
+    # Bluetooth applet shows its plain rune instead (switched off keeps its own icon).
+    for panel in $dest/*/panel; do
+      [ -e $panel/network-bluetooth.svg ] || continue
+      real=$(readlink -f $panel)
+      rm $panel
+      mkdir $panel
+      ln -s $real/* $panel/
+      for name in network-bluetooth-activated network-bluetooth-activated-symbolic; do
+        ln -sfn $real/network-bluetooth.svg $panel/$name.svg
+      done
+    done
     sed -e 's/^Name=.*/Name=Fluent dark (application icons)/' -e 's/^Inherits=.*/Inherits=hicolor,breeze-dark/' \
       $src/index.theme > $dest/index.theme
   '';
