@@ -2,7 +2,8 @@
 // (an app's helper processes fold into one row), sortable by name, CPU, memory or PID, searchable,
 // with End (SIGTERM, then Force kill) on each row. It polls `spawnkit-stats processes` while open.
 // Above the list, graphs (Usage.qml) show the machine's CPU, memory, graphics and network use over
-// the last minute the window has been open, from the same readings.
+// the last minute the window has been open, from the same readings, and under them a pinned bar
+// (MemoryMap.qml) of where the used memory sits: virtual machines, apps, RAM disks, kernel, other.
 //
 // Rows never jump: values glide between readings, the order is re-ranked at most every two seconds
 // with the rows sliding to their places, and it holds still while the pointer is over the list.
@@ -481,6 +482,12 @@ Window {
                 scaleLabel: P.rate(win.networkTop)
                 series: [{ values: win.series("received"), color: Theme.accent }, { values: win.series("sent"), color: Theme.positive }]
             }
+        }
+
+        MemoryMap {
+            Layout.fillWidth: true
+            occupants: win.machine ? win.machine.memory.occupants : []
+            total: win.machine ? win.machine.memory.total_bytes : 0
         }
 
         // Column headings; a click sorts, a second click reverses.

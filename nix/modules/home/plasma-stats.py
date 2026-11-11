@@ -3,7 +3,9 @@
 spawnkit-stats [--top N]      one snapshot of processor, graphics, memory, swap and disk use, with the
                               N busiest processes when asked
 spawnkit-stats processes      every process, grouped by the app or service that owns it, with the
-                              machine's CPU, memory, graphics and network use over the same interval
+                              machine's CPU, memory, graphics and network use over the same interval,
+                              and where the used memory sits (machine.memory.occupants: virtual
+                              machines, apps, RAM disks, kernel, other), parts that add up to it
 spawnkit-stats signal PID:START...  end processes with SIGTERM (--term) or SIGKILL (--kill) and report
                               which exited within --wait seconds
 spawnkit-stats details PID:START...  what each process is: executable, parent, unit, start time and
@@ -164,15 +166,71 @@ def nvidia_gpus():
     return gpus
 
 
-def memory():
+def meminfo():
     info = {}
     for line in Path("/proc/meminfo").read_text().splitlines():
         key, value = line.split(":", 1)
         info[key] = int(value.split()[0]) * 1024
+    return info
+
+
+def memory():
+    info = meminfo()
     return (
         {"used_bytes": info["MemTotal"] - info["MemAvailable"], "total_bytes": info["MemTotal"]},
         {"used_bytes": info["SwapTotal"] - info["SwapFree"], "total_bytes": info["SwapTotal"]},
     )
+
+
+def ram_disks():
+    """[(mount point, bytes stored)] of the mounted tmpfs and ramfs file systems holding anything,
+    each file system once however often it is mounted."""
+    seen = set()
+    result = []
+    for line in Path("/proc/self/mounts").read_text().splitlines():
+        _, target, fstype = line.split()[:3]
+        if fstype not in ("tmpfs", "ramfs"):
+            continue
+        target = target.replace("\\040", " ")
+        try:
+            stat = os.statvfs(target)
+            device = os.stat(target).st_dev
+        except OSError:
+            continue
+        used = (stat.f_blocks - stat.f_bfree) * stat.f_frsize
+        if used and device not in seen:
+            seen.add(device)
+            result.append((target, used))
+    return sorted(result, key=lambda m: -m[1])
+
+
+def size_text(n):
+    return f"{n / 2**30:.1f} GiB" if n >= 2**30 else f"{n // 2**20} MiB"
+
+
+def occupants(groups):
+    """Where the used memory (MemTotal - MemAvailable) sits, in parts that add up to it: each
+    virtual machine's guest RAM, the apps and services listed, files in RAM disks, the kernel's own
+    memory, and the rest. Files in RAM disks that a process maps count under that process too, and
+    the rest absorbs the overlap."""
+    info = meminfo()
+    used = info["MemTotal"] - info["MemAvailable"]
+    parts = []
+    for group in groups:
+        if group["kind"] == "vm":
+            parts.append({"id": group["id"], "name": group["name"], "bytes": group["memory_bytes"],
+                          "detail": "Guest RAM and the emulator"})
+    apps = sum(g["memory_bytes"] for g in groups if g["kind"] != "vm")
+    parts.append({"id": "apps", "name": "Apps and services", "bytes": apps, "detail": "Every other process listed below"})
+    disks = ram_disks()
+    parts.append({"id": "ram-disks", "name": "RAM disks", "bytes": sum(b for _, b in disks),
+                  "detail": ", ".join(f"{target} {size_text(b)}" for target, b in disks if b >= 2**20) or "Empty"})
+    kernel = sum(info.get(key, 0) for key in ("SUnreclaim", "KernelStack", "PageTables", "SecPageTables", "Percpu"))
+    parts.append({"id": "kernel", "name": "Kernel", "bytes": kernel,
+                  "detail": "Unreclaimable slab, page tables and kernel stacks"})
+    parts.append({"id": "other", "name": "Other", "bytes": max(0, used - sum(p["bytes"] for p in parts)),
+                  "detail": "Cache the kernel cannot free at once, driver buffers and memory no process maps"})
+    return parts
 
 
 def disk(path):
@@ -320,7 +378,7 @@ def group_of(unit, name, entries):
         title, icon = entries(desktop_id)
         return "app:" + desktop_id, title or desktop_id.rpartition(".")[2] or desktop_id, icon, "app"
     if stem.startswith("machine-qemu-"):
-        return "unit:" + unit, "Virtual machine " + re.sub(r"^machine-qemu-\d+-", "", stem), "computer", "service"
+        return "unit:" + unit, "Virtual machine " + re.sub(r"^machine-qemu-\d+-", "", stem), "computer", "vm"
     kind = "session" if unit.startswith(("plasma-", "session-")) or "@" in unit else "service"
     return "unit:" + unit, stem, None, kind
 
@@ -417,10 +475,12 @@ def measure_processes(interval, sort, flat):
             "network": window.network,
         },
     }
+    groups = grouped(procs, sort)
+    out["machine"]["memory"]["occupants"] = occupants(groups)
     if flat:
         out["processes"] = procs
     else:
-        out["groups"] = grouped(procs, sort)
+        out["groups"] = groups
     return out
 
 
