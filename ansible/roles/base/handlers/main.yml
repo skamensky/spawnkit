@@ -6,3 +6,12 @@
 - name: Apply udev rules to input devices
   ansible.builtin.shell: udevadm control --reload && udevadm trigger --subsystem-match=input --action=change
   changed_when: true
+- name: Restart the USB audio guard
+  ansible.builtin.systemd_service:
+    name: spawnkit-usb-audio-guard.service
+    state: restarted
+    daemon_reload: true
+  when: not ansible_check_mode
+- name: Apply udev rules to USB devices
+  ansible.builtin.shell: udevadm control --reload && udevadm trigger --subsystem-match=usb --attr-match=bInterfaceClass=01 --action=add
+  changed_when: true

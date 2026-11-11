@@ -313,8 +313,8 @@ in
         blur.enable = true;
         translucency.enable = true;
       };
-      # One bottom panel, as on Windows. Its right side holds only Wi-Fi, Bluetooth, the battery (while on
-      # battery), the clock with Google Calendar, and notifications; without a system tray,
+      # One bottom panel, as on Windows. Its right side holds only Wi-Fi, Bluetooth, sound, the battery
+      # (while on battery), the clock with Google Calendar, and notifications; without a system tray,
       # applications' tray icons (CopyQ, Claude) have nowhere to appear.
       panels = [
         {
@@ -349,6 +349,9 @@ in
             # Plasma's Bluetooth applet (bluedevil, installed by the base host role): connect and
             # disconnect paired devices, pair new ones, or turn Bluetooth off.
             "org.kde.plasma.bluetooth"
+            # Plasma's volume applet (plasma-pa, installed by the base host role): output and
+            # input volume, mute, per-application streams and the default device.
+            "org.kde.plasma.volume"
             "tech.shmuel.battery"
             # The current layout: a click switches between two, or opens a menu of more.
             "tech.shmuel.language"

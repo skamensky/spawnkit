@@ -351,6 +351,16 @@ Confirm the guest is off, then run
 only if every configured function is back on its declared driver and
 `nvidia-smi -L` works. A reboot clears it too; neither touches Windows data.
 
+Windows' sound reaches the host through Looking Glass and PipeWire, so a stuck host audio
+device silences it too. A USB microphone that stops answering (the kernel logs
+`usb_set_interface failed (-110)` every five seconds) blocks PipeWire's main loop: guest
+sound drops, volume keys do nothing and Sound settings cannot reach the devices. The base
+role's `spawnkit-usb-audio-guard` service resets such a device after three timeouts in
+30 seconds, as unplugging it would, and its udev rule keeps USB audio devices out of
+runtime suspend. By hand: `spawnkit-usb-audio status` lists USB audio devices and
+recent timeouts; `sudo spawnkit-usb-audio reset <port>` resets one; `journalctl -u
+spawnkit-usb-audio-guard` shows automatic resets.
+
 ## 4 Guest integration
 
 The definition always carries a QEMU guest agent channel. After installing the

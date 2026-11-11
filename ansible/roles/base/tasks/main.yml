@@ -108,3 +108,57 @@
     mode: '0644'
   when: cfg.plasma
   notify: Apply udev rules to input devices
+
+# A wedged USB microphone blocks PipeWire's main loop, which silences every sound on the
+# machine (the Windows VM's too) until the device is unplugged. usb-audio-guard.py resets
+# such a device automatically and offers `spawnkit-usb-audio status|reset` by hand.
+- name: Install the USB audio guard
+  ansible.builtin.copy:
+    src: usb-audio-guard.py
+    dest: /usr/local/libexec/spawnkit/usb-audio-guard.py
+    owner: root
+    group: root
+    mode: '0755'
+  notify: Restart the USB audio guard
+- name: Put the USB audio guard on the administrator's path
+  ansible.builtin.file:
+    src: /usr/local/libexec/spawnkit/usb-audio-guard.py
+    dest: /usr/local/sbin/spawnkit-usb-audio
+    state: link
+    force: true
+- name: Run the USB audio guard as a system service
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/spawnkit-usb-audio-guard.service
+    content: |
+      [Unit]
+      Description=Reset USB audio devices that stop answering (Spawnkit)
+
+      [Service]
+      ExecStart=/usr/local/libexec/spawnkit/usb-audio-guard.py watch
+      Restart=always
+      RestartSec=5
+
+      [Install]
+      WantedBy=multi-user.target
+    owner: root
+    group: root
+    mode: '0644'
+  notify: Restart the USB audio guard
+- name: Enable the USB audio guard
+  ansible.builtin.systemd_service:
+    name: spawnkit-usb-audio-guard.service
+    enabled: true
+    state: started
+    daemon_reload: true
+  when: not ansible_check_mode
+# Cheap USB microphones often time out when resuming from runtime suspend (a likely, not
+# confirmed, trigger of the NexiGo wedge); keeping USB audio devices powered avoids that path.
+- name: Keep USB audio devices out of runtime suspend
+  ansible.builtin.copy:
+    dest: /etc/udev/rules.d/70-spawnkit-usb-audio.rules
+    content: |
+      ACTION=="add|bind", SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_interface", ATTR{bInterfaceClass}=="01", RUN+="/bin/sh -c 'echo on > /sys%p/../power/control'"
+    owner: root
+    group: root
+    mode: '0644'
+  notify: Apply udev rules to USB devices
