@@ -21,7 +21,10 @@ let
   # the window keeps a shell. `start` adds only missing windows, so it is safe to rerun.
   claudeSessions = pkgs.writeShellApplication {
     name = "claude-sessions";
-    runtimeInputs = [ config.programs.tmux.package ];
+    runtimeInputs = [
+      config.programs.tmux.package
+      pkgs.procps
+    ];
     text = ''
       session=claude
       window() { # name dir command
@@ -46,6 +49,12 @@ let
           ;;
         stop)
           tmux kill-session -t "=$session" 2>/dev/null || true
+          # A Remote Control server deregisters its folder as it exits; wait for that, or a
+          # restart's new server finds the folder still served and refuses to start.
+          for _ in $(seq 30); do
+            pgrep -u "$(id -u)" -f '^claude remote-control' >/dev/null || break
+            sleep 0.5
+          done
           ;;
         list)
           tmux list-windows -t "=$session" -F '#{window_name} #{pane_current_path} #{pane_current_command}' 2>/dev/null || true
