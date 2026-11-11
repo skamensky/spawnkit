@@ -41,7 +41,7 @@ let
               continue
             fi
             window "$name" "$dir" "claude --dangerously-skip-permissions --name $name"
-            window "$name-rc" "$dir" "claude remote-control --permission-mode bypassPermissions --name $name"
+            window "$name-rc" "$dir" "claude remote-control --spawn same-dir --permission-mode bypassPermissions --name $name"
           done < ${projects}
           ;;
         stop)
