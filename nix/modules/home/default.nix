@@ -17,6 +17,7 @@
     ./runtimes.nix
     ./repositories.nix
     ./assistants.nix
+    ./claude-sessions.nix
     ./desktop.nix
     ./plasma.nix
     ./wallpaper.nix
