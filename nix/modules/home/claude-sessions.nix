@@ -56,11 +56,23 @@ let
             sleep 0.5
           done
           ;;
+        ensure-home)
+          # The backup: a bypass Claude with Remote Control in ~, in its own tmux session so
+          # stopping the project sessions never touches it. The window relaunches claude
+          # whenever it exits; the timer recreates the window if tmux itself went away.
+          if ! tmux has-session -t "=claude-home" 2>/dev/null; then
+            tmux new-session -d -s claude-home -n home -c "$HOME" -- bash -lic \
+              'while :; do claude --dangerously-skip-permissions --remote-control home --name home; sleep 5; done'
+            echo "started claude-home:home"
+          fi
+          ;;
         list)
-          tmux list-windows -t "=$session" -F '#{window_name} #{pane_current_path} #{pane_current_command}' 2>/dev/null || true
+          for s in "$session" claude-home; do
+            tmux list-windows -t "=$s" -F "$s:#{window_name} #{pane_current_path} #{pane_current_command}" 2>/dev/null || true
+          done
           ;;
         *)
-          echo "usage: claude-sessions start|stop|list (attach with: tmux attach -t $session)" >&2
+          echo "usage: claude-sessions start|stop|ensure-home|list (attach with: tmux attach -t $session, or -t claude-home)" >&2
           exit 2
           ;;
       esac
@@ -95,6 +107,24 @@ in
         KillMode = "process";
       };
       Install.WantedBy = [ "default.target" ];
+    };
+    # Keep at least one remote session reachable even if everything else is down.
+    systemd.user.services.claude-home = {
+      Unit.Description = "Ensure the backup Claude Remote Control session in ~ (tmux session claude-home)";
+      Service = {
+        Type = "oneshot";
+        ExecStart = "${lib.getExe claudeSessions} ensure-home";
+        # The tmux server may be started here; it must outlive this oneshot.
+        KillMode = "process";
+      };
+    };
+    systemd.user.timers.claude-home = {
+      Unit.Description = "Check every minute that the backup Claude session is running";
+      Timer = {
+        OnActiveSec = "0";
+        OnUnitActiveSec = "1min";
+      };
+      Install.WantedBy = [ "timers.target" ];
     };
   };
 }
