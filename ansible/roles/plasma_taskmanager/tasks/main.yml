@@ -1,6 +1,6 @@
 ---
 # Plasma's task manager, forked as tech.shmuel.taskmanager: icons only, and a right-click menu of
-# just Pin/Unpin and Close. Its QML is compiled into a C++ plugin together with the backend
+# just Pin/Unpin, Close and Force Close. Its QML is compiled into a C++ plugin together with the backend
 # (window actions, unread badges), so the fork is rebuilt from the matching plasma-desktop source
 # against Ubuntu's Plasma libraries.
 - name: Inspect installed Ubuntu packages

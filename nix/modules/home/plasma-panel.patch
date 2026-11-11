@@ -1,18 +1,27 @@
 --- a/main.qml
 +++ b/main.qml
-@@ -147,6 +147,15 @@
-         acceptedDevices: PointerDevice.TouchScreen | PointerDevice.Stylus
-         onLongPressed: Plasmoid.internalAction("configure").trigger()
+@@ -436,6 +436,24 @@
+             layoutDirection: Application.layoutDirection
+         }
      }
-+    // A press on the panel itself, outside any widget, closes the open popup. Popups close when
-+    // they lose focus, and the panel never takes focus, so they otherwise stay open. Widgets
-+    // accept their own presses, so only the panel's bare background reaches this handler. A
-+    // pinned popup (Keep open) stays.
-+    TapHandler {
-+        acceptedButtons: Qt.AllButtons
-+        onPressedChanged: if (pressed) Containment.applets.filter(applet => applet.hideOnWindowDeactivate)
-+            .forEach(applet => applet.expanded = false)
++
++    // A press anywhere on the panel closes the open popup, except the one belonging to the
++    // widget under the press, which toggles itself. Popups close when they lose focus and the
++    // panel never takes focus, so they otherwise stay open. This item lies above the widgets
++    // and only watches: its handler grabs passively, so the press still reaches the widget
++    // beneath (the taskbar fills most of the panel and accepts every press). A pinned popup
++    // (Keep open) stays.
++    Item {
++        anchors.fill: parent
++        TapHandler {
++            acceptedButtons: Qt.AllButtons
++            onPressedChanged: if (pressed) Containment.applets
++                .map(applet => root.itemFor(applet))
++                .filter(item => item && item.expanded && item.hideOnWindowDeactivate
++                    && !item.contains(item.mapFromItem(root, point.position)))
++                .forEach(item => item.expanded = false)
++        }
 +    }
- 
-     DragDrop.DropArea {
-         id: dropArea
+     MouseArea {
+         anchors.fill: parent
+         visible: Containment.corona.editMode && !Plasmoid.userConfiguring

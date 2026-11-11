@@ -1,6 +1,14 @@
 --- a/ContextMenu.qml
 +++ b/ContextMenu.qml
-@@ -70,10 +70,27 @@
+@@ -11,6 +11,7 @@
+ 
+ import org.kde.plasma.core as PlasmaCore
+ import org.kde.plasma.extras as PlasmaExtras
++import org.kde.plasma.plasma5support as P5Support
+ 
+ import org.kde.taskmanager as TaskManager
+ import org.kde.plasma.private.mpris as Mpris
+@@ -70,10 +71,27 @@
      function show(): void {
          Plasmoid.contextualActionsAboutToShow();
  
@@ -29,7 +37,7 @@
      function newMenuItem(parent: QtObject): PlasmaExtras.MenuItem {
          return Qt.createQmlObject(`
              import org.kde.plasma.extras as PlasmaExtras
-@@ -86,7 +103,7 @@
+@@ -86,7 +104,7 @@
          return Qt.createQmlObject(`
              import org.kde.plasma.extras as PlasmaExtras
  
@@ -38,7 +46,7 @@
              `, parent) as PlasmaExtras.MenuItem;
      }
  
-@@ -273,7 +290,7 @@
+@@ -273,7 +291,7 @@
  
      PlasmaExtras.MenuItem {
          id: startNewInstanceItem
@@ -47,7 +55,7 @@
          text: i18nc("action:inmenu", "Open New Window")
          icon: "window-new"
  
-@@ -283,7 +300,7 @@
+@@ -283,7 +301,7 @@
      PlasmaExtras.MenuItem {
          id: virtualDesktopsMenuItem
  
@@ -56,7 +64,7 @@
              && (menu.visualParent && !menu.get(TaskManager.AbstractTasksModel.IsLauncher)
              && !menu.get(TaskManager.AbstractTasksModel.IsStartup)
              && menu.get(TaskManager.AbstractTasksModel.IsVirtualDesktopsChangeable))
-@@ -371,9 +388,7 @@
+@@ -371,9 +389,7 @@
       PlasmaExtras.MenuItem {
          id: activitiesDesktopsMenuItem
  
@@ -67,7 +75,7 @@
  
          enabled: visible
  
-@@ -602,7 +617,7 @@
+@@ -602,7 +618,7 @@
      PlasmaExtras.MenuItem {
          id: moreActionsMenuItem
  
@@ -76,7 +84,7 @@
  
          enabled: visible
  
-@@ -746,13 +761,13 @@
+@@ -746,13 +762,13 @@
          }
      }
  
@@ -92,7 +100,7 @@
  
          text: configureAction ? configureAction.text : ""
          icon: configureAction ? configureAction.icon : ""
-@@ -766,7 +781,7 @@
+@@ -766,7 +782,7 @@
          property PlasmaCore.Action editModeAction: null
  
          enabled: editModeAction && editModeAction.enabled
@@ -101,7 +109,7 @@
  
          text: editModeAction ? editModeAction.text : ""
          icon: editModeAction ? editModeAction.icon : ""
-@@ -776,7 +791,7 @@
+@@ -776,7 +792,7 @@
          Component.onCompleted: editModeAction = Plasmoid.containment.internalAction("configure")
      }
  
@@ -110,6 +118,40 @@
  
      PlasmaExtras.MenuItem {
          id: closeWindowItem
+@@ -795,4 +811,33 @@
+             tasksModel.requestClose(menu.modelIndex);
+         }
+     }
++
++    // Spawnkit: Force Close sends SIGKILL to the app's processes (each window's, for a group), for
++    // an app that ignores Close. Like KWin's kill dialog, it reaches only the window's own process,
++    // so its children die only if they exit with it.
++    PlasmaExtras.MenuItem {
++        visible: closeWindowItem.visible
++        enabled: visible
++
++        text: i18nc("@action:inmenu", "&Force Close")
++        icon: "process-stop"
++
++        onClicked: {
++            const index = menu.modelIndex;
++            const pids = menu.get(TaskManager.AbstractTasksModel.IsGroupParent)
++                ? Array.from({length: tasksModel.rowCount(index)}, (_, row) =>
++                    tasksModel.data(tasksModel.index(row, 0, index), TaskManager.AbstractTasksModel.AppPid))
++                : [menu.get(TaskManager.AbstractTasksModel.AppPid)];
++            const unique = [...new Set(pids.filter(pid => pid > 1))];
++            if (unique.length > 0) {
++                spawnkitKill.connectSource("kill -KILL " + unique.join(" "));
++            }
++        }
++    }
++
++    P5Support.DataSource {
++        id: spawnkitKill
++        engine: "executable"
++        onNewData: sourceName => disconnectSource(sourceName)
++    }
+ }
 --- a/main.qml
 +++ b/main.qml
 @@ -32,7 +32,7 @@

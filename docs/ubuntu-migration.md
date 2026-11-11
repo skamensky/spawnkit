@@ -688,7 +688,7 @@ GNOME stays installed, so the session is chosen at login and the trial is revers
   Widgets are locked (`immutability=2` with `plasma/allow_configure_when_locked`
   off), so a task's right-click menu has no configure entries. The panel's task
   manager is `tech.shmuel.taskmanager`, a fork of Plasma's icon-only task manager
-  whose right-click menu offers only Pin/Unpin and Close, plus the launcher's desktop
+  whose right-click menu offers only Pin/Unpin, Close and Force Close (SIGKILL), plus the launcher's desktop
   actions that its `spawnkit-badges` tag lists for the current state (the Windows
   launcher's power actions; see `docs/windows-vm.md`). Its window tooltips ignore a
   media player with no track, which upstream counts as matching every title (Chrome's
