@@ -44,20 +44,81 @@ let
       }
     '';
   };
-  # A CopyQ script command (replaced by name at every start): after each clipboard change that
-  # holds an image, CopyQ copies the image again so that it owns the clipboard.
+  # After each clipboard change that holds an image, CopyQ copies the image again so that it owns
+  # the clipboard.
   copyqKeepImages = pkgs.writeText "copyq-keep-images.js" ''
-    var name = 'Keep copied images after their app exits'
-    var script = [
-      'var spawnkitClipboardChanged = onClipboardChanged',
-      'onClipboardChanged = function() {',
-      '  spawnkitClipboardChanged()',
-      '  var image = data("image/png")',
-      '  if (image.length) copy("image/png", image)',
-      '}',
-    ].join(String.fromCharCode(10))
-    setCommands(commands().filter(function(c) { return c.name !== name })
-      .concat([{name: name, isScript: true, cmd: script}]))
+    var spawnkitClipboardChanged = onClipboardChanged
+    onClipboardChanged = function() {
+      spawnkitClipboardChanged()
+      var image = data("image/png")
+      if (image.length) copy("image/png", image)
+    }
+  '';
+  # Enter on several selected items. CopyQ merges only their text, so selected screenshots left
+  # the clipboard empty; one clipboard holds one image, so the images go out as a list of files
+  # (as a file manager copies them), which browsers and Electron apps paste as one attachment each.
+  # Writes each image once, named by its hash, under ~/.cache/copyq/paste.
+  copyqPasteSelected = pkgs.writeText "copyq-paste-selected.js" ''
+    var newline = String.fromCharCode(10)
+    var dir = str(env('HOME')) + '/.cache/copyq/paste'
+    var rows = selectedItems()
+    tab(selectedTab())
+    var images = [], uris = [], texts = []
+    for (var i = 0; i < rows.length; ++i) {
+      var item = getItem(rows[i])
+      var png = item['image/png']
+      if (png && png.length) {
+        var path = dir + '/' + str(execute('${pkgs.coreutils}/bin/sha256sum', null, png).stdout).split(' ')[0] + '.png'
+        if (!new File(path).exists()) {
+          new Dir(dir).mkpath('.')
+          var file = new File(path)
+          file.openWriteOnly()
+          file.write(png)
+          file.close()
+        }
+        images.push('file://' + encodeURI(path))
+      } else {
+        if (item['text/uri-list']) uris = uris.concat(str(item['text/uri-list']).split(/\r?\n/).filter(Boolean))
+        if (item['text/plain']) texts.push(str(item['text/plain']))
+      }
+    }
+    if (images.length) {
+      uris = images.concat(uris)
+      copy({
+        'text/uri-list': uris.join(String.fromCharCode(13, 10)) + String.fromCharCode(13, 10),
+        'x-special/gnome-copied-files': ['copy'].concat(uris).join(newline),
+        'application/x-copyq-hidden': '1',
+      })
+    } else {
+      var merged = {'text/plain': texts.join(newline)}
+      if (uris.length) merged['text/uri-list'] = uris.join(String.fromCharCode(13, 10))
+      copy(merged)
+    }
+  '';
+  # Installs Spawnkit's CopyQ commands at every start, replacing earlier copies by name. An item
+  # command bound to Enter is CopyQ's activation action while it is enabled; the item list format
+  # exists only when several items are selected, so a single item still activates natively.
+  copyqCommands = pkgs.writeText "copyq-commands.js" ''
+    function read(path) {
+      var file = new File(path)
+      file.openReadOnly()
+      var text = str(file.readAll())
+      file.close()
+      return text
+    }
+    var spawnkit = [
+      {name: 'Keep copied images after their app exits', isScript: true, cmd: read('${copyqKeepImages}')},
+      {
+        name: 'Paste selected items together',
+        inMenu: true,
+        hideWindow: true,
+        input: 'application/x-copyq-itemlist',
+        shortcuts: ['Return', 'Enter'],
+        cmd: 'copyq:' + read('${copyqPasteSelected}'),
+      },
+    ]
+    var names = spawnkit.map(function(c) { return c.name })
+    setCommands(commands().filter(function(c) { return names.indexOf(c.name) < 0 }).concat(spawnkit))
   '';
   onlyoffice =
     inputs.nixpkgs-unstable.legacyPackages.${pkgs.stdenv.hostPlatform.system}.onlyoffice-desktopeditors.override
@@ -328,7 +389,7 @@ in
           pkgs.writeShellScript "copyq-setup" ''
             ready=
             for _ in $(${pkgs.coreutils}/bin/seq 30); do
-              ${copyq}/bin/copyq source ${copyqKeepImages} >/dev/null 2>&1 && { ready=1; break; }
+              ${copyq}/bin/copyq source ${copyqCommands} >/dev/null 2>&1 && { ready=1; break; }
               ${pkgs.coreutils}/bin/sleep 1
             done
             [ -n "$ready" ] || exit 1
