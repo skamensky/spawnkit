@@ -13,8 +13,10 @@ let
     )
   );
   # Each declared project whose checkout exists gets two windows in the detached tmux
-  # session `claude`: Claude with permissions bypassed, and the same with Remote Control
-  # (named after the project in claude.ai/code and the mobile app). A login shell runs
+  # session `claude`: Claude with permissions bypassed, and a Remote Control server
+  # (`claude remote-control`). The server registers this machine as a device in
+  # claude.ai/code and the mobile app, so new sessions in the project can be started
+  # from there; `claude --remote-control` would only expose one existing session. A login shell runs
   # each, so claude sees the same PATH and credentials as a terminal; when claude exits
   # the window keeps a shell. `start` adds only missing windows, so it is safe to rerun.
   claudeSessions = pkgs.writeShellApplication {
@@ -39,7 +41,7 @@ let
               continue
             fi
             window "$name" "$dir" "claude --dangerously-skip-permissions --name $name"
-            window "$name-rc" "$dir" "claude --dangerously-skip-permissions --remote-control $name"
+            window "$name-rc" "$dir" "claude remote-control --permission-mode bypassPermissions --name $name"
           done < ${projects}
           ;;
         stop)
