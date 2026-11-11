@@ -93,8 +93,40 @@ let
       if (uris.length) merged['text/uri-list'] = uris.join(String.fromCharCode(13, 10))
       copy(merged)
     }
+    if (str(config('activate_pastes')) === 'true') paste()
   '';
-  # Installs Spawnkit's CopyQ commands at every start, replacing earlier copies by name. An item
+  # Types the paste keystroke into the focused window through ydotool, as CopyQ cannot send keys to
+  # other Wayland windows: Ctrl+Shift+V in terminals while the clipboard holds no image, Ctrl+V
+  # elsewhere (and in terminals for an image, which Claude Code reads on Ctrl+V). Prints what it
+  # sent as JSON.
+  pasteTool = pkgs.writeShellApplication {
+    name = "spawnkit-paste";
+    runtimeInputs = with pkgs; [
+      kdotool
+      ydotool
+      wl-clipboard
+      gnugrep
+    ];
+    text = ''
+      export YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/ydotool.socket"
+      class=$(kdotool getactivewindow getwindowclassname 2>/dev/null || true)
+      keys=ctrl+v
+      case "$class" in
+        org.kde.konsole | com.mitchellh.ghostty | tech.shmuel.SpawnkitAgent | kitty | Alacritty | foot | org.wezfurlong.wezterm | xterm)
+          wl-paste --list-types 2>/dev/null | grep -q '^image/' || keys=ctrl+shift+v
+          ;;
+      esac
+      # Linux key codes: 29 left Ctrl, 42 left Shift, 47 V.
+      if [ "$keys" = ctrl+v ]; then
+        ydotool key 29:1 47:1 47:0 29:0 >/dev/null
+      else
+        ydotool key 29:1 42:1 47:1 47:0 42:0 29:0 >/dev/null
+      fi
+      printf '{"window_class":"%s","keys":"%s"}\n' "$class" "$keys"
+    '';
+  };
+  # Installs Spawnkit's CopyQ commands at every start, replacing earlier copies by name (the paste
+  # override too when it no longer applies). An item
   # command bound to Enter is CopyQ's activation action while it is enabled. Its filter enables it
   # only when the selection data holds the item list, which CopyQ adds only for several items, so
   # a single item still activates natively. (An input format cannot do this: CopyQ treats the
@@ -117,8 +149,21 @@ let
         shortcuts: ['Return', 'Enter'],
         cmd: 'copyq:' + read('${copyqPasteSelected}'),
       },
+      ${lib.optionalString config.personal.desktop.plasma ''
+        // CopyQ calls paste() after activating items once its window is gone; give KWin a moment
+        // to focus the window it came from.
+        {
+          name: 'Paste into the focused window',
+          isScript: true,
+          cmd: 'paste = function() { sleep(200); execute("${pasteTool}/bin/spawnkit-paste") }',
+        },
+      ''}
     ]
-    var names = spawnkit.map(function(c) { return c.name })
+    var names = [
+      'Keep copied images after their app exits',
+      'Paste selected items together',
+      'Paste into the focused window',
+    ]
     setCommands(commands().filter(function(c) { return names.indexOf(c.name) < 0 }).concat(spawnkit))
   '';
   onlyoffice =
@@ -211,6 +256,7 @@ in
         copyq
         (if config.personal.desktop.session == "x11" then xclip else wl-clipboard)
       ]
+      ++ lib.optional config.personal.desktop.plasma pasteTool
       ++ documentFonts
       ++ lib.optionals pkgs.stdenv.hostPlatform.isx86_64 [
         # Linux Chrome lists the Vulkan adapters but hands WebGPU none without this.
@@ -399,6 +445,20 @@ in
             ) "${copyq}/bin/copyq config save_delay_ms_on_item_added 10000 >/dev/null"}
           ''
         );
+      };
+      Install.WantedBy = [ "graphical-session.target" ];
+    };
+    # The virtual keyboard spawnkit-paste types through; Ansible's base role gives the seat's user
+    # /dev/uinput.
+    systemd.user.services.ydotoold = lib.mkIf config.personal.desktop.plasma {
+      Unit = {
+        Description = "ydotool virtual keyboard for CopyQ's paste";
+        PartOf = [ "graphical-session.target" ];
+        After = [ "graphical-session.target" ];
+      };
+      Service = {
+        ExecStart = "${pkgs.ydotool}/bin/ydotoold --mouse-off --socket-path=%t/ydotool.socket";
+        Restart = "on-failure";
       };
       Install.WantedBy = [ "graphical-session.target" ];
     };

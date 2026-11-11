@@ -4,7 +4,7 @@
     name: nix-daemon.service
     state: restarted
 - name: Apply udev rules to input devices
-  ansible.builtin.shell: udevadm control --reload && udevadm trigger --subsystem-match=input --action=change
+  ansible.builtin.shell: udevadm control --reload && udevadm trigger --subsystem-match=input --subsystem-match=misc --action=change
   changed_when: true
 - name: Restart the USB audio guard
   ansible.builtin.systemd_service:
