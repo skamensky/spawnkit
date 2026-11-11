@@ -61,11 +61,10 @@ let
   copyqPasteSelected = pkgs.writeText "copyq-paste-selected.js" ''
     var newline = String.fromCharCode(10)
     var dir = str(env('HOME')) + '/.cache/copyq/paste'
-    var rows = selectedItems()
-    tab(selectedTab())
+    var items = selectedItemsData()
     var images = [], uris = [], texts = []
-    for (var i = 0; i < rows.length; ++i) {
-      var item = getItem(rows[i])
+    for (var i = 0; i < items.length; ++i) {
+      var item = items[i]
       var png = item['image/png']
       if (png && png.length) {
         var path = dir + '/' + str(execute('${pkgs.coreutils}/bin/sha256sum', null, png).stdout).split(' ')[0] + '.png'
@@ -96,8 +95,10 @@ let
     }
   '';
   # Installs Spawnkit's CopyQ commands at every start, replacing earlier copies by name. An item
-  # command bound to Enter is CopyQ's activation action while it is enabled; the item list format
-  # exists only when several items are selected, so a single item still activates natively.
+  # command bound to Enter is CopyQ's activation action while it is enabled. Its filter enables it
+  # only when the selection data holds the item list, which CopyQ adds only for several items, so
+  # a single item still activates natively. (An input format cannot do this: CopyQ treats the
+  # item list input as always present.)
   copyqCommands = pkgs.writeText "copyq-commands.js" ''
     function read(path) {
       var file = new File(path)
@@ -112,7 +113,7 @@ let
         name: 'Paste selected items together',
         inMenu: true,
         hideWindow: true,
-        input: 'application/x-copyq-itemlist',
+        matchCmd: 'copyq: if (dataFormats().indexOf("application/x-copyq-item") < 0) fail()',
         shortcuts: ['Return', 'Enter'],
         cmd: 'copyq:' + read('${copyqPasteSelected}'),
       },
