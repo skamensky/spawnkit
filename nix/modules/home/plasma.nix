@@ -351,7 +351,19 @@ in
             "org.kde.plasma.bluetooth"
             # Plasma's volume applet (plasma-pa, installed by the base host role): output and
             # input volume, mute, per-application streams and the default device.
-            "org.kde.plasma.volume"
+            {
+              name = "org.kde.plasma.volume";
+              # Its default popup (252 px) wraps the Applications tab and cuts stream names
+              # such as "looking-glass-client · Looking Glass". Plasma keeps a popup's size in
+              # the applet's root config group, which `config` (named groups only) cannot reach.
+              extraConfig = ''
+                (widget) => {
+                  widget.currentConfigGroup = [];
+                  widget.writeConfig("popupWidth", 460);
+                  widget.writeConfig("popupHeight", 360);
+                }
+              '';
+            }
             "tech.shmuel.battery"
             # The current layout: a click switches between two, or opens a menu of more.
             "tech.shmuel.language"
@@ -431,6 +443,18 @@ in
             title = "Processes";
           };
           apply.desktopfile = { value = "spawnkit-task-manager"; apply = "force"; };
+        }
+        # The volume applet's settings button (and other panel shortcuts to a settings page)
+        # hand the page to an already open System Settings, which arrives without an activation
+        # token; KWin's focus stealing prevention then left it behind the active window.
+        {
+          description = "Settings windows come to the front";
+          match.window-class = {
+            value = "systemsettings|kcmshell";
+            type = "regex";
+            match-whole = false;
+          };
+          apply.fsplevel = { value = 0; apply = "force"; };
         }
         # WhatsApp's Chrome app window runs on native Wayland, where Chrome cannot place its
         # windows and opens at a fixed size, so KWin remembers its geometry instead. KWin writes
