@@ -243,9 +243,22 @@ def status(pid):
     with open(f"/proc/{pid}/status") as f:
         for line in f:
             key, _, value = line.partition(":")
-            if key in ("Name", "State", "PPid", "Uid", "Threads", "VmRSS", "RssAnon", "Kthread"):
+            if key in ("Name", "State", "PPid", "Uid", "Threads", "VmRSS", "RssAnon", "RssShmem", "Kthread"):
                 values[key] = value.strip()
     return values
+
+
+def memory_of(pid, info):
+    """Bytes of RAM the process holds that are not a cache of files: its anonymous memory plus the
+    shared memory it maps (a VM's guest RAM, memfd buffers, tmpfs files). For your own processes
+    this is the proportional share (PSS), which splits pages several processes map between them,
+    so app totals add up; another user's smaps_rollup is unreadable, so theirs is the full count."""
+    try:
+        with open(f"/proc/{pid}/smaps_rollup") as f:
+            kb = sum(int(line.split()[1]) for line in f if line.startswith(("Pss_Anon:", "Pss_Shmem:")))
+    except OSError:
+        kb = sum(int(info.get(key, "0 kB").split()[0]) for key in ("RssAnon", "RssShmem"))
+    return kb * 1024
 
 
 def unit_of(pid):
@@ -314,7 +327,7 @@ def group_of(unit, name, entries):
 
 def processes(before, after, elapsed, top=None, sort="cpu"):
     """Every user-space process with its share of the whole machine's CPU over the interval and its
-    private memory, sorted by sort; with top, only the busiest that many."""
+    memory (memory_of), sorted by sort; with top, only the busiest that many."""
     cpus = os.cpu_count() or 1
     own_uid = os.getuid()
     users = {}
@@ -337,7 +350,6 @@ def processes(before, after, elapsed, top=None, sort="cpu"):
                 users[uid] = str(uid)
         earlier = before.get(pid)
         used = ticks - earlier[1] if earlier and earlier[0] == start else 0
-        rss_anon = info.get("RssAnon", "0 kB").split()[0]
         name = info.get("Name", str(pid))
         result.append({
             "pid": pid,
@@ -349,7 +361,7 @@ def processes(before, after, elapsed, top=None, sort="cpu"):
             "own": uid == own_uid,
             "critical": pid == 1 or name in CRITICAL,
             "cpu_percent": round(100 * used / TICKS / elapsed / cpus, 1) if elapsed > 0 else 0.0,
-            "memory_bytes": int(rss_anon) * 1024,
+            "memory_bytes": memory_of(pid, info),
         })
     result.sort(key=sort_key(sort))
     return result[:top] if top else result
@@ -510,7 +522,7 @@ def details(target):
         "started": time.strftime("%Y-%m-%d %H:%M:%S %z", time.localtime(boot_time() + started / TICKS)),
         "state": info.get("State"),
         "threads": int(info.get("Threads", "0")),
-        "memory_bytes": int(info.get("RssAnon", "0 kB").split()[0]) * 1024,
+        "memory_bytes": memory_of(pid, info),
         "resident_bytes": int(info.get("VmRSS", "0 kB").split()[0]) * 1024,
     }
 
@@ -528,7 +540,7 @@ def details_text(item):
         ("Started", item["started"]),
         ("State", item["state"]),
         ("Threads", item["threads"]),
-        ("Memory", f"{item['memory_bytes'] // 1048576} MiB private, {item['resident_bytes'] // 1048576} MiB resident"),
+        ("Memory", f"{item['memory_bytes'] // 1048576} MiB in use, {item['resident_bytes'] // 1048576} MiB resident"),
     ]
     lines = [f"{item['name']} (PID {item['pid']})"]
     lines += [f"  {label}: {value}" for label, value in fields if value]
