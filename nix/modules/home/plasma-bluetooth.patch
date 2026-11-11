@@ -1,0 +1,44 @@
+--- a/main.xml
++++ b/main.xml
+@@ -10,6 +10,10 @@
+       <label>If true, the CompactRepresentation icon will display a badge with the number of connected devices.</label>
+       <default>false</default>
+     </entry>
++    <!-- Spawnkit: the popup's Keep open pin, as on Plasma's volume popup. -->
++    <entry name="pin" type="Bool">
++      <default>false</default>
++    </entry>
+   </group>
+ 
+ </kcfg>
+--- a/qml/main.qml
++++ b/qml/main.qml
+@@ -25,6 +25,7 @@
+     readonly property alias toggleBadgeAction: toggleBadgeAction
+     readonly property alias configureAction: configureAction
+ 
++    hideOnWindowDeactivate: !Plasmoid.configuration.pin
+     switchWidth: Kirigami.Units.gridUnit * 15
+     switchHeight: Kirigami.Units.gridUnit * 10
+ 
+--- a/qml/Toolbar.qml
++++ b/qml/Toolbar.qml
+@@ -97,5 +97,18 @@
+                 text: moreActionsButton.text
+             }
+         }
++
++        // Spawnkit: keeps the popup open while other windows take focus, as on Plasma's volume popup.
++        PlasmaComponents3.ToolButton {
++            icon.name: "window-pin-symbolic"
++            text: i18nc("@action:button keep this widget's pop-up open until explicitly dismissed", "Keep open")
++            display: PlasmaComponents3.AbstractButton.IconOnly
++            checkable: true
++            checked: Plasmoid.configuration.pin
++            onToggled: Plasmoid.configuration.pin = checked
++            PlasmaComponents3.ToolTip.text: text
++            PlasmaComponents3.ToolTip.visible: hovered || activeFocus
++            PlasmaComponents3.ToolTip.delay: Kirigami.Units.toolTipDelay
++        }
+     }
+ }

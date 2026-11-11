@@ -10,6 +10,7 @@ import QtQuick.Layouts
 import org.kde.plasma.plasmoid
 import org.kde.plasma.core as PlasmaCore
 import org.kde.plasma.plasma5support as P5Support
+import org.kde.plasma.components as PC3
 import org.kde.kirigami as Kirigami
 import "Spawnkit"
 import "processes.js" as P
@@ -100,6 +101,8 @@ PlasmoidItem {
     }
 
     Plasmoid.icon: "speedometer-symbolic"
+    // The card's pin (as on Plasma's volume popup) keeps it open while other windows take focus.
+    hideOnWindowDeactivate: !Plasmoid.configuration.pin
     Plasmoid.backgroundHints: PlasmaCore.Types.NoBackground
     toolTipMainText: i18n("System stats")
     toolTipSubText: i18n("Click for processor, graphics, memory and disk use")
@@ -469,6 +472,17 @@ PlasmoidItem {
                 Spinner {
                     opacity: root.stats === null ? 1 : 0
                     Behavior on opacity { NumberAnimation { duration: Theme.standard } }
+                }
+                PC3.ToolButton {
+                    icon.name: "window-pin-symbolic"
+                    text: i18n("Keep open")
+                    display: PC3.AbstractButton.IconOnly
+                    checkable: true
+                    checked: Plasmoid.configuration.pin
+                    onToggled: Plasmoid.configuration.pin = checked
+                    PC3.ToolTip.text: text
+                    PC3.ToolTip.visible: hovered
+                    PC3.ToolTip.delay: Kirigami.Units.toolTipDelay
                 }
             }
 

@@ -142,16 +142,17 @@ let
         name: "substituteInPlace $out/share/plasma/plasmoids/${id}/contents/ui/main.qml --replace-fail @${name}@ ${substitutions.${name}}\n"
       ) (builtins.attrNames substitutions)}
     '';
+  # The source of the Start menu and panel forks below. Pinned to Ubuntu's Plasma (6.6.6): move
+  # it with Ubuntu's Plasma, whose private QML modules they import.
+  plasmaDesktop = pkgs.fetchurl {
+    url = "mirror://kde/stable/plasma/6.6.6/plasma-desktop-6.6.6.tar.xz";
+    hash = "sha256-268SrI3PihK6PqCXwR5x6Ea+SzZzfvYkIOEc83pPY44=";
+  };
   # Plasma's Start menu (Kickoff) without its Places tab, which it has no option to hide. Kickoff
-  # is pure QML compiled into a plugin; this repackages that QML as a plain plasmoid. Pinned to
-  # Ubuntu's Plasma (6.6.6): move it with Ubuntu's Plasma, whose private QML modules it imports.
+  # is pure QML compiled into a plugin; this repackages that QML as a plain plasmoid.
   kickoffWidget =
     let
       id = "tech.shmuel.kickoff";
-      plasmaDesktop = pkgs.fetchurl {
-        url = "mirror://kde/stable/plasma/6.6.6/plasma-desktop-6.6.6.tar.xz";
-        hash = "sha256-268SrI3PihK6PqCXwR5x6Ea+SzZzfvYkIOEc83pPY44=";
-      };
     in
     pkgs.runCommand id { nativeBuildInputs = [ pkgs.jq ]; } ''
       tar -xJf ${plasmaDesktop} plasma-desktop-6.6.6/applets/kickoff
@@ -178,6 +179,64 @@ let
         | .KPlugin |= (with_entries(select(.key | startswith("Name[") | not)) | .Id = $id | .Name = "Start menu")' \
         $src/metadata.json > $dest/metadata.json
     '';
+  # Repackages a Plasma applet or containment whose QML upstream compiles into a plugin (with a
+  # generated C++ class and nothing else) as a plain KPackage under a tech.shmuel id, with a
+  # Spawnkit patch. Each is pinned to the Ubuntu package version it was cut from: move it with
+  # that package, whose private QML modules it imports.
+  qmlFork =
+    {
+      id,
+      name,
+      src,
+      dir,
+      qml,
+      patch,
+    }:
+    pkgs.runCommand id { nativeBuildInputs = [ pkgs.jq ]; } ''
+      tar -xJf ${src} ${dir}
+      patch -d ${dir} -p1 < ${patch}
+      dest=$out/share/plasma/plasmoids/${id}
+      mkdir -p $dest/contents/ui $dest/contents/config
+      cp ${lib.concatMapStringsSep " " (f: "${dir}/${f}") qml} $dest/contents/ui/
+      cp ${dir}/main.xml $dest/contents/config/
+      jq --arg id ${id} --arg name ${lib.escapeShellArg name} '.KPackageStructure = "Plasma/Applet"
+        | .KPlugin |= (with_entries(select(.key | startswith("Name[") | not)) | .Id = $id | .Name = $name)' \
+        ${dir}/metadata.json > $dest/metadata.json
+    '';
+  # Plasma's panel containment (org.kde.panel): a press on the panel's bare background closes
+  # the open popup. libplasma loads the QML alone as a generic containment.
+  panelContainment = qmlFork {
+    id = "tech.shmuel.panel";
+    name = "Spawnkit panel";
+    src = plasmaDesktop;
+    dir = "plasma-desktop-6.6.6/containments/panel";
+    qml = [ "*.qml" "LayoutManager.js" ];
+    patch = ./plasma-panel.patch;
+  };
+  # Plasma's network applet (plasma-nm 6.6.6, from Ubuntu) and Bluetooth applet (bluedevil 6.6.4)
+  # with the volume popup's Keep open pin in their toolbars.
+  networkWidget = qmlFork {
+    id = "tech.shmuel.networkmanagement";
+    name = "Networks";
+    src = pkgs.fetchurl {
+      url = "mirror://kde/stable/plasma/6.6.6/plasma-nm-6.6.6.tar.xz";
+      hash = "sha256-lBa/DfClIpIMK4LkPP16AJyhLp4tF5XG6NOOOABL7EA=";
+    };
+    dir = "plasma-nm-6.6.6/applet";
+    qml = [ "*.qml" ];
+    patch = ./plasma-networkmanagement.patch;
+  };
+  bluetoothWidget = qmlFork {
+    id = "tech.shmuel.bluetooth";
+    name = "Bluetooth";
+    src = pkgs.fetchurl {
+      url = "mirror://kde/stable/plasma/6.6.4/bluedevil-6.6.4.tar.xz";
+      hash = "sha256-10o2fEUgja7Qwvryr+6qfOCmcgnILwU4XMQ+d+jDf78=";
+    };
+    dir = "bluedevil-6.6.4/src/applet";
+    qml = [ "qml/*.qml" ];
+    patch = ./plasma-bluetooth.patch;
+  };
   # Windows' Snap Assist (kwin-snap-assist/contents/ui/main.qml): after a window snaps to half
   # the screen, the other windows are offered for the free half. It is a declarative KWin
   # effect, not a KWin script: on Wayland only the active surface gets keyboard input, so a
@@ -343,12 +402,12 @@ in
               ++ panelPins;
             }
             "org.kde.plasma.marginsseparator"
-            # Plasma's network applet (plasma-nm, installed by the base host role): pick a Wi-Fi
-            # network, see the connection, or toggle Wi-Fi and airplane mode.
-            "org.kde.plasma.networkmanagement"
-            # Plasma's Bluetooth applet (bluedevil, installed by the base host role): connect and
-            # disconnect paired devices, pair new ones, or turn Bluetooth off.
-            "org.kde.plasma.bluetooth"
+            # Plasma's network applet (networkWidget, over plasma-nm from the base host role): pick
+            # a Wi-Fi network, see the connection, or toggle Wi-Fi and airplane mode.
+            "tech.shmuel.networkmanagement"
+            # Plasma's Bluetooth applet (bluetoothWidget, over bluedevil from the base host role):
+            # connect and disconnect paired devices, pair new ones, or turn Bluetooth off.
+            "tech.shmuel.bluetooth"
             # Plasma's volume applet (plasma-pa, installed by the base host role): output and
             # input volume, mute, per-application streams and the default device.
             {
@@ -514,6 +573,16 @@ in
           text = "qdbus org.kde.plasmashell /PlasmaShell org.kde.PlasmaShell.evaluateScript 'lockCorona(true)'";
         };
       };
+      # Panels use the forked containment (tech.shmuel.panel); plasma-manager's layout script
+      # always creates Plasma's own, with no option for another. Fails loudly once upstream
+      # changes how it creates them.
+      startup.desktopScript.panels.text =
+        let
+          layout = import "${inputs.plasma-manager}/lib/panel.nix" { inherit lib config; };
+        in
+        assert lib.assertMsg (lib.hasInfix "new Panel();" layout)
+          "plasma-manager's panel script no longer calls `new Panel();`; update the containment override in plasma.nix";
+        lib.mkForce (builtins.replaceStrings [ "new Panel();" ] [ ''new Panel("tech.shmuel.panel");'' ] layout);
       # Plasma's application runner gives way to spawnkit-search (krunner/dbusplugins below), and
       # search offers no Software Center installs.
       configFile.krunnerrc = {
@@ -805,6 +874,9 @@ in
       fluentCursors
       kdePackages.kzones
       kickoffWidget
+      panelContainment
+      networkWidget
+      bluetoothWidget
       snapAssist
       appBadges
       appSearch

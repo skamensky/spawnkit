@@ -1,0 +1,44 @@
+--- a/main.qml
++++ b/main.qml
+@@ -29,6 +29,7 @@
+         || Plasmoid.location === PlasmaCore.Types.LeftEdge)
+     property alias planeModeSwitchAction: planeAction
+ 
++    hideOnWindowDeactivate: !Plasmoid.configuration.pin
+     toolTipMainText: i18n("Networks")
+     toolTipSubText: {
+         const activeConnections = networkStatus.activeConnections;
+--- a/main.xml
++++ b/main.xml
+@@ -16,6 +16,11 @@
+       <default>speed</default>
+     </entry>
+ 
++    <!-- Spawnkit: the popup's Keep open pin, as on Plasma's volume popup. -->
++    <entry name="pin" type="Bool">
++      <default>false</default>
++    </entry>
++
+   </group>
+ 
+ </kcfg>
+--- a/Toolbar.qml
++++ b/Toolbar.qml
+@@ -257,4 +257,17 @@
+             KCMUtils.KCMLauncher.openSystemSettings(mainWindow.kcm)
+         }
+     }
++
++    // Spawnkit: keeps the popup open while other windows take focus, as on Plasma's volume popup.
++    PlasmaComponents3.ToolButton {
++        icon.name: "window-pin-symbolic"
++        text: i18nc("@action:button keep this widget's pop-up open until explicitly dismissed", "Keep open")
++        display: PlasmaComponents3.AbstractButton.IconOnly
++        checkable: true
++        checked: plasmoid.configuration.pin
++        onToggled: plasmoid.configuration.pin = checked
++        PlasmaComponents3.ToolTip.text: text
++        PlasmaComponents3.ToolTip.visible: hovered || activeFocus
++        PlasmaComponents3.ToolTip.delay: Kirigami.Units.toolTipDelay
++    }
+ }

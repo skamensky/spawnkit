@@ -12,5 +12,9 @@
     <entry name="granularProcesses" type="Bool">
       <default>false</default>
     </entry>
+    <!-- The card's Keep open pin. -->
+    <entry name="pin" type="Bool">
+      <default>false</default>
+    </entry>
   </group>
 </kcfg>
