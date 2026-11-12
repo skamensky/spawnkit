@@ -1001,11 +1001,14 @@ in
     # Claude's own launcher (from its Ubuntu package) lists New Chat and new-session actions,
     # which Plasma's search shows as separate results. This user copy has none; Claude leaves a
     # user entry without its X-Claude-Generated marker alone.
+    # Electron's safeStorage picks KWallet on Plasma, and KWallet is off (see kwalletrc above), so
+    # Claude kept its sign-in only in memory and lost it on every restart. The flag sends it to
+    # GNOME's keyring, which GDM unlocks at login. This entry also handles claude:// links.
     xdg.desktopEntries."com.anthropic.Claude" = {
       name = "Claude";
       genericName = "AI Assistant";
       comment = "Desktop application for Claude.ai";
-      exec = "claude-desktop %U";
+      exec = "claude-desktop --password-store=gnome-libsecret %U";
       icon = "claude-desktop";
       categories = [
         "Utility"
@@ -1024,6 +1027,13 @@ in
         TryExec = "claude-desktop";
       };
     };
+    # Claude runs its sessions' commands (nix builds, tests) inside its own app scope. When the
+    # kernel OOM-kills one of them, the default OOMPolicy=stop made systemd SIGKILL the whole
+    # scope, Claude included. The prefix drop-in covers every app-com.anthropic.Claude-<pid>.scope.
+    xdg.configFile."systemd/user/app-com.anthropic.Claude-.scope.d/oom-policy.conf".text = ''
+      [Scope]
+      OOMPolicy=continue
+    '';
     # Names the process window (see window-rules above); it opens from the stats widget.
     xdg.desktopEntries.spawnkit-task-manager = {
       name = "Task Manager";
