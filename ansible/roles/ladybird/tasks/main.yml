@@ -38,3 +38,26 @@
     state: present
     update_cache: true
   when: not ansible_check_mode
+- name: Install the wrapper that runs Ladybird on the NVIDIA GPU
+  ansible.builtin.copy:
+    src: ladybird-rtx
+    dest: /usr/local/bin/ladybird
+    owner: root
+    group: root
+    mode: '0755'
+  when: cfg.nvidia
+# /usr/local/share precedes /usr/share in XDG_DATA_DIRS, so this copy of upstream's launcher,
+# remade from the installed one on every apply, shadows it under the same desktop id.
+- name: Read Ladybird's launcher
+  ansible.builtin.slurp:
+    src: /usr/share/applications/org.ladybird.Ladybird.desktop
+  register: ladybird_desktop
+  when: cfg.nvidia and not ansible_check_mode
+- name: Point Ladybird's launcher at the NVIDIA wrapper
+  ansible.builtin.copy:
+    dest: /usr/local/share/applications/org.ladybird.Ladybird.desktop
+    owner: root
+    group: root
+    mode: '0644'
+    content: "{{ ladybird_desktop.content | b64decode | regex_replace('(?m)^Exec=/opt/ladybird/bin/Ladybird', 'Exec=/usr/local/bin/ladybird') }}"
+  when: cfg.nvidia and not ansible_check_mode

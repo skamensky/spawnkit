@@ -1,0 +1,12 @@
+#!/bin/sh
+# Runs Ladybird on the NVIDIA GPU while Linux owns it. Ladybird paints on the GPU that Plasma
+# presents on, the Intel iGPU here; offering Vulkan only NVIDIA's driver makes it take the RTX.
+# Frames then reach the Intel display through shared memory rather than zero-copy. EGL stays
+# unrestricted: Qt's own Wayland EGL needs Mesa. While the Windows VM owns the RTX, the driver
+# has no device and Ladybird stays on Intel.
+for gpu in /proc/driver/nvidia/gpus/*; do
+  if [ -e "$gpu" ]; then
+    export VK_DRIVER_FILES=/usr/share/vulkan/icd.d/nvidia_icd.json
+  fi
+done
+exec /opt/ladybird/bin/Ladybird "$@"
