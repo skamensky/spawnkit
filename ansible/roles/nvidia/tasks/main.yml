@@ -28,6 +28,27 @@
     name: "{{ driver_candidates[0] }}"
     state: present
   when: not ansible_check_mode
+# nvidia-driver-* depends on nvidia-dkms-*, and DKMS builds a module for a new kernel
+# before Ubuntu's Canonical-signed copy (linux-modules-nvidia-*) arrives. depmod then
+# prefers updates/dkms, whose local MOK key is not enrolled, so with Secure Boot the
+# driver never loads and the Windows VM cannot take the RTX. Prefer the signed copy.
+- name: Prefer Ubuntu's signed NVIDIA modules over DKMS builds
+  ansible.builtin.copy:
+    dest: /etc/depmod.d/spawnkit-nvidia-signed.conf
+    owner: root
+    group: root
+    mode: '0644'
+    content: |
+      # Managed by Spawnkit (ansible/roles/nvidia).
+      {% for module in ['nvidia', 'nvidia-modeset', 'nvidia-drm', 'nvidia-uvm', 'nvidia-peermem'] %}
+      override {{ module }} * kernel/{{ driver_candidates[0] | regex_replace('^nvidia-driver-', 'nvidia-') }}
+      {% endfor %}
+  register: nvidia_depmod
+  when: not ansible_check_mode
+- name: Rebuild module dependencies for installed kernels
+  ansible.builtin.shell: for kernel in /lib/modules/*/kernel; do depmod "$(basename "$(dirname "$kernel")")"; done
+  changed_when: true
+  when: not ansible_check_mode and nvidia_depmod is changed
 - name: Configure the NVIDIA container repository
   when: cfg.docker
   block:
