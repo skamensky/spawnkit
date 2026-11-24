@@ -20,6 +20,7 @@ webex: true
 # Work's Citrix desktop runs from Ubuntu; Windows keeps the camera for calls.
 citrix: true
 chatgpt: true
+claude_desktop: true
 ladybird: true
 nix_chrome: true
 nix_bwrap: true

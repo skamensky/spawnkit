@@ -20,6 +20,9 @@ webex: false
 citrix: false
 # OpenAI's ChatGPT desktop app with Codex, from its signed APT repository.
 chatgpt: false
+# Anthropic's Claude Desktop from its signed APT repository; apt keeps it (and its Code tab's
+# bundled Claude Code) current.
+claude_desktop: false
 ladybird: false
 # AppArmor userns exception for Home Manager's Chrome (desktop hosts on Ubuntu 24.04+).
 nix_chrome: false

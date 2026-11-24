@@ -46,6 +46,8 @@
       when: cfg.citrix
     - role: chatgpt
       when: cfg.chatgpt
+    - role: claude_desktop
+      when: cfg.claude_desktop
     - role: ladybird
       when: cfg.ladybird
     - role: nix_chrome

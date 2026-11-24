@@ -1,0 +1,44 @@
+---
+# Anthropic's Claude Desktop, whose Code tab runs the Claude Code build bundled with each release
+# (~/.config/Claude/claude-code/<version>), not the Home Manager CLI: new models reach it only
+# through Desktop upgrades. The .deb's postinst writes this key and a claude-desktop.list unless
+# another source already names the repo, so this deb822 file replaces it; Ubuntu release upgrades
+# disable third-party .list files, which once left Desktop stuck on an old build.
+- name: Install Anthropic's Claude Desktop repository signing key
+  ansible.builtin.copy:
+    src: claude-desktop-archive-keyring.asc
+    dest: /usr/share/keyrings/claude-desktop-archive-keyring.asc
+    owner: root
+    group: root
+    mode: '0644'
+- name: Declare Anthropic's signed Claude Desktop repository
+  ansible.builtin.copy:
+    dest: /etc/apt/sources.list.d/claude-desktop.sources
+    owner: root
+    group: root
+    mode: '0644'
+    content: |
+      Types: deb
+      URIs: https://downloads.claude.ai/claude-desktop/apt/stable
+      Suites: stable
+      Components: main
+      Architectures: amd64 arm64
+      Signed-By: /usr/share/keyrings/claude-desktop-archive-keyring.asc
+- name: Remove the package's own and release-upgrade-disabled source entries
+  ansible.builtin.file:
+    path: "/etc/apt/sources.list.d/{{ item }}"
+    state: absent
+  loop:
+    - claude-desktop.list
+    - claude-desktop.list.disabled
+- name: Preview Claude Desktop installation
+  ansible.builtin.debug:
+    msg: Install the latest claude-desktop from Anthropic's repository.
+  when: ansible_check_mode
+# latest, not present: the bundled Claude Code (and the models it offers) moves with Desktop.
+- name: Install the latest Claude Desktop
+  ansible.builtin.apt:
+    name: claude-desktop
+    state: latest
+    update_cache: true
+  when: not ansible_check_mode

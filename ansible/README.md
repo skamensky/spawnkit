@@ -75,6 +75,7 @@ Existing cloud access is not replaced by an assumed configuration.
 | `webex` | Cisco's rolling Webex .deb when absent (unpinned; it self-updates), AppArmor profile for its sandbox user namespace |
 | `citrix` | Citrix Workspace app from the pinned, hash-checked .deb in `~/Downloads` (Citrix gates downloads behind its EULA) |
 | `chatgpt` | OpenAI's signed repository/key and the `chatgpt` package (ChatGPT desktop with the Codex app); apt upgrades it |
+| `claude_desktop` | Anthropic's signed repository/key as a deb822 source (replacing the package's own `.list`) and the latest `claude-desktop`; its Code tab runs the Claude Code bundled with each Desktop release |
 | `ladybird` | Ladybird's signed APT repository/key and the `ladybird` alpha package (a rolling channel; apt upgrades it); with `nvidia`, a `/usr/local` wrapper and launcher that run it on the RTX while Linux owns it |
 | `windows_vm` | Explicit `vm-define` playbook; managed domain and new disk, no automatic start |
 
