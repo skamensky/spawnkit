@@ -35,6 +35,18 @@ in
       "$HOME/bin"
       "$HOME/.cargo/bin"
     ];
+    # GDM starts Plasma without a login shell, so /etc/profile.d/nix.sh and
+    # hm-session-vars never reach the desktop: launchers that run a profile command
+    # (host-config, spawnkit-stats) failed with "Could not find the program". The
+    # systemd user manager reads environment.d, and Plasma's services inherit it.
+    systemd.user.sessionVariables.PATH = lib.concatStringsSep ":" (
+      config.home.sessionPath
+      ++ [
+        "${config.home.profileDirectory}/bin"
+        "/nix/var/nix/profiles/default/bin"
+        "$PATH"
+      ]
+    );
     programs.bash = {
       enable = true;
       enableCompletion = true;
