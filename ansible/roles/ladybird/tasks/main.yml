@@ -53,6 +53,14 @@
     src: /usr/share/applications/org.ladybird.Ladybird.desktop
   register: ladybird_desktop
   when: cfg.nvidia and not ansible_check_mode
+- name: Create the local launcher directory
+  ansible.builtin.file:
+    path: /usr/local/share/applications
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+  when: cfg.nvidia
 - name: Point Ladybird's launcher at the NVIDIA wrapper
   ansible.builtin.copy:
     dest: /usr/local/share/applications/org.ladybird.Ladybird.desktop
