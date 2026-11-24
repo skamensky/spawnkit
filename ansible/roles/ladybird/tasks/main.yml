@@ -1,0 +1,40 @@
+---
+# Ladybird's alpha, a rolling channel built by upstream for Ubuntu. The key and sources file use
+# upstream's own names (apt.ladybird.org/ladybird-<suite>.sources), so apt upgrades it like any
+# Ubuntu package. Ubuntu 26.10 shares the resolute suite.
+- name: Create trusted APT key directory
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+- name: Install Ladybird's APT repository signing key
+  ansible.builtin.copy:
+    src: ladybird.asc
+    dest: /etc/apt/keyrings/ladybird.asc
+    owner: root
+    group: root
+    mode: '0644'
+- name: Declare Ladybird's signed APT repository
+  ansible.builtin.copy:
+    dest: /etc/apt/sources.list.d/ladybird.sources
+    owner: root
+    group: root
+    mode: '0644'
+    content: |
+      Types: deb
+      URIs: https://apt.ladybird.org/
+      Suites: {{ 'noble' if ansible_facts.distribution_release == 'noble' else 'resolute' }}
+      Components: main
+      Signed-By: /etc/apt/keyrings/ladybird.asc
+- name: Preview Ladybird installation
+  ansible.builtin.debug:
+    msg: Install ladybird (the alpha channel) from Ladybird's repository.
+  when: ansible_check_mode
+- name: Install Ladybird
+  ansible.builtin.apt:
+    name: ladybird
+    state: present
+    update_cache: true
+  when: not ansible_check_mode

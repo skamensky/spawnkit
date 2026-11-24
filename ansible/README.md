@@ -75,6 +75,7 @@ Existing cloud access is not replaced by an assumed configuration.
 | `webex` | Cisco's rolling Webex .deb when absent (unpinned; it self-updates), AppArmor profile for its sandbox user namespace |
 | `citrix` | Citrix Workspace app from the pinned, hash-checked .deb in `~/Downloads` (Citrix gates downloads behind its EULA) |
 | `chatgpt` | OpenAI's signed repository/key and the `chatgpt` package (ChatGPT desktop with the Codex app); apt upgrades it |
+| `ladybird` | Ladybird's signed APT repository/key and the `ladybird` alpha package (a rolling channel); apt upgrades it |
 | `windows_vm` | Explicit `vm-define` playbook; managed domain and new disk, no automatic start |
 
 Ubuntu supplies the system service units. This repository stores settings and

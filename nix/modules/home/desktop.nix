@@ -247,11 +247,6 @@ in
         # Its nixpkgs wrapper already adds dconf's GIO module. Vulkan is on for WebGPU, like
         # Chrome; nixpkgs leaves it off by default because it can break VA-API video decoding.
         (brave.override { enableVulkan = true; })
-        (plasmaQt (
-          callPackage ./ladybird-rtx.nix {
-            ladybird = callPackage ./ladybird.nix { src = inputs.ladybird; };
-          }
-        ))
         vscode
         copyq
         (if config.personal.desktop.session == "x11" then xclip else wl-clipboard)

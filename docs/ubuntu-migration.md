@@ -787,7 +787,7 @@ GNOME stays installed, so the session is chosen at login and the trial is revers
   profiles, plus any `*.worktrees`, `build`, `tmp_claude` or `playwright-report`
   folder. (2026-11-08: these were 350,000 of 447,000 indexed files.) Setting the
   filters replaces Baloo's default list, so the module repeats it. Files indexed
-  before an exclusion stay listed until `balooctl6 purge` rebuilds the index. Nix Qt 6 apps (CopyQ, OBS, Ladybird) are
+  before an exclusion stay listed until `balooctl6 purge` rebuilds the index. Nix Qt 6 apps (CopyQ, OBS) are
   wrapped by `plasma-qt.nix` with Plasma's platform theme, Kvantum and Breeze, since
   Nix Qt loads only its own plugins and would otherwise draw with Fusion and default
   fonts; apps bundling their own Qt (Zoom) stay unwrapped. The `desktop-integration`
