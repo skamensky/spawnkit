@@ -1,6 +1,7 @@
-# Ubuntu 24.04 restricts unprivileged user namespaces. Ubuntu's chrome profile only
-# covers /opt/google/chrome, so Home Manager's Chrome falls back to the SUID sandbox,
-# which cannot be setuid inside the read-only Nix store, and aborts at launch.
+# Ubuntu 24.04 restricts unprivileged user namespaces. Ubuntu's chrome and brave profiles
+# only cover /opt/google/chrome and /opt/brave.com, so Home Manager's Chromium browsers
+# fall back to the SUID sandbox, which cannot be setuid inside the read-only Nix store,
+# and abort at launch.
 abi <abi/4.0>,
 include <tunables/global>
 
@@ -8,4 +9,10 @@ profile nix-chrome /nix/store/*-google-chrome-*/share/google/chrome/chrome flags
   userns,
 
   include if exists <local/nix-chrome>
+}
+
+profile nix-brave /nix/store/*-brave-*/opt/brave.com/brave/brave flags=(unconfined) {
+  userns,
+
+  include if exists <local/nix-brave>
 }

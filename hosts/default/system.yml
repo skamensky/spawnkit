@@ -24,7 +24,7 @@ chatgpt: false
 # bundled Claude Code) current.
 claude_desktop: false
 ladybird: false
-# AppArmor userns exception for Home Manager's Chrome (desktop hosts on Ubuntu 24.04+).
+# AppArmor userns exception for Home Manager's Chrome and Brave (desktop hosts on Ubuntu 24.04+).
 nix_chrome: false
 nix_bwrap: false
 nvidia_driver_package: ""
