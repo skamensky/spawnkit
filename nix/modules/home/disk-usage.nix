@@ -27,6 +27,8 @@ in
         # The scan reads the whole filesystem: stay out of the way of interactive work.
         Nice = 19;
         IOSchedulingClass = "idle";
+        # The page and inode caches a whole-disk walk fills are charged to this unit (11G unbounded).
+        MemoryHigh = "1G";
       };
     };
     systemd.user.timers.spawnkit-disk-usage = {

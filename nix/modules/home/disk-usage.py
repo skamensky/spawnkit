@@ -132,7 +132,8 @@ def scan(db, path):
                 break
             db.execute("UPDATE usage SET bytes = max(0, bytes + ?) WHERE parent = ? AND name = ?",
                        (total[0] - previous[0], *key(ancestor)))
-    db.execute("DELETE FROM scans WHERE path >= ? AND path < ?", below(path))
+    # Strictly below: the root's range starts at "/", its own path.
+    db.execute("DELETE FROM scans WHERE path > ? AND path < ?", below(path))
     db.execute("UPDATE scans SET finished = ? WHERE path = ?", (time.time(), path))
     db.execute("COMMIT")
     db.execute("DROP TABLE found")
