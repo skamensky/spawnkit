@@ -1,7 +1,9 @@
 ---
 # Dolphin, patched: folder and item menus keep only Dolphin's own actions (no Open With for
 # folders, no Paste on items, no service menus or file item plugins, so no application can add
-# entries), and the Places panel widens to show every place's name in full. It is built from the
+# entries), the Places panel widens to show every place's name in full, and a folder's size is the
+# disk space its subtree occupies, read from spawnkit-disk-usage's index (Home Manager's
+# disk-usage.nix) and recomputed for each folder opened. It is built from the
 # matching release into its own prefix; /usr/local/bin/dolphin, the FileManager1 D-Bus service
 # and plasma-dolphin.service run it instead of Ubuntu's /usr/bin/dolphin.
 - name: Inspect installed Ubuntu packages

@@ -829,7 +829,18 @@ GNOME stays installed, so the session is chosen at login and the trial is revers
   details leave rather than a square as wide as the panel, so a tall page or receipt
   fills it, and it follows the selection after 100 ms instead of 300 for arrowing
   through files, and stays on the clicked item rather than following the mouse
-  (`InformationPanel showHovered=false`). KIO's image plugins preview pictures, and
+  (`InformationPanel showHovered=false`). A folder's Size is the disk space its whole
+  subtree occupies (`ContentDisplay DirectorySizeMode=ContentSize`), and the status bar adds
+  the open folder's total; selecting folders sums them. The numbers come from
+  `spawnkit-disk-usage` (`disk-usage.nix`), which keeps every directory's `du -x` total in
+  `~/.cache/spawnkit/disk-usage.db`: `ls [--json] PATH` reads it, `refresh PATH` rescans a
+  subtree unless a scan covering it finished in the last 30 seconds (and waits for one in
+  progress), `status` lists scans. The patched Dolphin shows the indexed size at once and runs
+  `refresh` 0.7 s after a folder is opened or reloaded, so passing through folders starts
+  nothing; a daily user timer rescans `/` at idle priority. Directories the user cannot read
+  are missing from the totals, and other filesystems are only scanned when opened.
+  (Checked: the CLI on this laptop and a scratch build of the patch; not yet used in the
+  installed Dolphin.) KIO's image plugins preview pictures, and
   `textthumbnail` previews source code and other text with syntax highlighting.
   `document-thumbnailer.nix` draws text formats as pages through one `.thumbnailer`
   per kind running `spawnkit-document-thumbnail KIND SIZE INPUT OUTPUT`, a small Qt

@@ -1,3 +1,21 @@
+--- a/src/CMakeLists.txt
++++ b/src/CMakeLists.txt
+@@ -87,6 +87,7 @@
+     kitemviews/kstandarditemlistview.cpp
+     kitemviews/private/kdirectorycontentscounter.cpp
+     kitemviews/private/kdirectorycontentscounterworker.cpp
++    kitemviews/private/spawnkitdiskusage.cpp
+     kitemviews/private/kfileitemclipboard.cpp
+     kitemviews/private/kfileitemmodelfilter.cpp
+     kitemviews/private/kitemlistheaderwidget.cpp
+@@ -142,6 +143,7 @@
+     kitemviews/kstandarditemlistview.h
+     kitemviews/private/kdirectorycontentscounter.h
+     kitemviews/private/kdirectorycontentscounterworker.h
++    kitemviews/private/spawnkitdiskusage.h
+     kitemviews/private/kfileitemclipboard.h
+     kitemviews/private/kfileitemmodelfilter.h
+     kitemviews/private/kitemlistheaderwidget.h
 --- a/src/dolphincontextmenu.cpp
 +++ b/src/dolphincontextmenu.cpp
 @@ -212,9 +212,7 @@
@@ -69,6 +87,389 @@
      connect(m_placesPanel, &PlacesPanel::placeActivated, this, &DolphinMainWindow::slotPlaceActivated);
      connect(m_placesPanel, &PlacesPanel::tabRequested, this, &DolphinMainWindow::openNewTab);
      connect(m_placesPanel, &PlacesPanel::activeTabRequested, this, &DolphinMainWindow::openNewTabAndActivate);
+--- a/src/kitemviews/kfileitemmodel.cpp
++++ b/src/kitemviews/kfileitemmodel.cpp
+@@ -2132,13 +2132,13 @@
+ 
+         KIO::filesize_t sizeA = 0;
+         if (itemA.isDir()) {
+-            sizeA = a->values.value("size").toULongLong();
++            sizeA = std::max(0LL, a->values.value("size").toLongLong()); // spawnkit: unknown (-1) sorts as empty
+         } else {
+             sizeA = itemA.size();
+         }
+         KIO::filesize_t sizeB = 0;
+         if (itemB.isDir()) {
+-            sizeB = b->values.value("size").toULongLong();
++            sizeB = std::max(0LL, b->values.value("size").toLongLong());
+         } else {
+             sizeB = itemB.size();
+         }
+--- a/src/kitemviews/private/kdirectorycontentscounter.cpp
++++ b/src/kitemviews/private/kdirectorycontentscounter.cpp
+@@ -8,6 +8,7 @@
+ #include "kdirectorycontentscounter.h"
+ #include "dolphin_contentdisplaysettings.h"
+ #include "kitemviews/kfileitemmodel.h"
++#include "spawnkitdiskusage.h"
+ 
+ #include <KDirWatch>
+ 
+@@ -111,7 +112,8 @@
+     connect(this, &KDirectoryContentsCounter::requestDirectoryContentsCount, s_worker, &KDirectoryContentsCounterWorker::countDirectoryContents);
+ 
+     connect(s_worker, &KDirectoryContentsCounterWorker::result, this, &KDirectoryContentsCounter::slotResult);
+-    connect(s_worker, &KDirectoryContentsCounterWorker::intermediateResult, this, &KDirectoryContentsCounter::result);
++    connect(s_worker, &KDirectoryContentsCounterWorker::intermediateResult, this, &KDirectoryContentsCounter::emitResult);
++    connect(SpawnkitDiskUsage::instance(), &SpawnkitDiskUsage::updated, this, &KDirectoryContentsCounter::slotUsageUpdated);
+     connect(s_worker, &KDirectoryContentsCounterWorker::finished, this, &KDirectoryContentsCounter::scheduleNext);
+ 
+     m_dirWatcher = new KDirWatch(this);
+@@ -136,7 +138,33 @@
+     s_cache->insert(resolvedPath, {count, size, true}, inserted);
+ 
+     // sends the results
+-    Q_EMIT result(path, count, size);
++    emitResult(path, count);
++}
++
++// spawnkit: the worker only counts a directory's entries. Its size is the disk space its whole
++// subtree occupies, from spawnkit-disk-usage's index: -1 (shown empty) until the index knows it.
++void KDirectoryContentsCounter::emitResult(const QString &path, int count)
++{
++    auto usage = SpawnkitDiskUsage::instance();
++    usage->load(SpawnkitDiskUsage::parentOf(path));
++    Q_EMIT result(path, count, usage->size(path));
++}
++
++void KDirectoryContentsCounter::slotUsageUpdated(const QString &directory)
++{
++    const auto usage = SpawnkitDiskUsage::instance();
++    const int itemCount = m_model->count();
++    for (int i = 0; i < itemCount; ++i) {
++        const KFileItem item = m_model->fileItem(i);
++        const QString path = item.localPath();
++        if (!item.isDir() || path.isEmpty() || SpawnkitDiskUsage::parentOf(path) != directory) {
++            continue;
++        }
++        const auto counted = s_cache->value(QFileInfo(path).canonicalFilePath());
++        if (counted) {
++            Q_EMIT result(path, counted.count, usage->size(path));
++        }
++    }
+ }
+ 
+ void KDirectoryContentsCounter::slotDirWatchDirty(const QString &path)
+@@ -208,7 +236,7 @@
+     if (pair) {
+         // fast path when in cache
+         // will be updated later if result has changed
+-        Q_EMIT result(m_currentPath, pair.count, pair.size);
++        emitResult(m_currentPath, pair.count);
+     }
+ 
+     // if scanned fully recently, skip rescan
+@@ -224,7 +252,8 @@
+     }
+ 
+     m_workerIsBusy = true;
+-    Q_EMIT requestDirectoryContentsCount(m_currentPath, options, ContentDisplaySettings::recursiveDirectorySizeLimit());
++    // spawnkit: entries only; sizes come from the index
++    Q_EMIT requestDirectoryContentsCount(m_currentPath, options, 0);
+ }
+ 
+ void KDirectoryContentsCounter::enqueuePathScanning(const QString &path, bool alreadyInCache, PathCountPriority priority)
+@@ -267,7 +296,7 @@
+     if (pair) {
+         // fast path when in cache
+         // will be updated later if result has changed
+-        Q_EMIT result(path, pair.count, pair.size);
++        emitResult(path, pair.count);
+     }
+ 
+     // if scanned fully recently, skip rescan
+--- a/src/kitemviews/private/kdirectorycontentscounter.h
++++ b/src/kitemviews/private/kdirectorycontentscounter.h
+@@ -55,6 +55,7 @@
+ 
+ private Q_SLOTS:
+     void slotResult(const QString &path, int count, long long size);
++    void slotUsageUpdated(const QString &directory);
+     void slotDirWatchDirty(const QString &path);
+     void slotItemsRemoved();
+     void slotDirectoryRefreshing();
+@@ -62,6 +63,7 @@
+ 
+ private:
+     void enqueuePathScanning(const QString &path, bool alreadyInCache, PathCountPriority priority);
++    void emitResult(const QString &path, int count);
+ 
+     KFileItemModel *m_model;
+ 
+--- a/src/kitemviews/private/kdirectorycontentscounterworker.cpp
++++ b/src/kitemviews/private/kdirectorycontentscounterworker.cpp
+@@ -82,6 +82,11 @@
+             }
+         }
+ 
++        // spawnkit: counted here, before directories below the recursion limit are skipped
++        if (node->fts_level == 1) {
++            ++totalCount;
++        }
++
+         if (info == FTS_D) {
+             if (node->fts_level == 0) {
+                 // first read was successful, we can init counters
+@@ -95,11 +100,6 @@
+                 continue;
+             }
+         }
+-        // count first level elements
+-        if (node->fts_level == 1) {
+-            ++totalCount;
+-        }
+-
+         // delay intermediate results
+         if (timer.hasExpired(200) || node->fts_level == 0) {
+             Q_EMIT intermediateResult(dirPath, totalCount, totalSize);
+--- a/src/kitemviews/private/spawnkitdiskusage.cpp
++++ b/src/kitemviews/private/spawnkitdiskusage.cpp
+@@ -0,0 +1,145 @@
++/*
++ * spawnkit: disk space per directory, from the index the spawnkit-disk-usage command keeps.
++ *
++ * SPDX-License-Identifier: GPL-2.0-or-later
++ */
++
++#include "spawnkitdiskusage.h"
++
++#include <QDebug>
++#include <QDir>
++#include <QJsonDocument>
++#include <QJsonObject>
++#include <QProcess>
++#include <QStandardPaths>
++
++namespace
++{
++// Leaving a directory within this time starts no recomputation: passing through is not a visit.
++const int s_visitDelay = 700;
++const int s_maxListings = 256;
++}
++
++SpawnkitDiskUsage *SpawnkitDiskUsage::instance()
++{
++    static SpawnkitDiskUsage *usage = new SpawnkitDiskUsage();
++    return usage;
++}
++
++SpawnkitDiskUsage::SpawnkitDiskUsage()
++    : QObject(nullptr)
++    , m_program(QStandardPaths::findExecutable(QStringLiteral("spawnkit-disk-usage")))
++{
++    if (m_program.isEmpty()) {
++        qWarning() << "spawnkit-disk-usage is not on PATH: folders show no size";
++    }
++    m_visitTimer.setSingleShot(true);
++    m_visitTimer.setInterval(s_visitDelay);
++    connect(&m_visitTimer, &QTimer::timeout, this, [this]() {
++        refresh(m_visited);
++    });
++}
++
++QString SpawnkitDiskUsage::parentOf(const QString &path)
++{
++    const int slash = path.lastIndexOf(QLatin1Char('/'));
++    return slash <= 0 ? QStringLiteral("/") : path.left(slash);
++}
++
++void SpawnkitDiskUsage::visit(const QString &directory)
++{
++    const QString path = QDir::cleanPath(directory);
++    // Another process may have rescanned since this listing was read.
++    query({path});
++    m_visited = path;
++    m_visitTimer.start();
++}
++
++void SpawnkitDiskUsage::load(const QString &directory)
++{
++    if (!m_listings.contains(directory)) {
++        query({directory});
++    }
++}
++
++qint64 SpawnkitDiskUsage::size(const QString &path) const
++{
++    const auto own = m_listings.constFind(path);
++    if (own != m_listings.constEnd() && own->total >= 0) {
++        return own->total;
++    }
++    const auto parent = m_listings.constFind(parentOf(path));
++    if (parent == m_listings.constEnd()) {
++        return -1;
++    }
++    return parent->children.value(path.mid(path.lastIndexOf(QLatin1Char('/')) + 1), -1);
++}
++
++bool SpawnkitDiskUsage::refreshing(const QString &directory) const
++{
++    return m_refreshing.contains(directory);
++}
++
++void SpawnkitDiskUsage::query(const QStringList &directories)
++{
++    if (m_program.isEmpty() || directories.isEmpty()) {
++        return;
++    }
++    if (m_listings.size() > s_maxListings) {
++        m_listings.clear();
++    }
++    for (const QString &directory : directories) {
++        // Present from now on, so load() asks once.
++        m_listings[directory];
++    }
++
++    auto process = new QProcess(this);
++    connect(process, &QProcess::finished, this, [this, process, directories]() {
++        process->deleteLater();
++        const QJsonObject listings = QJsonDocument::fromJson(process->readAllStandardOutput()).object().value(QLatin1String("directories")).toObject();
++        for (const QString &directory : directories) {
++            const QJsonObject found = listings.value(directory).toObject();
++            Listing listing;
++            listing.total = found.value(QLatin1String("bytes")).isDouble() ? found.value(QLatin1String("bytes")).toInteger() : -1;
++            const QJsonObject children = found.value(QLatin1String("children")).toObject();
++            for (auto child = children.constBegin(); child != children.constEnd(); ++child) {
++                listing.children.insert(child.key(), child.value().toInteger());
++            }
++            m_listings.insert(directory, listing);
++            Q_EMIT updated(directory);
++        }
++    });
++    connect(process, &QProcess::errorOccurred, process, &QObject::deleteLater);
++    process->start(m_program, QStringList{QStringLiteral("ls"), QStringLiteral("--json"), QStringLiteral("--")} + directories);
++}
++
++void SpawnkitDiskUsage::refresh(const QString &directory)
++{
++    if (m_program.isEmpty() || m_refreshing.contains(directory)) {
++        return;
++    }
++    m_refreshing.insert(directory);
++    Q_EMIT updated(directory);
++
++    auto process = new QProcess(this);
++    const auto done = [this, process, directory]() {
++        process->deleteLater();
++        if (!m_refreshing.remove(directory)) {
++            return;
++        }
++        // Every listing read from the old subtree is stale now.
++        QStringList stale{directory};
++        const QString below = directory.endsWith(QLatin1Char('/')) ? directory : directory + QLatin1Char('/');
++        for (auto listing = m_listings.constBegin(); listing != m_listings.constEnd(); ++listing) {
++            if (listing.key() != directory && listing.key().startsWith(below)) {
++                stale << listing.key();
++            }
++        }
++        query(stale);
++    };
++    connect(process, &QProcess::finished, this, done);
++    connect(process, &QProcess::errorOccurred, this, done);
++    process->start(m_program, {QStringLiteral("refresh"), QStringLiteral("--"), directory});
++}
++
++#include "moc_spawnkitdiskusage.cpp"
+--- a/src/kitemviews/private/spawnkitdiskusage.h
++++ b/src/kitemviews/private/spawnkitdiskusage.h
+@@ -0,0 +1,59 @@
++/*
++ * spawnkit: disk space per directory, from the index the spawnkit-disk-usage command keeps.
++ *
++ * SPDX-License-Identifier: GPL-2.0-or-later
++ */
++
++#ifndef SPAWNKITDISKUSAGE_H
++#define SPAWNKITDISKUSAGE_H
++
++#include <QHash>
++#include <QObject>
++#include <QSet>
++#include <QStringList>
++#include <QTimer>
++
++/**
++ * Sizes come from the index at once, however stale. Opening a directory recomputes its subtree
++ * in the background a moment later, and the fresh sizes replace the indexed ones.
++ */
++class SpawnkitDiskUsage : public QObject
++{
++    Q_OBJECT
++
++public:
++    static SpawnkitDiskUsage *instance();
++
++    /** The directory a view opened: read its indexed sizes now and recompute its subtree shortly. */
++    void visit(const QString &directory);
++    /** Read the indexed sizes of \a directory and its subdirectories, unless they are known. */
++    void load(const QString &directory);
++    /** Bytes the directory \a path occupies, or -1 while unknown. */
++    qint64 size(const QString &path) const;
++    /** Whether \a directory's subtree is being recomputed. */
++    bool refreshing(const QString &directory) const;
++
++    static QString parentOf(const QString &path);
++
++Q_SIGNALS:
++    /** The sizes of \a directory and its subdirectories were read, or its recomputation started. */
++    void updated(const QString &directory);
++
++private:
++    struct Listing {
++        qint64 total = -1;
++        QHash<QString, qint64> children;
++    };
++
++    explicit SpawnkitDiskUsage();
++    void query(const QStringList &directories);
++    void refresh(const QString &directory);
++
++    QString m_program;
++    QHash<QString, Listing> m_listings;
++    QSet<QString> m_refreshing;
++    QString m_visited;
++    QTimer m_visitTimer;
++};
++
++#endif
+--- a/src/panels/information/informationpanelcontent.cpp
++++ b/src/panels/information/informationpanelcontent.cpp
+@@ -136,8 +136,11 @@
+     QScroller::grabGesture(viewport, QScroller::TouchGesture);
+     viewport->installEventFilter(this);
+ 
+-    layout->addWidget(m_preview);
+-    layout->addWidget(m_mediaWidget);
++    // Spawnkit: the preview takes every pixel the name and metadata leave, so a tall page or
++    // receipt fills the panel's height instead of a square as wide as the panel.
++    m_preview->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
++    layout->addWidget(m_preview, 1);
++    layout->addWidget(m_mediaWidget, 1);
+     layout->addWidget(m_nameLabel);
+     layout->addWidget(new KSeparator());
+     layout->addWidget(m_configureLabel);
+--- a/src/panels/information/informationpanel.cpp
++++ b/src/panels/information/informationpanel.cpp
+@@ -392,7 +392,8 @@
+ void InformationPanel::init()
+ {
+     m_infoTimer = new QTimer(this);
+-    m_infoTimer->setInterval(300);
++    // Spawnkit: 100 ms instead of 300, so arrowing through files previews each one promptly.
++    m_infoTimer->setInterval(100);
+     m_infoTimer->setSingleShot(true);
+     connect(m_infoTimer, &QTimer::timeout, this, &InformationPanel::slotInfoTimeout);
+ 
 --- a/src/panels/places/placespanel.cpp
 +++ b/src/panels/places/placespanel.cpp
 @@ -26,8 +26,11 @@
@@ -112,31 +513,81 @@
  Q_SIGNALS:
      void errorMessage(const QString &error);
      void storageTearDownRequested(const QString &mountPath);
---- a/src/panels/information/informationpanelcontent.cpp
-+++ b/src/panels/information/informationpanelcontent.cpp
-@@ -136,8 +136,11 @@
-     QScroller::grabGesture(viewport, QScroller::TouchGesture);
-     viewport->installEventFilter(this);
+--- a/src/views/dolphinview.cpp
++++ b/src/views/dolphinview.cpp
+@@ -22,6 +22,7 @@
+ #include "kitemviews/kitemlistheader.h"
+ #include "kitemviews/kitemlistselectionmanager.h"
+ #include "kitemviews/private/kitemlistroleeditor.h"
++#include "kitemviews/private/spawnkitdiskusage.h"
+ #include "selectionmode/singleclickselectionproxystyle.h"
+ #include "settings/viewmodes/viewmodesettings.h"
+ #include "versioncontrol/versioncontrolobserver.h"
+@@ -62,6 +63,7 @@
+ #include <QActionGroup>
+ #include <QApplication>
+ #include <QClipboard>
++#include <QDir>
+ #include <QDropEvent>
+ #include <QGraphicsOpacityEffect>
+ #include <QGraphicsSceneDragDropEvent>
+@@ -197,6 +199,12 @@
  
--    layout->addWidget(m_preview);
--    layout->addWidget(m_mediaWidget);
-+    // Spawnkit: the preview takes every pixel the name and metadata leave, so a tall page or
-+    // receipt fills the panel's height instead of a square as wide as the panel.
-+    m_preview->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
-+    layout->addWidget(m_preview, 1);
-+    layout->addWidget(m_mediaWidget, 1);
-     layout->addWidget(m_nameLabel);
-     layout->addWidget(new KSeparator());
-     layout->addWidget(m_configureLabel);
---- a/src/panels/information/informationpanel.cpp
-+++ b/src/panels/information/informationpanel.cpp
-@@ -392,7 +392,8 @@
- void InformationPanel::init()
- {
-     m_infoTimer = new QTimer(this);
--    m_infoTimer->setInterval(300);
-+    // Spawnkit: 100 ms instead of 300, so arrowing through files previews each one promptly.
-+    m_infoTimer->setInterval(100);
-     m_infoTimer->setSingleShot(true);
-     connect(m_infoTimer, &QTimer::timeout, this, &InformationPanel::slotInfoTimeout);
+     connect(m_model, &KFileItemModel::directoryLoadingStarted, this, &DolphinView::slotDirectoryLoadingStarted);
+     connect(m_model, &KFileItemModel::directoryLoadingCompleted, this, &DolphinView::slotDirectoryLoadingCompleted);
++    // spawnkit: the status bar carries the open folder's disk usage
++    connect(SpawnkitDiskUsage::instance(), &SpawnkitDiskUsage::updated, this, [this](const QString &directory) {
++        if (this->url().isLocalFile() && directory == QDir::cleanPath(this->url().toLocalFile())) {
++            requestStatusBarText();
++        }
++    });
+     connect(m_model, &KFileItemModel::directoryLoadingCanceled, this, &DolphinView::slotDirectoryLoadingCanceled);
+     connect(m_model, &KFileItemModel::directoryLoadingProgress, this, &DolphinView::directoryLoadingProgress);
+     connect(m_model, &KFileItemModel::directorySortingProgress, this, &DolphinView::directorySortingProgress);
+@@ -648,6 +656,8 @@
+         for (const KFileItem &item : list) {
+             if (item.isDir()) {
+                 ++folderCount;
++                // spawnkit: a selected folder adds the disk space it occupies
++                totalFileSize += std::max(0LL, SpawnkitDiskUsage::instance()->size(item.localPath()));
+             } else {
+                 ++fileCount;
+                 totalFileSize += item.size();
+@@ -693,10 +703,24 @@
+     } else if (fileCount > 0) {
+         summary = i18nc("@info:status files (size)", "%1 (%2)", filesText, KFormat().formatByteSize(totalFileSize));
+     } else if (folderCount > 0) {
+-        summary = foldersText;
++        summary = selection == HasSelection && totalFileSize > 0
++            ? i18nc("@info:status folders (size)", "%1 (%2)", foldersText, KFormat().formatByteSize(totalFileSize))
++            : foldersText;
+     } else {
+         summary = i18nc("@info:status", "0 folders, 0 files");
+     }
++    // spawnkit: what the open folder occupies on disk, subfolders included
++    if (selection == NoSelection && url().isLocalFile()) {
++        const auto usage = SpawnkitDiskUsage::instance();
++        const QString directory = QDir::cleanPath(url().toLocalFile());
++        const qint64 used = usage->size(directory);
++        if (used >= 0) {
++            summary += QStringLiteral(" — ") + i18nc("@info:status", "%1 on disk", KFormat().formatByteSize(used));
++        }
++        if (usage->refreshing(directory)) {
++            summary += QStringLiteral(" — ") + i18nc("@info:status", "measuring…");
++        }
++    }
+     Q_EMIT statusBarTextChanged(summary);
+ }
  
+@@ -2280,6 +2304,11 @@
+         return;
+     }
+ 
++    // spawnkit: opening or reloading a folder recomputes the disk usage of its subtree
++    if (url.isLocalFile()) {
++        SpawnkitDiskUsage::instance()->visit(url.toLocalFile());
++    }
++
+     if (reload) {
+         m_model->refreshDirectory(url);
+     } else {

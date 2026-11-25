@@ -19,6 +19,7 @@
     ./assistants.nix
     ./claude-sessions.nix
     ./desktop.nix
+    ./disk-usage.nix
     ./plasma.nix
     ./wallpaper.nix
   ];
