@@ -427,7 +427,13 @@ and recovery; routine automation can use SSH.
   endpoints. A viewer only sees a hot-plugged channel after it reconnects. Looking
   Glass tags its streams `media.role=Music`, which WirePlumber restores volume and
   mute by, so a saved muted Music state once silenced Windows; a WirePlumber rule
-  (loaded when WirePlumber restarts) stops restoring Looking Glass streams. `vm-view` passes `audio:micDefault=allow`, so calls open the microphone
+  (loaded when WirePlumber restarts) stops restoring Looking Glass streams. Looking
+  Glass records the microphone with a 48-sample latency, which ran the capture graph at
+  PipeWire's 32-sample minimum; beside a busy VM it dropped periods and callers heard a
+  metallic voice. A PipeWire drop-in (loaded when PipeWire restarts) sets the minimum
+  quantum to 512 samples; `pw-top` shows the microphone's quantum and its error count,
+  and `pw-metadata -n settings 0 clock.min-quantum 512` applies the floor to a running
+  session. `vm-view` passes `audio:micDefault=allow`, so calls open the microphone
   without a prompt (Looking Glass still shows its recording indicator). The desktop
   launcher picks up launcher changes only after a Home Manager switch.
 - **Keyboard and mouse:** while focused, Looking Glass grabs the keyboard

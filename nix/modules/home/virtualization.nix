@@ -71,6 +71,15 @@
         }
       ]
     '';
+    # Looking Glass records the microphone with a 48-sample latency, which runs the capture
+    # graph at PipeWire's 32-sample minimum (0.67 ms). Beside a busy VM that drops periods,
+    # and Windows callers hear a metallic voice. A 512-sample floor (10.7 ms) matches the
+    # latency Looking Glass asks for playback. Loaded when PipeWire restarts.
+    xdg.configFile."pipewire/pipewire.conf.d/52-spawnkit-looking-glass.conf".text = ''
+      context.properties = {
+        default.clock.min-quantum = 512
+      }
+    '';
     # Launchers live in ~/.local/share/applications rather than the profile: GNOME
     # Shell never notices launchers added to a profile directory that a switch
     # replaces, so a new one stays out of the dock until the next login.
