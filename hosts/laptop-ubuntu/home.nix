@@ -41,4 +41,29 @@
   personal.clients.docker = false;
   personal.clients.tailscale = false;
   personal.clients.taildrop = true;
+
+  # Weekly money report (bank-records-automation spending/refresh.py): log into the banks that
+  # need no person, rebuild the ledger, have a headless Claude analyst write the report and
+  # email it. The bank sites reject headless browsers, so it drives Chrome on the desktop
+  # session and needs Shmuel logged in; Persistent runs it on the next wake after a missed Sunday.
+  systemd.user.services.weekly-finances = {
+    Unit.Description = "Collect bank exports and email the weekly financial report";
+    Service = {
+      Type = "oneshot";
+      WorkingDirectory = "${config.home.homeDirectory}/repos/skamensky/bank-records-automation";
+      Environment = [
+        "PATH=${config.home.homeDirectory}/.local/share/mise/shims:${config.home.profileDirectory}/bin:/usr/bin:/bin"
+      ];
+      ExecStart = "${config.home.homeDirectory}/.local/share/mise/shims/uv run -q spending/refresh.py --send shmuelkamensky@gmail.com";
+      TimeoutStartSec = "2h";
+    };
+  };
+  systemd.user.timers.weekly-finances = {
+    Unit.Description = "Weekly financial report, Sunday morning";
+    Timer = {
+      OnCalendar = "Sun *-*-* 08:00:00 Asia/Jerusalem";
+      Persistent = true;
+    };
+    Install.WantedBy = [ "timers.target" ];
+  };
 }
