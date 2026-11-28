@@ -1,3 +1,4 @@
+diff -ruN a/main.xml b/main.xml
 --- a/main.xml
 +++ b/main.xml
 @@ -10,6 +10,10 @@
@@ -11,6 +12,158 @@
    </group>
  
  </kcfg>
+diff -ruN a/qml/DeviceItem.qml b/qml/DeviceItem.qml
+--- a/qml/DeviceItem.qml
++++ b/qml/DeviceItem.qml
+@@ -31,15 +31,30 @@
+ 
+     property list<string> currentDeviceDetails
+ 
++    // Spawnkit: the device's new address when its pairing changed on its side (see
++    // FullRepresentation), and the Re-pair call that pairs it in place of this one.
++    property string replacement
++    property bool repairing
++    property string repairError
++    property var repairDevice
++    readonly property bool needsRepair: replacement !== "" && !model.Connected
++
+     icon: model.Icon
+     title: model.DeviceFullName
+     subtitle: infoText()
+-    isBusy: model.Connecting || model.Disconnecting
++    isBusy: model.Connecting || model.Disconnecting || repairing
+     defaultActionButtonAction: QQC2.Action {
+-        icon.name: root.model.Connected ? "network-disconnect-symbolic" : "network-connect-symbolic"
+-        text: root.model.Connected ? i18n("Disconnect") : i18n("Connect")
++        icon.name: root.needsRepair ? "view-refresh-symbolic"
++            : root.model.Connected ? "network-disconnect-symbolic" : "network-connect-symbolic"
++        text: root.needsRepair ? i18nc("@action:button pair a device again at its new address", "Re-pair")
++            : root.model.Connected ? i18n("Disconnect") : i18n("Connect")
++        enabled: !root.repairing
+         onTriggered: source => {
+-            root.toggleDevice();
++            if (root.needsRepair) {
++                root.repairDevice(root.model.Address, root.replacement);
++            } else {
++                root.toggleDevice();
++            }
+         }
+     }
+ 
+@@ -244,7 +259,9 @@
+     }
+ 
+     function infoText(): string {
+-        if (model.Connecting) {
++        if (repairing) {
++            return i18n("Re-pairing");
++        } else if (model.Connecting) {
+             return i18n("Connecting");
+         } else if (model.Disconnecting) {
+             return i18n("Disconnecting");
+@@ -252,7 +269,11 @@
+ 
+         const labels = [];
+ 
+-        if (model.ConnectionFailed && !model.Connected) {
++        if (repairError !== "") {
++            labels.push(i18n("Re-pairing failed: %1", repairError));
++        } else if (needsRepair) {
++            labels.push(i18n("Pairing changed on the device"));
++        } else if (model.ConnectionFailed && !model.Connected) {
+             labels.push(i18n("Connection failed"));
+         }
+ 
+diff -ruN a/qml/FullRepresentation.qml b/qml/FullRepresentation.qml
+--- a/qml/FullRepresentation.qml
++++ b/qml/FullRepresentation.qml
+@@ -18,6 +18,7 @@
+ import org.kde.plasma.core as PlasmaCore
+ import org.kde.plasma.extras as PlasmaExtras
+ import org.kde.plasma.plasmoid
++import org.kde.plasma.plasma5support as P5Support
+ import org.kde.plasma.private.bluetooth as PlasmaBt
+ import org.kde.bluedevil.components as BluedevilComponents
+ 
+@@ -46,6 +47,66 @@
+         }
+     }
+ 
++    // Spawnkit: a device whose pairing changed on its side (a Logitech mouse takes a new address
++    // whenever a channel button pairs again) never connects at its old address, and its new one
++    // is not listed because it is unpaired. While the popup is open, spawnkit-bluetooth finds such
++    // devices, and their entries offer Re-pair, which pairs the new address and forgets the old.
++    readonly property string bluetoothTool: "@bluetooth@"
++    property var replacements: ({})
++    property var repairing: ({})
++    property var repairErrors: ({})
++    readonly property bool anyDisconnected: BluezQt.Manager.devices.some(device => device.paired && !device.connected)
++
++    function repair(address: string, replacement: string): void {
++        repairing = Object.assign({}, repairing, {[address]: true});
++        const errors = Object.assign({}, repairErrors);
++        delete errors[address];
++        repairErrors = errors;
++        bluetoothRunner.connectSource(`${bluetoothTool} repair ${address} ${replacement}`);
++    }
++
++    Timer {
++        interval: 8000
++        repeat: true
++        triggeredOnStart: true
++        running: root.plasmoidItem.expanded && root.anyDisconnected && BluezQt.Manager.bluetoothOperational
++        onTriggered: bluetoothRunner.connectSource(`${root.bluetoothTool} stale --scan 6`)
++    }
++
++    P5Support.DataSource {
++        id: bluetoothRunner
++        engine: "executable"
++        onNewData: (source, data) => {
++            disconnectSource(source);
++            let result = null;
++            try {
++                result = JSON.parse(data.stdout);
++            } catch (error) {
++                result = {error: data.stderr.trim() || i18n("Re-pairing failed")};
++            }
++            const words = source.split(" ");
++            if (words[1] === "stale") {
++                const found = {};
++                for (const device of Array.isArray(result) ? result : []) {
++                    found[device.address] = device.replacement;
++                }
++                root.replacements = found;
++                return;
++            }
++            const address = words[2];
++            const repairing = Object.assign({}, root.repairing);
++            delete repairing[address];
++            root.repairing = repairing;
++            const replacements = Object.assign({}, root.replacements);
++            delete replacements[address];
++            if (result && result.error) {
++                root.repairErrors = Object.assign({}, root.repairErrors, {[address]: result.error});
++                replacements[address] = words[3];
++            }
++            root.replacements = replacements;
++        }
++    }
++
+     PlasmaBt.DevicesProxyModel {
+         id: devicesModel
+         hideBlockedDevices: true
+@@ -131,6 +192,10 @@
+             highlightResizeDuration: Kirigami.Units.shortDuration
+             delegate: DeviceItem {
+                 forgetDeviceDialog: forgetDeviceDialog
++                replacement: root.replacements[model.Address] ?? ""
++                repairing: !!root.repairing[model.Address]
++                repairError: root.repairErrors[model.Address] ?? ""
++                repairDevice: root.repair
+             }
+ 
+             Keys.onUpPressed: event => {
+diff -ruN a/qml/main.qml b/qml/main.qml
 --- a/qml/main.qml
 +++ b/qml/main.qml
 @@ -25,6 +25,7 @@
@@ -21,6 +174,7 @@
      switchWidth: Kirigami.Units.gridUnit * 15
      switchHeight: Kirigami.Units.gridUnit * 10
  
+diff -ruN a/qml/Toolbar.qml b/qml/Toolbar.qml
 --- a/qml/Toolbar.qml
 +++ b/qml/Toolbar.qml
 @@ -97,5 +97,18 @@

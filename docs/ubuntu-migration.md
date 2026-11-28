@@ -667,6 +667,13 @@ GNOME stays installed, so the session is chosen at login and the trial is revers
   `kwriteconfig6 --notify` on that file loads the new one. No XKB toggle option is
   set, since GNOME's `grp:win_space_toggle` would make Meta+Space switch twice. There is no system tray, so applications'
   tray icons (CopyQ, Claude) do not appear; volume and network have no indicator.
+  The Bluetooth applet (`tech.shmuel.bluetooth`) lists only paired devices, so a
+  device whose pairing changed on its side (a Logitech mouse takes a new address
+  whenever a channel button pairs again) would only fail to connect. While its popup
+  is open it runs `spawnkit-bluetooth stale --scan 6`, which matches a paired,
+  disconnected device to an unpaired one advertising for pairing under the same name
+  and appearance; that entry then offers Re-pair, which runs `spawnkit-bluetooth
+  repair OLD NEW` (pair, trust and connect the new address, then forget the old).
   Ctrl+` toggles CopyQ through a plasma-manager command (GNOME binds it in
   `desktop.nix`). KWin matches the typed symbol, and the Hebrew layout types `;` on
   that key, so Ctrl+; is bound too (2026-11-05: injected keypresses toggle CopyQ on

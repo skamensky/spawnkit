@@ -226,7 +226,13 @@ let
     qml = [ "*.qml" ];
     patch = ./plasma-networkmanagement.patch;
   };
-  bluetoothWidget = qmlFork {
+  # Finds paired devices whose pairing changed on the device's side and re-pairs them; the
+  # Bluetooth applet's Re-pair button calls it.
+  bluetoothTool = pkgs.writers.writePython3Bin "spawnkit-bluetooth" {
+    libraries = [ pkgs.python3Packages.dbus-next ];
+    flakeIgnore = [ "E501" "W503" ];
+  } (builtins.readFile ./plasma-bluetooth.py);
+  bluetoothWidget = (qmlFork {
     id = "tech.shmuel.bluetooth";
     name = "Bluetooth";
     src = pkgs.fetchurl {
@@ -236,7 +242,12 @@ let
     dir = "bluedevil-6.6.4/src/applet";
     qml = [ "qml/*.qml" ];
     patch = ./plasma-bluetooth.patch;
-  };
+  }).overrideAttrs (old: {
+    buildCommand = old.buildCommand + ''
+      substituteInPlace $out/share/plasma/plasmoids/tech.shmuel.bluetooth/contents/ui/FullRepresentation.qml \
+        --replace-fail @bluetooth@ ${bluetoothTool}/bin/spawnkit-bluetooth
+    '';
+  });
   # Windows' Snap Assist (kwin-snap-assist/contents/ui/main.qml): after a window snaps to half
   # the screen, the other windows are offered for the free half. It is a declarative KWin
   # effect, not a KWin script: on Wayland only the active surface gets keyboard input, so a
@@ -406,7 +417,8 @@ in
             # a Wi-Fi network, see the connection, or toggle Wi-Fi and airplane mode.
             "tech.shmuel.networkmanagement"
             # Plasma's Bluetooth applet (bluetoothWidget, over bluedevil from the base host role):
-            # connect and disconnect paired devices, pair new ones, or turn Bluetooth off.
+            # connect and disconnect paired devices, pair new ones, re-pair a device whose pairing changed
+            # on its side (spawnkit-bluetooth), or turn Bluetooth off.
             "tech.shmuel.bluetooth"
             # Plasma's volume applet (plasma-pa, installed by the base host role): output and
             # input volume, mute, per-application streams and the default device.
@@ -885,6 +897,7 @@ in
       languageWidget
       statsTool
       statsWidget
+      bluetoothTool
       startIcon
       clockWidget
       calendarSync
