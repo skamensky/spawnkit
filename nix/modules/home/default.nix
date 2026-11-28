@@ -14,6 +14,7 @@
     ./certificate-policy.nix
     ./tools.nix
     ./eda.nix
+    ./graphics.nix
     ./runtimes.nix
     ./repositories.nix
     ./assistants.nix
